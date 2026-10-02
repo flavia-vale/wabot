@@ -12,6 +12,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
+import { CampanhaCanaisFunil } from './CampanhaCanaisFunil'
 
 const PERIODOS = [
   [4, '4 semanas'],
@@ -299,6 +300,11 @@ export default function AdminFunilPage() {
           </section>
         </>
       )}
+
+      {/* Por onde a campanha traz gente (página → botão → cadastro). Veio da
+          antiga tela Marketing & Growth, apagada em 2026-10-02 (Q5 da
+          auditoria): era a única parte dela com dado real. */}
+      <CampanhaCanaisFunil />
     </div>
   )
 }
