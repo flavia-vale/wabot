@@ -229,10 +229,11 @@ export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {
   }
   if (featureCode === FEATURE_CODES.MULTI_NETWORK) {
     return {
-      error: 'O multicanal (WhatsApp + Telegram) estará disponível em um novo plano acima do Pro.',
+      error: 'Enviar suas ofertas também para o Telegram faz parte do plano Premium. Para liberar, escolha o Premium na tela de planos (/painel/plano).',
       code: 'FEATURE_REQUIRES_PREMIUM',
       feature: FEATURE_CODES.MULTI_NETWORK,
       requiredPlan: PLAN_IDS.PREMIUM,
+      upgradePath: '/painel/plano',
     }
   }
 

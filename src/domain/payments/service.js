@@ -1,6 +1,7 @@
 const DEFAULT_PLANS = {
   basic: { title: 'Espelha Grupos Basic - acesso por 30 dias', price: 39 },
   pro: { title: 'Espelha Grupos Pro - acesso por 30 dias', price: 69 },
+  premium: { title: 'Espelha Grupos Premium - acesso por 30 dias', price: 99 },
 }
 
 function parseCurrencyAmount(value) {
@@ -60,7 +61,7 @@ export function createPaymentsService({ db, now = () => new Date() } = {}) {
 
   async function getBillingPlans() {
     try {
-      const rows = await db.lpPlan.findMany({ where: { id: { in: ['basic', 'pro'] } } })
+      const rows = await db.lpPlan.findMany({ where: { id: { in: ['basic', 'pro', 'premium'] } } })
       if (!rows.length) return DEFAULT_PLANS
       const dynamic = { ...DEFAULT_PLANS }
       for (const row of rows) {
