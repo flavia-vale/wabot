@@ -49,6 +49,9 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // existe refresh de sender-key de canal, então a ação é ignorar até a
   // sessão se resincronizar sozinha.
   wa_channel_desync_quarantine: 'ops_wa_channel_desync_quarantine',
+  // Blindagem B (RCA 2026-10-02): chat fora da lista que derrubou a sessão
+  // repetidas vezes (stream:error 500 citando mensagem dele) — ignorado por 7 dias.
+  wa_chat_drop_quarantine: 'ops_wa_chat_drop_quarantine',
   // `failure reason=405`: o WhatsApp recusou o login/registro. Na prática é
   // sempre a versão do WA Web anunciada no handshake tendo sido cortada pelo
   // servidor — atinge TODAS as sessões de uma vez (RCA 2026-07-28), não um chip

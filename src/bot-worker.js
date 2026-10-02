@@ -130,6 +130,7 @@ import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
+import { shouldIgnoreOwnDeviceDm, isChatQuarantinable, createRecentInboundIndex, createChatDropQuarantine } from './core/outOfScopeChatGuard.js'
 import { ensureDeviceSignaturePrefix } from './core/deviceIdentitySignature.js'
 import { createSentMessageStore } from './core/sentMessageStore.js'
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
@@ -460,10 +461,15 @@ function logMonitoredSourceDrop(jid, reason, details = {}) {
 // visibilidade admin), evitando que a operadora precise cruzar o jid na mão.
 const groupSubjectByJid = new Map()
 
+const DEFAULT_WORKER_CHAT_SCOPE_MODE = 'dm'
+
 // Fase 2 do plano de recepção (RCA 2026-08-26): "olhar só o que foi escolhido".
 // Inverte a lista de exceções acima — ver src/core/chatScopePolicy.js. Modo em
-// degraus, default `off`, rollback sem redeploy pela env.
-const CHAT_SCOPE_MODE = normalizeChatScopeMode(process.env.WA_CHAT_SCOPE_MODE)
+// degraus. Default `dm` desde 2026-10-02 (RCA "Cegueira com DMs fromMe"): conversa
+// individual nunca é usada pelo robô e era a porta das quedas 500 / cegueira
+// (medido em prod: 2.740 DMs abertas no bot.log, todas descartadas). Rollback sem
+// redeploy: WA_CHAT_SCOPE_MODE=off (pm2 delete + start).
+const CHAT_SCOPE_MODE = normalizeChatScopeMode(process.env.WA_CHAT_SCOPE_MODE ?? DEFAULT_WORKER_CHAT_SCOPE_MODE)
 const CHAT_SCOPE_PANIC_MS = Math.max(0, Number(process.env.WA_CHAT_SCOPE_PANIC_MS ?? DEFAULT_CHAT_SCOPE_PANIC_MS))
 const CHAT_SCOPE_SIGNAL_INTERVAL_MS = Math.max(5 * 60_000, Number(process.env.WA_CHAT_SCOPE_SIGNAL_INTERVAL_MS || 60 * 60_000))
 const CHAT_SCOPE_LOG_SAMPLE_PER_TYPE = Math.max(0, Number(process.env.WA_CHAT_SCOPE_LOG_SAMPLE || 5))
@@ -575,6 +581,20 @@ const msgRetryCounterCache = createDurableStuckMessageRetryCache({
   logger,
 })
 const placeholderResendCache = new NodeCache({ stdTTL: 60 * 60, useClones: false })
+// Blindagem contra chats fora do escopo (RCA 2026-10-02 — ver
+// src/core/outOfScopeChatGuard.js). Ligadas por padrão; `0` desliga cada uma.
+// A: DM que outro aparelho da conta mandou para um contato fora da lista é
+// confirmada e descartada sem abrir. B: chat fora da lista que derrubar a
+// sessão (stream:error 500 citando mensagem dele) 2× em 24 h fica ignorado
+// por 7 dias — só conversa individual, nunca grupo nem canal. Escopo de
+// módulo: sobrevive a reconexões; B também a restart.
+const WA_IGNORE_OWN_DEVICE_DMS = String(process.env.WA_IGNORE_OWN_DEVICE_DMS ?? '1').trim() !== '0'
+const WA_CHAT_DROP_QUARANTINE = String(process.env.WA_CHAT_DROP_QUARANTINE ?? '1').trim() !== '0'
+const recentInboundChats = createRecentInboundIndex({ max: 5000 })
+const chatDropQuarantine = createChatDropQuarantine({
+  file: `${getAuthInfoDir(userId)}/chat-drop-quarantine.json`,
+  logger,
+})
 // RCA 2026-09 ("Aguardando mensagem" nos membros do grupo de destino): quem
 // recebe e não consegue decifrar pede reenvio; o Baileys só reenvia se
 // `getMessage` devolver a mensagem original. Sem isso (default = undefined) o
@@ -3804,6 +3824,9 @@ async function startBotInner() {
       // dessincronizada (ver handleGroupDecryptSignal). Checada primeiro —
       // reage rápido, independe do modo de chat-scope.
       if (isChannelDesyncQuarantined(jid)) return true
+      // Blindagem B: conversa individual fora da lista que já derrubou a sessão
+      // (nunca grupo nem canal — ver outOfScopeChatGuard.js).
+      if (WA_CHAT_DROP_QUARANTINE && chatDropQuarantine.isQuarantined(jid) && isChatQuarantinable(jid, { ready: allowedChatJidsReady, allowedJids: allowedChatJids, selfJids: selfChatJids })) return true
       // Regra nova (Fase 2): olhar só o que foi escolhido. Com o modo `off`
       // ela não decide nada e a regra antiga (lista de exceções) segue valendo
       // para quem já ligou WA_IGNORE_UNMONITORED_GROUPS.
@@ -3824,6 +3847,19 @@ async function startBotInner() {
         ready: allowedChatJidsReady,
       })
     },
+    // Blindagem A (gancho do patch do Baileys): DM de outro aparelho da conta
+    // para um contato. O patch já garante que é DM de contato, nunca a própria
+    // conta. Contato em quarentena (B) também é descartado aqui.
+    shouldIgnoreOwnDeviceDm: (recipient) => {
+      if (WA_CHAT_DROP_QUARANTINE && chatDropQuarantine.isQuarantined(recipient) && isChatQuarantinable(recipient, { ready: allowedChatJidsReady, allowedJids: allowedChatJids, selfJids: selfChatJids })) return true
+      return shouldIgnoreOwnDeviceDm(recipient, {
+        enabled: WA_IGNORE_OWN_DEVICE_DMS,
+        ready: allowedChatJidsReady,
+        allowedJids: allowedChatJids,
+      })
+    },
+    // Gancho do patch: de qual chat veio cada mensagem (para atribuir a queda).
+    onIncomingMessageNode: ({ id, chatJid }) => recentInboundChats.record(id, chatJid),
   })
 
   pendingSock = sock
@@ -4029,6 +4065,18 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             'Mensagem travada em loop de retry-receipt colocada em quarentena durável; a próxima conexão não pedirá novo retry'
           )
           try { recordOperationalSignal('wa_stuck_message_retry', { userId, msgId: stuckMsgId, count: stuckResult.count }) } catch {}
+        }
+        // Blindagem B: atribui a queda ao chat de onde a mensagem veio.
+        const stuckChatJid = recentInboundChats.get(stuckMsgId)
+        if (WA_CHAT_DROP_QUARANTINE && stuckChatJid && isChatQuarantinable(stuckChatJid, { ready: allowedChatJidsReady, allowedJids: allowedChatJids, selfJids: selfChatJids })) {
+          const chatDrop = chatDropQuarantine.registerDrop(stuckChatJid)
+          if (chatDrop.newlyQuarantined) {
+            logger.error(
+              { chatJid: stuckChatJid, msgId: stuckMsgId, drops: chatDrop.count },
+              'Conversa individual fora da lista derrubou a sessão repetidas vezes — ignorando mensagens dela por 7 dias (não é fonte nem destino)'
+            )
+            try { recordOperationalSignal('wa_chat_drop_quarantine', { userId, jid: stuckChatJid, msgId: stuckMsgId, count: chatDrop.count }) } catch {}
+          }
         }
         if (STUCK_CYCLE_THRESHOLD > 0) {
           const cycle = registerStuckDrop(stuckCycleDrops, { now, msgId: stuckMsgId, windowMs: STUCK_CYCLE_WINDOW_MS, threshold: STUCK_CYCLE_THRESHOLD })

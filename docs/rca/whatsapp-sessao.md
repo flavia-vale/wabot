@@ -620,7 +620,14 @@ Teste: `test/reconnect-giveup-policy.test.js`.
 Parar uma sessão à mão (marca como parada de propósito, não gera aviso de robô
 caído): `node scripts/parar-sessao.mjs <email>`.
 
-## Olhar só o que foi escolhido (`WA_CHAT_SCOPE_MODE`, default OFF)
+## Olhar só o que foi escolhido (`WA_CHAT_SCOPE_MODE`, default `dm` desde 2026-10-02)
+
+**2026-10-02:** o default no worker passou a `dm` (env ausente). Medido em prod:
+312 boots com `chatScopeMode:"off"` e 2.740 DMs (`@lid`) abertas e descartadas no
+`bot.log` — a porta das quedas 500/cegueira do RCA "Cegueira com DMs fromMe". `dm`
+não cobre DM de outro aparelho da própria conta (vem pela identidade da conta):
+isso é a regra A de `src/core/outOfScopeChatGuard.js`. Rollback:
+`WA_CHAT_SCOPE_MODE=off` + `pm2 delete`/`start`.
 
 A regra acima (`WA_IGNORE_UNMONITORED_GROUPS`) é uma **lista de exceções**, e
 listas de exceções envelhecem mal: começou cobrindo grupo, veio o incidente de
@@ -636,8 +643,8 @@ Modo em degraus via `WA_CHAT_SCOPE_MODE`:
 
 | Modo | Ignora, fora da lista de escolhidos |
 |---|---|
-| `off` (default) | nada — comportamento histórico |
-| `dm` | conversa direta (`@lid`, `@s.whatsapp.net`) |
+| `off` | nada — comportamento histórico |
+| `dm` (default) | conversa direta (`@lid`, `@s.whatsapp.net`) |
 | `dm+group` | soma grupo `@g.us` |
 | `strict` | soma canal `@newsletter` (**só após a validação da Fase 3**) |
 
@@ -1055,6 +1062,31 @@ novo (5 ids, 1 queda cada) — por isso a quarentena não adiantava.
 (cegueira). Aceite: depois do deploy + restart do `bot-supervisor`, o pid da
 conta com `mensagem recebida` > 0 e sem `stream:error` com `<ack>` de `3EB0…`
 em `@lid`.
+
+**Resultado do hotfix (2026-10-02, #2155):** a conta seguiu sem receber depois
+do deploy. Voltou a receber **só depois de a cliente desconectar o WhatsApp,
+esquecer o número e parear de novo** — o estado acumulado da sessão não se cura
+sozinho; o conserto do receipt evita acúmulo novo, mas não limpa o que já
+estava preso.
+
+**Blindagem para ninguém mais cair por isso (`src/core/outOfScopeChatGuard.js`,
+ligadas por padrão, `=0` desliga cada uma):**
+
+| Regra | O que faz | Env |
+|---|---|---|
+| A (preventiva) | DM que OUTRO aparelho da conta mandou para um contato fora da lista → `<ack>` e descarta **antes de abrir** (gancho `shouldIgnoreOwnDeviceDm` no patch do Baileys). Conversa consigo mesma e mensagem interna entre aparelhos (sem `recipient`) passam. | `WA_IGNORE_OWN_DEVICE_DMS` |
+| B (reativa) | O patch avisa de qual chat veio cada id (`onIncomingMessageNode`); queda 500 com `stuckMsgId` é atribuída ao chat. **Conversa individual** (`@lid`/`@s.whatsapp.net`) fora da lista com **2 quedas em 24 h** fica ignorada **7 dias** — **nunca grupo nem canal** (grupo monitorado ignorado por engano pararia o espelhamento em silêncio; grupo/canal fora da lista já têm regra própria) e só com a lista de escolhidos carregada (`chat-drop-quarantine.json` no AUTH_DIR, sinal `ops_wa_chat_drop_quarantine`). | `WA_CHAT_DROP_QUARANTINE` |
+
+Por que a A era necessária: o `WA_CHAT_SCOPE_MODE=dm` **nunca** ignora o que
+chega pela própria conta (`selfJids`), e é exatamente por aí que essas DMs
+chegam (`from` = a conta, o contato fica em `recipient`). Aceite:
+`grep -c 'fora do escopo confirmada com ack, sem abrir' bot.log` > 0 e queda de
+`stream:error` com `<ack>` de `3EB0…` em `@lid`.
+
+**Não regredir:** nunca descarta nem põe em quarentena fonte/destino/canal do
+botão, a própria conta ou `status@broadcast`; tudo falha para DEIXAR PASSAR
+(lista não carregada, jid vazio); índice e quarentena em escopo de módulo
+(sobrevivem à reconexão). Testes: `test/out-of-scope-chat-guard.test.js`.
 
 **Causa raiz da cegueira (antes de 2026-10-02): NÃO provada.** Hipóteses abertas: (a) o `nack` 487 de mensagem
 `fromMe` é recusado pelo servidor; (b) a mensagem chega por um caminho abaixo do
