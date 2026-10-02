@@ -467,3 +467,14 @@ ação de admin, retida 180 dias e soterrando a trilha de "quem fez o quê".
 é só ação de admin. O evento precisa estar em `ANALYTICS_EVENTS`, senão some
 sem erro. O painel passa a mostrar só eventos novos (os antigos ficam na
 auditoria até vencerem os 180 dias). Zero RAM: mesma escrita, mesmo sweep.
+
+## Auditoria nas escritas de afiliado e confirmação obrigatória no disparo (Q8 da auditoria, 2026-10-02)
+
+Aprovar/rejeitar afiliado, mudar a regra geral de comissão e dar percentual
+especial (`affiliate.js`) escreviam sem `AdminAuditLog`; comissões e saques já
+gravavam. Agora as quatro gravam antes/depois (`admin.affiliate.approve`,
+`.reject` com motivo, `.settings.update`, `.commission_override`). No disparo
+de e-mail em massa (`adminEmails.js` `/send`), `confirmTotal` era opcional:
+sem ele, saía para a base sem conferir. Agora é obrigatório (400) e segue 409
+quando a lista mudou. Guarda: `test/admin-afiliados-auditoria.test.js`.
+Zero RAM.

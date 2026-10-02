@@ -294,7 +294,13 @@ export async function adminEmailsRoutes(app, opts = {}) {
     // Se a base mudou entre a conferida e o clique, o disparo para aqui em vez
     // de sair para mais gente do que a admin viu.
     const confirmado = Number(req.body?.confirmTotal)
-    if (Number.isFinite(confirmado) && confirmado !== recipients.length) {
+    // Q8 da auditoria (2026-10-02): a confirmação era opcional — um cliente
+    // de API que omitisse o número disparava em massa sem conferir. Agora é
+    // obrigatória: sem o total conferido, não sai nada.
+    if (!Number.isFinite(confirmado)) {
+      return reply.code(400).send({ error: 'Confirme o total de clientes antes de enviar (confirmTotal).', total: recipients.length })
+    }
+    if (confirmado !== recipients.length) {
       return reply.code(409).send({
         error: `A lista mudou: agora são ${recipients.length} clientes (você conferiu ${confirmado}). Revise e confirme de novo.`,
         total: recipients.length,
