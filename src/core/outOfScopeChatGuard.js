@@ -11,10 +11,15 @@
 //     recipient = o contato) fora da lista de escolhidos → o socket confirma
 //     com <ack> e descarta ANTES de abrir (gancho `shouldIgnoreOwnDeviceDm`
 //     no patch do Baileys). Preventiva.
-//  B. Quarentena por CHAT: o `stream:error` 500 cita o id da mensagem que o
-//     servidor não aceitou; o patch avisa de qual chat cada id veio. Chat fora
-//     da lista que derrubar a sessão N vezes na janela é ignorado por um TTL.
-//     Reativa — é a rede para o balde que ainda não conhecemos.
+//  B. Quarentena por CONVERSA INDIVIDUAL: o `stream:error` 500 cita o id da
+//     mensagem que o servidor não aceitou; o patch avisa de qual chat cada id
+//     veio. Conversa individual fora da lista que derrubar a sessão N vezes na
+//     janela é ignorada por um TTL. Reativa.
+//     ⚠️ Só DM (`@lid`, `@s.whatsapp.net`), NUNCA grupo nem canal: um grupo
+//     monitorado ignorado por engano para o espelhamento em silêncio (a lista
+//     pode estar vazia no boot ou o endereço mudar de formato). Grupo e canal
+//     fora da lista já têm regra própria (WA_IGNORE_UNMONITORED_GROUPS e a
+//     quarentena de canal dessincronizado).
 //
 // Tudo falha para o lado de DEIXAR PASSAR: regra desligada, lista ainda não
 // carregada, jid vazio. Nunca entram aqui: o que está na lista (fontes,
@@ -28,7 +33,7 @@ export const CHAT_DROP_QUARANTINE_VERSION = 1
 export const DEFAULT_CHAT_DROP_QUARANTINE_TTL_MS = 7 * 24 * 60 * 60_000
 export const DEFAULT_CHAT_DROP_WINDOW_MS = 24 * 60 * 60_000
 export const DEFAULT_CHAT_DROP_THRESHOLD = 2
-const STATUS_BROADCAST = 'status@broadcast'
+const DM_JID_SUFFIXES = ['@lid', '@s.whatsapp.net']
 
 // Regra A. `recipient` já vem filtrado pelo patch (DM de contato, nunca a
 // própria conta). Aqui só a decisão de escopo.
@@ -40,10 +45,12 @@ export function shouldIgnoreOwnDeviceDm(recipient, { enabled = false, ready = fa
   return true
 }
 
-// Chat que pode entrar na quarentena da regra B.
-export function isChatQuarantinable(chatJid, { allowedJids, selfJids } = {}) {
+// Chat que pode entrar (ou ficar) na quarentena da regra B. Exige a lista de
+// escolhidos já carregada: com ela vazia, tudo pareceria "fora da lista".
+export function isChatQuarantinable(chatJid, { ready = false, allowedJids, selfJids } = {}) {
+  if (!ready) return false
   const normalized = normalizeJid(chatJid)
-  if (!normalized || normalized === STATUS_BROADCAST) return false
+  if (!normalized || !DM_JID_SUFFIXES.some(suffix => normalized.endsWith(suffix))) return false
   if (allowedJids && allowedJids.has(normalized)) return false
   if (selfJids && selfJids.has(normalized)) return false
   return true

@@ -1068,7 +1068,7 @@ ligadas por padrão, `=0` desliga cada uma):**
 | Regra | O que faz | Env |
 |---|---|---|
 | A (preventiva) | DM que OUTRO aparelho da conta mandou para um contato fora da lista → `<ack>` e descarta **antes de abrir** (gancho `shouldIgnoreOwnDeviceDm` no patch do Baileys). Conversa consigo mesma e mensagem interna entre aparelhos (sem `recipient`) passam. | `WA_IGNORE_OWN_DEVICE_DMS` |
-| B (reativa) | O patch avisa de qual chat veio cada id (`onIncomingMessageNode`); queda 500 com `stuckMsgId` é atribuída ao chat. Chat fora da lista com **2 quedas em 24 h** fica ignorado **7 dias** (`chat-drop-quarantine.json` no AUTH_DIR, sinal `ops_wa_chat_drop_quarantine`). | `WA_CHAT_DROP_QUARANTINE` |
+| B (reativa) | O patch avisa de qual chat veio cada id (`onIncomingMessageNode`); queda 500 com `stuckMsgId` é atribuída ao chat. **Conversa individual** (`@lid`/`@s.whatsapp.net`) fora da lista com **2 quedas em 24 h** fica ignorada **7 dias** — **nunca grupo nem canal** (grupo monitorado ignorado por engano pararia o espelhamento em silêncio; grupo/canal fora da lista já têm regra própria) e só com a lista de escolhidos carregada (`chat-drop-quarantine.json` no AUTH_DIR, sinal `ops_wa_chat_drop_quarantine`). | `WA_CHAT_DROP_QUARANTINE` |
 
 Por que a A era necessária: o `WA_CHAT_SCOPE_MODE=dm` **nunca** ignora o que
 chega pela própria conta (`selfJids`), e é exatamente por aí que essas DMs
