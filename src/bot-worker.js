@@ -99,6 +99,8 @@ import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingSta
 import { createPairingAuthBackup } from './core/pairingAuthBackup.js'
 import { resolveWaWebVersion, WA_VERSION_REGISTRY_URL_DEFAULT, WA_FAILURE_VERSION_REJECTED } from './core/waVersion.js'
 import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, shouldResetAuthForBadSession, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide, extractRemoteJidFromLogArgs } from './core/reconnectPolicy.js'
+import { registerStuckDrop, noteDecryptFailure, describeStuckCulprit } from './core/stuckCycleDetector.js'
+import { extractStreamErrorAck } from './core/stuckAckClassifier.js'
 import { buildAuthResetSessionPatch, buildCloseSessionPatch, buildHeartbeatSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
@@ -1583,6 +1585,21 @@ const RECONNECT_STABLE_CLOSE_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber
 const STUCK_MSG_WINDOW_MS = Math.max(5 * 60_000, envNumber('WA_STUCK_MSG_WINDOW_MS', 2 * 60 * 60_000))
 const STUCK_MSG_THRESHOLD = Math.max(0, envNumber('WA_STUCK_MSG_THRESHOLD', 2))
 let stuckMessageTimestamps = new Map()
+// Ciclo de mensagem travada com id DIFERENTE a cada queda (Camada B, ver
+// core/stuckCycleDetector.js). Escopo de módulo: atravessa reconexões e só
+// zera em markMessageAccepted. Só sinal (`ops_wa_stuck_cycle`), sem ação.
+// `WA_STUCK_CYCLE_THRESHOLD=0` desliga.
+const STUCK_CYCLE_WINDOW_MS = Math.max(10 * 60_000, envNumber('WA_STUCK_CYCLE_WINDOW_MS', 3 * 60 * 60_000))
+const STUCK_CYCLE_THRESHOLD = Math.max(0, envNumber('WA_STUCK_CYCLE_THRESHOLD', 3))
+const STUCK_CYCLE_CULPRIT_WINDOW_MS = 10 * 60_000
+let stuckCycleDrops = []
+let recentDecryptFailuresByJid = new Map()
+function noteDecryptFailureForCycle(args) {
+  try {
+    const jid = extractRemoteJidFromLogArgs(args)
+    if (jid) recentDecryptFailuresByJid = noteDecryptFailure(recentDecryptFailuresByJid, jid, Date.now(), { windowMs: STUCK_CYCLE_CULPRIT_WINDOW_MS })
+  } catch {}
+}
 // Auto-heal de grupo dessincronizado (issue #1216, Camada 3): investigação de produção
 // (jul/2026) achou um grupo NÃO-monitorado com sender-key do Signal dessincronizada
 // gerando centenas de falhas de decrypt e derrubando a sessão em cadência de ~50min (o
@@ -1928,6 +1945,7 @@ function markMessageAccepted() {
   // e o único evento que zera a cegueira acumulada.
   failuresSinceLastAccepted = 0
   stableDropsSinceLastAccepted = 0
+  stuckCycleDrops = []
 }
 
 // `WA_RECEPTION_WINDOW_MS=0` desliga a classificação (rollback sem redeploy).
@@ -2111,7 +2129,7 @@ function instrumentBaileysLoggerForHealth(baileysLogger) {
       value: (...args) => {
         try {
           for (const arg of args) {
-            if (typeof arg === 'string' && SESSION_HEALTH_SIGNAL_RE.test(arg)) { recordCryptoError(); handleGroupDecryptSignal(args); break }
+            if (typeof arg === 'string' && SESSION_HEALTH_SIGNAL_RE.test(arg)) { recordCryptoError(); handleGroupDecryptSignal(args); noteDecryptFailureForCycle(args); break }
           }
           if (level === 'error' && typeof target.debug === 'function') {
             for (const arg of args) {
@@ -4003,6 +4021,18 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             'Mensagem travada em loop de retry-receipt colocada em quarentena durável; a próxima conexão não pedirá novo retry'
           )
           try { recordOperationalSignal('wa_stuck_message_retry', { userId, msgId: stuckMsgId, count: stuckResult.count }) } catch {}
+        }
+        if (STUCK_CYCLE_THRESHOLD > 0) {
+          const cycle = registerStuckDrop(stuckCycleDrops, { now, msgId: stuckMsgId, windowMs: STUCK_CYCLE_WINDOW_MS, threshold: STUCK_CYCLE_THRESHOLD })
+          stuckCycleDrops = cycle.state
+          if (cycle.cycle) {
+            const culprit = describeStuckCulprit(extractStreamErrorAck(lastDisconnect?.error?.data), recentDecryptFailuresByJid, now, { windowMs: STUCK_CYCLE_CULPRIT_WINDOW_MS })
+            logger.error(
+              { drops: cycle.count, distinctIds: cycle.distinctIds, windowMs: STUCK_CYCLE_WINDOW_MS, culprit },
+              'Ciclo de quedas 500 por mensagem travada com ids diferentes e nada aceito no meio — a quarentena por id não pega; ver docs/rca/whatsapp-sessao.md "Ciclo de mensagem travada"'
+            )
+            try { recordOperationalSignal('wa_stuck_cycle', { userId, drops: cycle.count, distinctIds: cycle.distinctIds, culpritKind: culprit.kind, culpritJid: culprit.jid, culpritSource: culprit.source }) } catch {}
+          }
         }
       }
       connectionOpenedAt = null
