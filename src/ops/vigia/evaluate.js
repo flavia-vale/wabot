@@ -7,6 +7,8 @@
 export const LEVEL = { OK: 'ok', WARN: 'warn', RED: 'red', UNKNOWN: 'unknown' }
 export const ICON = { ok: '🟢', warn: '🟡', red: '🔴', unknown: '⚪' }
 
+import { HEARTBEAT_FRESH_MS } from '../../domain/session/sessionLiveness.js'
+
 export const DEFAULTS = Object.freeze({
   swapWarnGb: 0.1,
   swapRedGb: 1,
@@ -16,7 +18,7 @@ export const DEFAULTS = Object.freeze({
   diskRedFreePct: 7,
   restartsWarn: 1,
   restartsRed: 3,
-  staleHeartbeatMs: 5 * 60_000,
+  staleHeartbeatMs: HEARTBEAT_FRESH_MS,
   staleSessionsWarnPct: 5,
   staleSessionsRedPct: 20,
   sendErrWarnPct: 10,
