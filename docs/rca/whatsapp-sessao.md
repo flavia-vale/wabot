@@ -1001,7 +1001,7 @@ sqlite3 ~/wabot/prisma/prod.db "SELECT COALESCE(json_extract(metadata,'$.waReaso
 **Não regredir / não fazer sem dado:** não reverter a assinatura do aparelho
 nem reiniciar a frota por causa do 401; não trocar biblioteca por palpite.
 
-## Cegueira com DMs `fromMe` de outro aparelho da conta (RCA 2026-10-01 — EM ABERTO, não regredir)
+## Cegueira com DMs `fromMe` de outro aparelho da conta (RCA 2026-10-01; causa da queda medida em 2026-10-02 — não regredir)
 
 Conta `glauciasimoes10@gmail.com`: espelhava 31× em 7 dias e passou a 0 desde
 ~23:36Z; painel "conectado", 23 quedas 500 em 24 h; a cliente confirmou que as
@@ -1030,7 +1030,33 @@ age em OUTROS erros de decrypt (Bad MAC, No session...). A hipótese "o
 `<receipt type=retry>` é recusado" **não** vale para o erro dela. A cadência de
 "50 min" também não é fixa (71 e 50 min nos eventos dela).
 
-**Causa raiz: NÃO provada.** Hipóteses abertas: (a) o `nack` 487 de mensagem
+**Atualização 2026-10-02 (conta `gabrielpontes@consultorfin.com`, mesmo quadro;
+medido com a instrumentação abaixo).** Sequência do id travado
+`3EB03D75946FF3C1824253` no pid da conta:
+
+| Hora (Z) | Linha |
+|---|---|
+| 14:36:01.494 | chegada (`from 60155429409001:39@lid`, `recipient 78765438816421@lid`, `offline:"0"`) — decifrou sem erro |
+| 14:36:01.497 | `DM de outro aparelho da conta confirmada com receipt`, `type:"sender"`, **sem `participant`** |
+| 15:26:00.517 | `stream:error` com `<ack class=message type=text id=…>` → 500 (**49 min 59 s** depois) |
+| 15:26:08 | reentrega pós-reconexão → `MessageCounterError` → nack 487 (não derruba mais) |
+
+Logo a hipótese (a) caiu: o nack vem **depois** da queda. **Causa da queda
+(fonte do Baileys 6.7.23, `handleMessage`):** no `<receipt type=sender>`, o
+Baileys só põe o aparelho autor em `participant` quando o chat é jid de telefone
+(`isJidUser`); em `@lid` o receipt sai sem ele, o servidor não o aceita como
+confirmação, espera 50 min e derruba a conexão pedindo o ack. O 7.x (7.0.0-rc14)
+usa `isLidUser` nesse ponto. **Conserto:** o patch do Baileys passa a preencher
+`participant = author` também em LID (teste
+`test/baileys-sender-receipt-lid-patch.test.js`). Hoje cada queda era um id
+novo (5 ids, 1 queda cada) — por isso a quarentena não adiantava.
+
+**Ainda hipótese:** que o ack pendente é o que segura a recepção dos grupos
+(cegueira). Aceite: depois do deploy + restart do `bot-supervisor`, o pid da
+conta com `mensagem recebida` > 0 e sem `stream:error` com `<ack>` de `3EB0…`
+em `@lid`.
+
+**Causa raiz da cegueira (antes de 2026-10-02): NÃO provada.** Hipóteses abertas: (a) o `nack` 487 de mensagem
 `fromMe` é recusado pelo servidor; (b) a mensagem chega por um caminho abaixo do
 `handleMessage` e fica sem ack; (c) a convivência com o outro aparelho deixa a
 recepção morta no servidor. Nenhuma tem dado.
