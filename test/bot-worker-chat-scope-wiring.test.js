@@ -14,9 +14,12 @@ test('a regra nova é consultada no gancho do socket', () => {
   assert.match(source, /shouldIgnoreByChatScope\(jid, \{/)
 })
 
-test('o default é DESLIGADO (rollout seguro)', () => {
-  // normalizeChatScopeMode devolve 'off' para env ausente/desconhecida.
-  assert.match(source, /const CHAT_SCOPE_MODE = normalizeChatScopeMode\(process\.env\.WA_CHAT_SCOPE_MODE\)/)
+test('o default é `dm` (conversa individual fora da lista não é aberta)', () => {
+  // Env ausente → 'dm'; valor desconhecido → 'off' (normalizeChatScopeMode).
+  assert.match(source, /const CHAT_SCOPE_MODE = normalizeChatScopeMode\(process\.env\.WA_CHAT_SCOPE_MODE \?\? DEFAULT_WORKER_CHAT_SCOPE_MODE\)/)
+  // Default `dm` (RCA 2026-10-02): conversa individual fora da lista nunca é aberta.
+  // Nunca `dm+group`/`strict` por default — grupo/canal ficam com as regras próprias.
+  assert.match(source, /const DEFAULT_WORKER_CHAT_SCOPE_MODE = 'dm'/)
 })
 
 test('a regra antiga continua valendo quando o modo novo está desligado', () => {
