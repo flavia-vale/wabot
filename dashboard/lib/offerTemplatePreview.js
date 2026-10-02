@@ -5,8 +5,6 @@ export const OFFER_TEMPLATE_PREVIEW_SAMPLE = {
   groupId: 'preview-destino-whatsapp',
   date: '2026-06-02',
   link: 'https://s.shopee.com.br/oferta-afiliada',
-  groupInviteLink: 'https://chat.whatsapp.com/seu-grupo',
-  couponLink: 'https://espelhagrupos.com.br/cupons',
   product: {
     title: 'Kit 3 Organizadores Dobráveis Multiuso',
     price: 'R$ 39,90',
@@ -18,6 +16,12 @@ export const OFFER_TEMPLATE_PREVIEW_SAMPLE = {
     platform: 'shopee',
   },
 }
+
+// Link global vazio NÃO ganha link de exemplo na prévia: o robô envia a linha
+// vazia, e um link fictício aqui fazia a cliente achar que já estava configurado
+// (RCA 2026-10-02 — "Resgate os cupons aqui:" saindo sem link).
+export const MISSING_COUPON_LINK_NOTICE = '⚠️ Preencha o Link de cupom no final da página (Links opcionais)'
+export const MISSING_GROUP_LINK_NOTICE = '⚠️ Preencha o Link de convite do grupo no final da página (Links opcionais)'
 
 export function buildRenderedOfferTemplatePreview({
   template,
@@ -42,8 +46,8 @@ export function buildRenderedOfferTemplatePreview({
     date,
     random,
     poolJson: resolveCopyVariationPoolJson(copyVariationPoolJson),
-    groupInviteLink: groupInviteLink || OFFER_TEMPLATE_PREVIEW_SAMPLE.groupInviteLink,
-    couponLink: couponLink || OFFER_TEMPLATE_PREVIEW_SAMPLE.couponLink,
+    groupInviteLink: String(groupInviteLink || '').trim() || MISSING_GROUP_LINK_NOTICE,
+    couponLink: String(couponLink || '').trim() || MISSING_COUPON_LINK_NOTICE,
     autoInjectWhenMissing: false,
   })
 }
