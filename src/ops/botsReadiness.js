@@ -10,7 +10,9 @@
 // o sinal a cada ~60 s). Contagem que falhou não afirma nada (fica 200 com
 // `unknown`), para o monitor não gritar por falha de leitura isolada.
 
-export const BOTS_STALE_MS = 5 * 60_000
+import { HEARTBEAT_FRESH_MS } from '../domain/session/sessionLiveness.js'
+
+export const BOTS_STALE_MS = HEARTBEAT_FRESH_MS
 export const BOTS_STALE_RED_RATIO = 0.5
 
 export function decideBotsReadiness({ mode = 'inline', supervisorAlive = null, live = null, stale = null } = {}) {
