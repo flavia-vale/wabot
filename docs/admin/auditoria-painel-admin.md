@@ -242,6 +242,8 @@ sqlite3 prisma/prod.db "SELECT COUNT(*), MIN(createdAt) FROM AnalyticsEvent WHER
 
 Falta: tela de auditoria ("quem fez o quê"), padrão único de confirmação dupla para destrutivas (purge, ban, pagar em massa, apagar conta), e papel separado para destrutivas.
 
+**Sondagem real das rotas admin (apurado 2026-10-02):** em 26/09, entre 01:45 e 01:52, uma conta trial recém-criada com nome falso, que nunca conectou WhatsApp, fez 80 chamadas a `/api/admin/*` via `curl` com o próprio token de login. Todas tomaram 403 (`admin.js:716`) e ficaram auditadas com IP e agente. O que funcionou: autenticação + papel + auditoria. O que falta: o limite de requisições é só global por IP (`server.js:534-539`), sem regra para rajada de negativas por **conta**; nenhum aviso foi enviado; e bloquear a conta exige SQL porque `users/:id/block` não tem tela. Entram no plano como Q10 e no M4.
+
 ---
 
 ## 4. Ações que faltam (hoje = terminal/SQL)
@@ -406,6 +408,7 @@ Cada fatia = 1 PR contra `develop`, com teste. **RAM: todas zero** (leitura/rota
 | Q7 | Lista de e-mails fixa → permissão | `sucesso-cliente/page.js:11` | idem + `ROLE_PERMISSIONS` | grep falha se e-mail literal em `dashboard/app/admin` | ●○○ |
 | Q8 | Auditoria em approve/reject/settings/override de afiliados; `confirmTotal` obrigatório no envio em massa | escritas sem rastro | `affiliate.js:392, 411, 598, 670`, `adminEmails.js:296` | teste de rota verifica `AdminAuditLog` | ●●○ |
 | Q9 | Mover scripts obsoletos para `scripts/arquivo/` + README | 20+ scripts one-shot no meio dos úteis | `scripts/` | lista do apêndice B(c); testes que importam continuam passando | ●○○ |
+| Q10 | Rajada de 403 no admin: limite por conta + aviso | sondagem real por `curl` (80 negativas em 6 min) passou sem aviso e dentro do limite por IP | `src/api/routes/admin.js:701-720` (`requireAdmin`), `src/email/adminAlerts.js`, `registry.js` | a partir de N negativas da mesma conta em 10 min: responde 429 e manda `admin_sondagem_admin` (silêncio 24 h); contador em memória pequeno (Map por userId, teto de chaves) — **RAM desprezível, sinalizado**; teste puro da política | ●●○ |
 
 ### Fatias médias (2-3 dias)
 
@@ -414,7 +417,7 @@ Cada fatia = 1 PR contra `develop`, com teste. **RAM: todas zero** (leitura/rota
 | M1 | `sessionLiveness.js`: uma janela de "online/cego" | 3 janelas de heartbeat, 2 de cegueira | novo `src/domain/session/sessionLiveness.js`; `admin.js:827-833, 855`, `sessionOwnership.js:40` | todas as rotas importam; teste puro |
 | M2 | Ficha 360° — aba Robô com ações | ver sem agir | `clientes/[id]/page.js`; rotas `online/:id/reconnect`, nova `POST /users/:id/session/stop` (usa `manager` como `parar-sessao.mjs`), `GET /send-dlq/:userId` | reconectar/parar/DLQ na ficha com confirm + motivo; auditados |
 | M3 | Ficha 360° — aba Financeiro com Sincronizar MP + Testar renovação | só SSH | nova `src/domain/payments/subscriptionSync.js` extraída de `sincronizar-assinatura.mjs`; script passa a importar | mostra diff antes de gravar; `billing:write`; teste puro da extração |
-| M4 | Alertas para a dona (dentro dos sweeps existentes) | nada avisa | `src/email/adminAlerts.js`, `registry.js`, `server.js:296-307` (sweep 15 min) | 5 gatilhos: pagante caído > 2 h, cego > 3 h, DLQ > 0, swap ativo + < 20 % RAM, supervisor sem heartbeat; silêncio 12 h; teste de política puro. **RAM zero** (mesmo `setInterval`) |
+| M4 | Alertas para a dona (dentro dos sweeps existentes) | nada avisa | `src/email/adminAlerts.js`, `registry.js`, `server.js:296-307` (sweep 15 min) | 6 gatilhos: pagante caído > 2 h, cego > 3 h, envios presos em `sending`, swap ativo + < 20 % RAM, supervisor sem heartbeat, rajada de 403 no admin (Q10); silêncio 12 h; teste de política puro. **RAM zero** (mesmo `setInterval`) |
 | M5 | Tela Operação → Filas: envios presos em `sending` e fila em memória por cliente | **fila é em memória em prod** (`QUEUE_BACKEND` ausente): DLQ Redis, card "Trabalhos parados" e rotas `send-dlq/*` não medem nada | `src/jobs/stuckSendLogs.js`, `MessageLog status='sending'`, `admin.js:391, 422, 3814-3870`; remover o card/alerta de DLQ do Início | tela mostra presos em `sending` por cliente com [Reprocessar]; card de DLQ some enquanto o backend for memória; rotas `send-dlq` ficam atrás de `QUEUE_BACKEND=bullmq` |
 | M6 | Credencial de loja no painel | só a cliente sabe | expor último resultado de `credentialExpiry/sweep.js` por usuário; card na ficha → Lojas e linha na caixa | sem sondagem nova; dado vem do `AnalyticsEvent credential_expiry_alert_sent` |
 | M7 | Retenção de `AnalyticsEvent ops_*` (90 d) | cresce para sempre | `server.js:202-208` | **antes**: rodar o `sqlite3` da seção 3.5; depois: `deleteMany` diário em lote |
