@@ -581,7 +581,8 @@ const placeholderResendCache = new NodeCache({ stdTTL: 60 * 60, useClones: false
 // A: DM que outro aparelho da conta mandou para um contato fora da lista é
 // confirmada e descartada sem abrir. B: chat fora da lista que derrubar a
 // sessão (stream:error 500 citando mensagem dele) 2× em 24 h fica ignorado
-// por 7 dias. Escopo de módulo: sobrevive a reconexões; B também a restart.
+// por 7 dias — só conversa individual, nunca grupo nem canal. Escopo de
+// módulo: sobrevive a reconexões; B também a restart.
 const WA_IGNORE_OWN_DEVICE_DMS = String(process.env.WA_IGNORE_OWN_DEVICE_DMS ?? '1').trim() !== '0'
 const WA_CHAT_DROP_QUARANTINE = String(process.env.WA_CHAT_DROP_QUARANTINE ?? '1').trim() !== '0'
 const recentInboundChats = createRecentInboundIndex({ max: 5000 })
@@ -3818,8 +3819,9 @@ async function startBotInner() {
       // dessincronizada (ver handleGroupDecryptSignal). Checada primeiro —
       // reage rápido, independe do modo de chat-scope.
       if (isChannelDesyncQuarantined(jid)) return true
-      // Blindagem B: chat fora da lista que já derrubou a sessão.
-      if (WA_CHAT_DROP_QUARANTINE && chatDropQuarantine.isQuarantined(jid) && isChatQuarantinable(jid, { allowedJids: allowedChatJids, selfJids: selfChatJids })) return true
+      // Blindagem B: conversa individual fora da lista que já derrubou a sessão
+      // (nunca grupo nem canal — ver outOfScopeChatGuard.js).
+      if (WA_CHAT_DROP_QUARANTINE && chatDropQuarantine.isQuarantined(jid) && isChatQuarantinable(jid, { ready: allowedChatJidsReady, allowedJids: allowedChatJids, selfJids: selfChatJids })) return true
       // Regra nova (Fase 2): olhar só o que foi escolhido. Com o modo `off`
       // ela não decide nada e a regra antiga (lista de exceções) segue valendo
       // para quem já ligou WA_IGNORE_UNMONITORED_GROUPS.
@@ -3844,7 +3846,7 @@ async function startBotInner() {
     // para um contato. O patch já garante que é DM de contato, nunca a própria
     // conta. Contato em quarentena (B) também é descartado aqui.
     shouldIgnoreOwnDeviceDm: (recipient) => {
-      if (WA_CHAT_DROP_QUARANTINE && chatDropQuarantine.isQuarantined(recipient) && isChatQuarantinable(recipient, { allowedJids: allowedChatJids, selfJids: selfChatJids })) return true
+      if (WA_CHAT_DROP_QUARANTINE && chatDropQuarantine.isQuarantined(recipient) && isChatQuarantinable(recipient, { ready: allowedChatJidsReady, allowedJids: allowedChatJids, selfJids: selfChatJids })) return true
       return shouldIgnoreOwnDeviceDm(recipient, {
         enabled: WA_IGNORE_OWN_DEVICE_DMS,
         ready: allowedChatJidsReady,
@@ -4061,12 +4063,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         }
         // Blindagem B: atribui a queda ao chat de onde a mensagem veio.
         const stuckChatJid = recentInboundChats.get(stuckMsgId)
-        if (WA_CHAT_DROP_QUARANTINE && stuckChatJid && isChatQuarantinable(stuckChatJid, { allowedJids: allowedChatJids, selfJids: selfChatJids })) {
+        if (WA_CHAT_DROP_QUARANTINE && stuckChatJid && isChatQuarantinable(stuckChatJid, { ready: allowedChatJidsReady, allowedJids: allowedChatJids, selfJids: selfChatJids })) {
           const chatDrop = chatDropQuarantine.registerDrop(stuckChatJid)
           if (chatDrop.newlyQuarantined) {
             logger.error(
               { chatJid: stuckChatJid, msgId: stuckMsgId, drops: chatDrop.count },
-              'Chat fora da lista derrubou a sessão repetidas vezes — ignorando mensagens dele por 7 dias (não é fonte nem destino)'
+              'Conversa individual fora da lista derrubou a sessão repetidas vezes — ignorando mensagens dela por 7 dias (não é fonte nem destino)'
             )
             try { recordOperationalSignal('wa_chat_drop_quarantine', { userId, jid: stuckChatJid, msgId: stuckMsgId, count: chatDrop.count }) } catch {}
           }
