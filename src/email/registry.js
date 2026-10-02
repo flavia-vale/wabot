@@ -1511,6 +1511,34 @@ O que dá para fazer: desligar o staging enquanto não estiver validando, ou aum
 [[botao:Ver a capacidade do servidor|{{link_capacidade}}]]`,
   },
   {
+    // Vigia do servidor (scripts/vigia.mjs via vigia_cron.sh). RCA 2026-10-01:
+    // o pm2 perdeu o bot-supervisor e os robôs de todas as clientes ficaram
+    // parados ~20 min até alguém olhar por acaso. Aviso que só mora no log
+    // não é aviso.
+    slug: 'admin_servidor_vigia',
+    name: '[Interno] O vigia achou problema no servidor',
+    description: 'Avisa a administradora quando o vigia do servidor muda para vermelho (robôs parados, app sumido do pm2, API fora, disco ou memória no limite) e quando volta ao normal.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'resumo', description: 'Frase curta do estado', example: '🔴 Robôs parados: bot-supervisor sumiu do pm2' },
+      { name: 'detalhe', description: 'Relatório do vigia (só o que não está verde)', example: '🔴 Processos do servidor: Sumiram do pm2: bot-supervisor.' },
+      { name: 'quando', description: 'Quando o vigia mediu', example: '2026-10-01T23:50:00Z' },
+    ],
+    title: '{{resumo}}',
+    subject: '[Servidor] {{resumo}}',
+    body: `{{resumo}}
+
+Medido em {{quando}}.
+
+{{detalhe}}
+
+Para religar com segurança: \`cd ~/wabot && scripts/religar-producao.sh\` (só mostra o que faria; \`APLICAR=1\` aplica). Roteiro: docs/ops/runbook-pm2-sumiu.md.`,
+  },
+  {
     slug: 'admin_cobranca_recusada',
     name: '[Interno] Uma cobrança foi recusada',
     description: 'Avisa a administradora quando a cobrança de uma assinatura é recusada, com cliente, valor e o código que o Mercado Pago devolveu.',

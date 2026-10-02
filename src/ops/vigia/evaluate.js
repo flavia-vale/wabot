@@ -35,9 +35,12 @@ const num = v => (v === null || v === undefined || v === '' ? null : Number.isFi
 const check = (id, level, title, detail) => ({ id, level, title, detail })
 const unknown = (id, title, why) => check(id, LEVEL.UNKNOWN, title, `Não consegui medir (${why}).`)
 
-function evalPm2(pm2, prevRestarts, t) {
+function evalPm2(pm2, prevRestarts, t, missing = []) {
   const title = 'Processos do servidor'
   if (!Array.isArray(pm2)) return unknown('pm2', title, 'pm2 não respondeu')
+  // RCA 2026-10-01: o bot-supervisor SUMIU do pm2 (não ficou "parado") e o
+  // vigia só olhava os apps presentes. App esperado ausente é o pior caso.
+  if (missing.length) return check('pm2', LEVEL.RED, title, `Sumiram do pm2: ${missing.join(', ')}. Use scripts/religar-producao.sh.`)
   const down = pm2.filter(p => p.status !== 'online')
   if (down.length) return check('pm2', LEVEL.RED, title, `Fora do ar: ${down.map(p => `${p.name} (${p.status})`).join(', ')}.`)
   if (!prevRestarts) return check('pm2', LEVEL.OK, title, `${pm2.length} processos no ar (primeira leitura, sem comparação de reinícios).`)
@@ -135,19 +138,36 @@ function evalWa(wa, t) {
   return check('quedas', LEVEL.OK, title, base)
 }
 
-function evalBackup(ageH, t) {
+function evalBackup(ageH, t, extra = {}) {
   const title = 'Backup'
   const v = num(ageH)
   if (v === null) return unknown('backup', title, 'marcador de backup não encontrado')
   if (v > t.backupMaxAgeH) return check('backup', LEVEL.RED, title, `Último backup há ${v.toFixed(0)} h (limite ${t.backupMaxAgeH} h).`)
+  // Perder a VPS sem cópia fora dela = perder banco + sessões. Não é queda
+  // agora, é risco: amarelo.
+  const riscos = []
+  if (extra.cloud === false) riscos.push('não sobe para fora da VPS (BACKUP_RCLONE_REMOTE vazio)')
+  if (extra.encrypted === false) riscos.push('não é cifrado (BACKUP_AGE_RECIPIENT vazio)')
+  if (riscos.length) return check('backup', LEVEL.WARN, title, `Último backup há ${v.toFixed(0)} h, mas ${riscos.join(' e ')}.`)
   return check('backup', LEVEL.OK, title, `Último backup há ${v.toFixed(0)} h.`)
+}
+
+// needrestart em modo diferente de 'l' reinicia serviços sozinho depois de um
+// `apt install` — provável gatilho do pm2 ter caído em 01/10. Não é queda,
+// é risco: amarelo.
+function evalNeedrestart(mode) {
+  const title = 'Instalação de pacotes (needrestart)'
+  if (mode === undefined) return unknown('needrestart', title, 'configuração não lida')
+  if (mode === null) return check('needrestart', LEVEL.OK, title, 'needrestart não instalado.')
+  if (mode === 'l') return check('needrestart', LEVEL.OK, title, 'Só lista serviços; não reinicia nada sozinho.')
+  return check('needrestart', LEVEL.WARN, title, `Modo "${mode}": um apt install pode reiniciar o pm2 e derrubar tudo. Criar /etc/needrestart/conf.d/50-wabot.conf com $nrconf{restart} = 'l';`)
 }
 
 /** @returns {{level:string, checks:object[]}} pior nível entre as checagens (unknown não rebaixa um red/warn, mas nunca vira ok). */
 export function evaluateVigia(snapshot = {}, thresholds = {}, now = Date.now()) {
   const t = { ...DEFAULTS, ...thresholds }
   const checks = [
-    evalPm2(snapshot.pm2, snapshot.prevRestarts, t),
+    evalPm2(snapshot.pm2, snapshot.prevRestarts, t, snapshot.missingApps ?? []),
     evalApi(snapshot.apiReady),
     evalSupervisor(snapshot.supervisorAlive),
     evalMemory(snapshot.mem, t),
@@ -156,7 +176,8 @@ export function evaluateVigia(snapshot = {}, thresholds = {}, now = Date.now()) 
     evalSends(snapshot.sends, t),
     evalQueue(snapshot.queueBacklog, t),
     evalWa(snapshot.wa, t),
-    evalBackup(snapshot.backupAgeH, t),
+    evalBackup(snapshot.backupAgeH, t, snapshot.backupInfo ?? {}),
+    evalNeedrestart(snapshot.needrestartMode),
   ]
   const has = l => checks.some(c => c.level === l)
   const level = has(LEVEL.RED) ? LEVEL.RED : has(LEVEL.WARN) ? LEVEL.WARN : has(LEVEL.UNKNOWN) ? LEVEL.UNKNOWN : LEVEL.OK

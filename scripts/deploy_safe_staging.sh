@@ -2,6 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# Um deploy por vez no servidor (RCA 2026-10-01: deploy de staging e de
+# produção rodando juntos no mesmo pm2). Ver scripts/lib/deploy-lock.sh.
+# shellcheck source=lib/deploy-lock.sh
+source "$SCRIPT_DIR/lib/deploy-lock.sh"
+wabot_deploy_lock bash "$0" "$@"
 DEFAULT_ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 ROOT_DIR="${ROOT_DIR:-$DEFAULT_ROOT_DIR}"
 DASHBOARD_DIR="$ROOT_DIR/dashboard"
@@ -690,7 +695,13 @@ else
   echo "  bot-supervisor preservado (RESTART_SUPERVISOR=0). Sessões continuam ativas."
 fi
 
-pm2 save
+# `pm2 save` PROTEGIDO, nunca cru (RCA 2026-10-01: um save com o pm2 vazio
+# apagou bot-supervisor e dashboard de produção do dump). Recusa = deploy
+# vermelho, e o dump fica como estava.
+if ! node "$ROOT_DIR/scripts/pm2-save-seguro.mjs"; then
+  echo "ERRO: pm2-save-seguro recusou salvar a lista do pm2 (ver motivos acima)."
+  exit 1
+fi
 
 echo "[8/9] PM2 status"
 pm2 status

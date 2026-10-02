@@ -46,6 +46,7 @@ import { runSmartLinkAlertSweep } from '../jobs/smartLinkAlerts.js'
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
+import { BOTS_STALE_MS, decideBotsReadiness } from '../ops/botsReadiness.js'
 import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, listRunningBots, listRunningBotsByNode, getNodeCapacities, getSupervisorNodesSnapshot, getDualOwnerTotal, SUPERVISOR_MODE } from '../manager.js'
 import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
 import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/staleWorkerCodeGuard.js'
@@ -529,7 +530,7 @@ await app.register(fastifyCors, {
 // a Cloudflare) — ver src/api/trustedProxies.js.
 const RATE_LIMIT_MAX = Math.max(1, Number(process.env.RATE_LIMIT_MAX || 300))
 const RATE_LIMIT_WINDOW = String(process.env.RATE_LIMIT_WINDOW || '1 minute')
-const RATE_LIMIT_ALLOWLIST = new Set(['/health', '/ready', '/metrics'])
+const RATE_LIMIT_ALLOWLIST = new Set(['/health', '/ready', '/ready/bots', '/api/ready/bots', '/metrics'])
 await app.register(fastifyRateLimit, {
   global: true,
   max: RATE_LIMIT_MAX,
@@ -718,6 +719,33 @@ app.get('/ready', async (req, reply) => {
     return reply.code(503).send({ ok: false, error: 'Banco indisponível' })
   }
 })
+
+// Robôs de pé? Para monitor externo (RCA 2026-10-01). Cache de 20 s: o
+// monitor pode bater à vontade sem virar carga no banco/Redis.
+let botsReadinessCache = { at: 0, value: null }
+async function botsReadinessHandler(req, reply) {
+  if (!botsReadinessCache.value || Date.now() - botsReadinessCache.at > 20_000) {
+    let supervisorAlive = null
+    if (SUPERVISOR_MODE === 'remote') { try { supervisorAlive = Boolean(await isSupervisorAlive()) } catch { supervisorAlive = null } }
+    let live = null
+    let stale = null
+    try {
+      const liveWhere = { status: { in: ['connected', 'connecting'] } }
+      live = await db.waSession.count({ where: liveWhere })
+      stale = await db.waSession.count({
+        where: { ...liveWhere, OR: [{ lastHeartbeatAt: null }, { lastHeartbeatAt: { lt: new Date(Date.now() - BOTS_STALE_MS) } }] },
+      })
+    } catch { live = null; stale = null }
+    botsReadinessCache = { at: Date.now(), value: decideBotsReadiness({ mode: SUPERVISOR_MODE, supervisorAlive, live, stale }) }
+  }
+  // Rota pública (monitor externo): só o veredito, sem números de sessões.
+  const { ok, reason } = botsReadinessCache.value
+  return ok ? { ok, reason } : reply.code(503).send({ ok, reason })
+}
+// `/api/ready/bots` é o caminho que passa pelo proxy do painel (domínio
+// público); `/ready/bots` é o direto na porta da API.
+app.get('/ready/bots', botsReadinessHandler)
+app.get('/api/ready/bots', botsReadinessHandler)
 
 const port = Number(process.env.API_PORT) || 3001
 const databaseReadyAtBoot = await ensureDatabaseReady()

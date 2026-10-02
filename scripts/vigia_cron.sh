@@ -3,13 +3,15 @@
 # Roda o vigia (scripts/vigia.mjs) de tempos em tempos e guarda o histórico.
 # NÃO instala nada sozinho: copie a linha de cron abaixo se quiser.
 #
-#   */5 * * * * cd /home/deploy/wabot && scripts/vigia_cron.sh >/dev/null 2>&1
+#   */3 * * * * cd /home/deploy/wabot && scripts/vigia_cron.sh >/dev/null 2>&1
 #
 # Variáveis opcionais:
 #   VIGIA_DIR         onde guardar log/estado (default: $HOME/wabot-vigia)
-#   VIGIA_NOTIFY_CMD  comando chamado SÓ quando o estado passa para 🔴
-#                     (recebe o relatório em stdin). Ex.: um curl para um bot.
-#                     Vazio = só registra no log.
+#   VIGIA_NOTIFY_CMD  comando chamado SÓ na troca de estado (🔴 ao entrar,
+#                     🟢 ao sair; recebe o relatório em stdin e VIGIA_ESTADO=
+#                     vermelho|resolvido). Padrão: e-mail para a administradora
+#                     via scripts/vigia-notificar.mjs. VIGIA_EMAIL=0 desliga.
+#   Janela de manutenção aberta (scripts/janela.sh) = registra no log, não avisa.
 #   VIGIA_MAX_LOG_KB  tamanho máximo do log antes de rodar (default 2048)
 set -uo pipefail
 
@@ -38,8 +40,17 @@ PREV="$(cat "$LAST" 2>/dev/null || echo ok)"
 CUR=ok; [ "$CODE" -ne 0 ] && CUR=red
 echo "$CUR" > "$LAST"
 
-# Avisa só na TRANSIÇÃO para vermelho (não repete a cada 5 minutos).
-if [ "$CUR" = red ] && [ "$PREV" != red ] && [ -n "${VIGIA_NOTIFY_CMD:-}" ]; then
-  echo "$OUT" | sh -c "$VIGIA_NOTIFY_CMD" >> "$LOG" 2>&1 || true
+NOTIFY="${VIGIA_NOTIFY_CMD:-}"
+if [ -z "$NOTIFY" ] && [ "${VIGIA_EMAIL:-1}" != "0" ]; then NOTIFY="node scripts/vigia-notificar.mjs"; fi
+JANELA_FILE="${WABOT_JANELA_FILE:-$HOME/.wabot-janela}"
+if [ -f "$JANELA_FILE" ]; then
+  echo "   (janela de manutenção aberta: $(head -n 1 "$JANELA_FILE") — sem aviso)" >> "$LOG"
+  NOTIFY=""
+fi
+
+# Avisa só na TROCA de estado (não repete a cada execução).
+if [ -n "$NOTIFY" ] && [ "$CUR" != "$PREV" ]; then
+  ESTADO=vermelho; [ "$CUR" = ok ] && ESTADO=resolvido
+  echo "$OUT" | VIGIA_ESTADO="$ESTADO" timeout 60 sh -c "$NOTIFY" >> "$LOG" 2>&1 || true
 fi
 exit 0
