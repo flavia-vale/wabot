@@ -447,3 +447,23 @@ pagante. **Números mudam** (para baixo onde havia cortesia, para cima onde só
 havia cobrança de assinatura): avisar a dona antes do deploy em `main`.
 **Custo:** filtros de relação dentro do próprio `count`, nenhuma consulta por
 linha, zero RAM.
+
+## Telemetria do painel da cliente fora de `AdminAuditLog` (Q1 da auditoria, 2026-10-02)
+
+Medido em produção (7 dias): `session.telemetry` = 1.568 linhas, 75 % de
+`AdminAuditLog`. Era a tela "Conexão WhatsApp" do painel da **cliente**
+(`POST /api/session/telemetry`) gravando etapa/evento/detalhe como se fosse
+ação de admin, retida 180 dias e soterrando a trilha de "quem fez o quê".
+
+| Peça | Onde |
+|---|---|
+| Gravação | `src/api/routes/session.js` → `trackAnalyticsEvent({ event: 'session_telemetry' })` |
+| Relatório (PURO) | `src/domain/admin/sessionTelemetry.js` |
+| Leitura | `GET /api/admin/session-telemetry` lê `AnalyticsEvent` e junta nome/e-mail em lote |
+| Retenção | `SESSION_TELEMETRY_RETENTION_DAYS` (90) no sweep diário de `server.js` |
+| Guarda | `test/admin-telemetria-fora-da-auditoria.test.js` |
+
+**Não regredir:** rota de cliente nunca escreve `adminAuditLog`; `AdminAuditLog`
+é só ação de admin. O evento precisa estar em `ANALYTICS_EVENTS`, senão some
+sem erro. O painel passa a mostrar só eventos novos (os antigos ficam na
+auditoria até vencerem os 180 dias). Zero RAM: mesma escrita, mesmo sweep.

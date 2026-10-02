@@ -183,6 +183,10 @@ export const ANALYTICS_EVENTS = new Set([
   'ops_wa_channel_desync_quarantine',
   'ops_wa_reception_blind',
   'ops_wa_reception_self_heal',
+  // Telemetria da tela Conexão WhatsApp do painel da cliente (etapa/evento/
+  // detalhe/segundos). Saiu de AdminAuditLog em 2026-10-02: era 75 % daquela
+  // tabela sem ser auditoria. Lida por GET /api/admin/session-telemetry.
+  'session_telemetry',
   // Piloto de reforço de ativação (2026-09-23): mensagem de boas-vindas pelo
   // próprio WhatsApp na 1ª conexão de conta do piloto (ver
   // src/core/selfWelcomeMessage.js). Cada evento é uma vez que o robô mandou —

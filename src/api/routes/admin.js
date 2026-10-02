@@ -23,6 +23,7 @@ import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpiso
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
 import { withPayingStatus } from '../../domain/admin/payingStatus.js'
 import { loadEverPaidUserIds, currentPayingWhere, formerPayingWhere, stalePayingWhere } from '../../domain/admin/payingLoader.js'
+import { SESSION_TELEMETRY_EVENT, buildSessionTelemetryReport } from '../../domain/admin/sessionTelemetry.js'
 import { withSharedPhoneStatus } from '../../domain/admin/sharedPhoneStatus.js'
 import { loadSharedPhoneCounts } from '../../domain/admin/sharedPhoneLoader.js'
 import { describeDisconnectReason } from '../../domain/admin/disconnectReason.js'
@@ -3745,24 +3746,21 @@ export async function adminRoutes(app) {
   app.get('/session-telemetry', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'tech:read'))) return
     const limit = Math.min(Math.max(Number(req.query?.limit ?? 100), 1), 300)
-    const events = await db.adminAuditLog.findMany({
-      where: { action: 'session.telemetry', resource: 'wa_session' },
+    // Telemetria mora em AnalyticsEvent (não em AdminAuditLog) desde 2026-10-02.
+    // Nome/e-mail entram por UMA consulta em lote — AnalyticsEvent não tem relação.
+    const rows = await db.analyticsEvent.findMany({
+      where: { event: SESSION_TELEMETRY_EVENT },
       orderBy: { createdAt: 'desc' },
       take: limit,
-      select: { id: true, actorUserId: true, createdAt: true, after: true, actorUser: { select: { email: true, name: true } } },
+      select: { id: true, userId: true, createdAt: true, metadata: true },
     })
-    const parsed = events.map((item) => {
-      let payload = {}
-      try { payload = item.after ? JSON.parse(item.after) : {} } catch {}
-      return { id: item.id, createdAt: item.createdAt, userId: item.actorUserId, user: item.actorUser, ...payload }
-    })
-    const summary = parsed.reduce((acc, item) => {
-      const key = `${item.stage || 'unknown'}:${item.event || 'unknown'}`
-      acc[key] = (acc[key] || 0) + 1
-      return acc
-    }, {})
+    const userIds = [...new Set(rows.map((row) => row.userId).filter(Boolean))]
+    const users = userIds.length
+      ? await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, name: true } })
+      : []
+    const usersById = new Map(users.map((user) => [user.id, { email: user.email, name: user.name }]))
     await writeAdminAuditLog(req, { action: 'admin.session.telemetry.read', resource: 'waSessionTelemetry' })
-    return { total: parsed.length, summary, events: parsed }
+    return buildSessionTelemetryReport({ rows, usersById })
   })
 
 app.get('/sessions', async (req, reply) => {

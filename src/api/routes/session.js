@@ -12,6 +12,8 @@ import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
 import { resolveClientVisibleState, DEFAULT_CLIENT_GRACE_MS } from '../../core/clientVisibleSessionState.js'
 import { anchorTrialOnFirstConnection } from '../../domain/painel/trialAnchorApply.js'
 import { STANDARD_TRIAL_DAYS, requestPasswordResetForEmail } from './auth.js'
+import { trackAnalyticsEvent } from '../../analytics.js'
+import { SESSION_TELEMETRY_EVENT } from '../../domain/admin/sessionTelemetry.js'
 
 // Subprotocolos aceitos no handshake do WebSocket do QR. São TOKENS do HTTP
 // (RFC 6455 §4.1): não aceitam espaço. O nome vigente é 'espelhagrupos-auth';
@@ -439,16 +441,13 @@ function parseBlockNoticeForClient(raw) {
     const userId = req.user.sub
     const { stage = 'unknown', event = 'unknown', detail = null, elapsedSec = null } = req.body ?? {}
     req.log.info({ userId, stage, event, detail, elapsedSec }, 'Session telemetry')
-    await db.adminAuditLog.create({
-      data: {
-        actorUserId: userId,
-        targetUserId: userId,
-        action: 'session.telemetry',
-        resource: 'wa_session',
-        resourceId: userId,
-        after: JSON.stringify({ stage, event, detail, elapsedSec }),
-        reason: 'dashboard_session_observability',
-      },
+    // Telemetria de uso NÃO é auditoria: vai para AnalyticsEvent, nunca para
+    // AdminAuditLog (que guarda ação de admin por 180 dias). Medido em
+    // 2026-10-02: 75 % da tabela de auditoria era esta linha.
+    await trackAnalyticsEvent({
+      userId,
+      event: SESSION_TELEMETRY_EVENT,
+      metadata: { stage, event, detail, elapsedSec },
     }).catch(() => {})
     return reply.code(202).send({ ok: true })
   })
