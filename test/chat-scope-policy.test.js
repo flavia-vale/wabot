@@ -8,6 +8,7 @@ import {
   buildAllowedJidSet,
   shouldIgnoreByChatScope,
   shouldAutoDisableChatScope,
+  countsTowardChatScopePanic,
 } from '../src/core/chatScopePolicy.js'
 
 const MONITORADO = '120363402840158007@g.us'
@@ -140,4 +141,15 @@ test('panicMs=0 desliga o freio sem quebrar', () => {
     now: NOW, enabled: true, everAccepted: true,
     lastAcceptedAtMs: NOW - PANIC * 5, ignoredSinceLastAccepted: 5, panicMs: 0,
   }), false)
+})
+
+// RCA 2026-10-02: com o modo `dm` (default), o freio disparou em 3 contas cujos
+// grupos só estavam quietos por 30 min. Conversa individual descartada não silencia
+// fonte monitorada — só grupo/canal descartado conta para o freio.
+test('freio: só descarte de grupo ou canal conta, nunca conversa individual', () => {
+  assert.equal(countsTowardChatScopePanic(CHAT_JID_TYPES.GROUP), true)
+  assert.equal(countsTowardChatScopePanic(CHAT_JID_TYPES.NEWSLETTER), true)
+  assert.equal(countsTowardChatScopePanic(CHAT_JID_TYPES.DM), false)
+  assert.equal(countsTowardChatScopePanic(CHAT_JID_TYPES.STATUS), false)
+  assert.equal(countsTowardChatScopePanic(CHAT_JID_TYPES.UNKNOWN), false)
 })
