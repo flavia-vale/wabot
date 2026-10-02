@@ -334,31 +334,34 @@ function emptyOperationalLogCounts() {
 }
 
 function classifyOperationalLogIntoCounts(counts, log) {
-  if (log.status === 'queued' || log.status === 'sending') { counts.inFlight++; return }
-  if (log.status === 'success') { counts.success++; return }
+  const weight = Number(log.count) > 0 ? Number(log.count) : 1
+  if (log.status === 'queued' || log.status === 'sending') { counts.inFlight += weight; return }
+  if (log.status === 'success') { counts.success += weight; return }
   const category = categorizeErrorMsg(log.errorMsg)
-  if (category === ERROR_CATEGORIES.DEDUP) { counts.skippedDedup++; return }
-  if (category === ERROR_CATEGORIES.CONFIG_BLOCK) { counts.skippedConfig++; return }
-  if (category === ERROR_CATEGORIES.TIMEOUT) counts.timeoutTotal++
-  else if (log.status === 'error') counts.errorOther++
+  if (category === ERROR_CATEGORIES.DEDUP) { counts.skippedDedup += weight; return }
+  if (category === ERROR_CATEGORIES.CONFIG_BLOCK) { counts.skippedConfig += weight; return }
+  if (category === ERROR_CATEGORIES.TIMEOUT) counts.timeoutTotal += weight
+  else if (log.status === 'error') counts.errorOther += weight
 }
 
-function buildOperationalWindows(recentLogs, now = new Date()) {
+// Janelas operacionais calculadas no banco: um groupBy pequeno por janela
+// (status × errorMsg) em vez de ler o MessageLog inteiro para a memória.
+// `floor` limita a janela ao período já escolhido (logs/summary).
+async function loadOperationalWindows(db, now, { floor = null } = {}) {
   const nowMs = now.getTime()
   const windows = {}
-  for (const window of OBSERVABILITY_WINDOWS) {
+  await Promise.all(OBSERVABILITY_WINDOWS.map(async (window) => {
+    const windowFrom = new Date(nowMs - window.ms)
+    const gte = floor && floor > windowFrom ? floor : windowFrom
+    const rows = await db.messageLog.groupBy({
+      by: ['status', 'errorMsg'],
+      where: { sentAt: { gte, lte: now } },
+      _count: { _all: true },
+    }).catch(() => [])
     const counts = emptyOperationalLogCounts()
-    for (const log of recentLogs) {
-      const sentAt = new Date(log.sentAt).getTime()
-      if (Number.isFinite(sentAt) && nowMs - sentAt <= window.ms) classifyOperationalLogIntoCounts(counts, log)
-    }
-    windows[window.key] = {
-      label: window.label,
-      from: new Date(nowMs - window.ms).toISOString(),
-      to: now.toISOString(),
-      logs: counts,
-    }
-  }
+    for (const row of rows) classifyOperationalLogIntoCounts(counts, { status: row.status, errorMsg: row.errorMsg, count: row._count?._all })
+    windows[window.key] = { label: window.label, from: windowFrom.toISOString(), to: now.toISOString(), logs: counts }
+  }))
   return windows
 }
 
@@ -1712,21 +1715,17 @@ export async function adminRoutes(app) {
     if (!(await requireAdmin(req, reply, 'tech:read'))) return
     const metrics = getApiMetricsSnapshot()
     const now = new Date()
-    const since24h = addDays(now, -1)
     const checkedAt = now.toISOString()
     const dlqSnapshot = getDlqMaintenanceSnapshot()
 
-    const [dlqOpen, dbOk, supervisor, supervisorAlive, queueStatusRows, sessionStatusRows, recentLogs] = await Promise.all([
+    const [dlqOpen, dbOk, supervisor, supervisorAlive, queueStatusRows, sessionStatusRows, windows] = await Promise.all([
       db.paymentWebhookDlq.count({ where: { resolvedAt: null } }).catch(() => null),
       db.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
       getSupervisorOperationalCounters(),
       isSupervisorAlive(),
       db.offerQueueItem.groupBy({ by: ['status'], _count: { _all: true } }).catch(() => []),
       db.waSession.groupBy({ by: ['status'], _count: { _all: true } }).catch(() => []),
-      db.messageLog.findMany({
-        where: { sentAt: { gte: since24h, lte: now } },
-        select: { status: true, errorMsg: true, sentAt: true },
-      }).catch(() => []),
+      loadOperationalWindows(db, now),
     ])
 
     const queueCounts = { pending: 0, queued: 0, sending: 0, sent: 0, cancelled: 0, error: 0, failed: 0, total: 0 }
@@ -1747,7 +1746,6 @@ export async function adminRoutes(app) {
       else sessionCounts.other += count
     }
 
-    const windows = buildOperationalWindows(recentLogs, now)
     const logCounts = windows['24h']?.logs ?? emptyOperationalLogCounts()
 
     const contract = buildAdminObservabilityContract({
@@ -3447,10 +3445,17 @@ export async function adminRoutes(app) {
       from = new Date(now.getTime() - periodMsByKey[period])
     }
 
-    const logs = await db.messageLog.findMany({
+    // Agrupado no banco: memória proporcional às combinações distintas, não às linhas.
+    const groupedRows = await db.messageLog.groupBy({
+      by: ['userId', 'status', 'errorMsg', 'destGroup'],
       where: { sentAt: { gte: from, lte: to } },
-      select: { userId: true, status: true, errorMsg: true, destGroup: true, sentAt: true },
+      _count: { _all: true },
+      _max: { sentAt: true },
     })
+    const logs = groupedRows.map(row => ({
+      userId: row.userId, status: row.status, errorMsg: row.errorMsg, destGroup: row.destGroup,
+      count: row._count?._all ?? 0, sentAt: row._max?.sentAt ?? null,
+    }))
     const topErrorsLimit = Math.max(1, Math.min(200, parseInt(req.query?.topErrors ?? '50') || 50))
 
     const counts = {
@@ -3465,21 +3470,22 @@ export async function adminRoutes(app) {
     const errorsByUser = new Map()
 
     for (const log of logs) {
-      if (log.status === 'queued' || log.status === 'sending') { counts.inFlight++; continue }
-      if (log.status === 'success') { counts.success++; continue }
+      const weight = log.count
+      if (log.status === 'queued' || log.status === 'sending') { counts.inFlight += weight; continue }
+      if (log.status === 'success') { counts.success += weight; continue }
       const category = categorizeErrorMsg(log.errorMsg)
-      if (category === ERROR_CATEGORIES.DEDUP) { counts.skippedDedup++; continue }
-      if (category === ERROR_CATEGORIES.CONFIG_BLOCK) { counts.skippedConfig++; continue }
+      if (category === ERROR_CATEGORIES.DEDUP) { counts.skippedDedup += weight; continue }
+      if (category === ERROR_CATEGORIES.CONFIG_BLOCK) { counts.skippedConfig += weight; continue }
       if (category === ERROR_CATEGORIES.TIMEOUT) {
-        counts.timeoutTotal++
+        counts.timeoutTotal += weight
         if (log.destGroup && log.destGroup !== 'skipped') {
-          timeoutByDest.set(log.destGroup, (timeoutByDest.get(log.destGroup) || 0) + 1)
+          timeoutByDest.set(log.destGroup, (timeoutByDest.get(log.destGroup) || 0) + weight)
         }
       } else if (log.status === 'error') {
-        counts.errorOther++
+        counts.errorOther += weight
       }
       if (log.status === 'error') {
-        errorsByUser.set(log.userId, (errorsByUser.get(log.userId) || 0) + 1)
+        errorsByUser.set(log.userId, (errorsByUser.get(log.userId) || 0) + weight)
       }
     }
 
@@ -3500,7 +3506,7 @@ export async function adminRoutes(app) {
       topTimeoutDests,
       topErrorUsers,
       errorsByMessage: buildErrorsByMessage(logs, { limit: topErrorsLimit }),
-      windows: buildOperationalWindows(logs, now),
+      windows: await loadOperationalWindows(db, now, { floor: from }),
     }
   })
 
