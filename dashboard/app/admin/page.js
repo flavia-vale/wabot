@@ -2507,6 +2507,8 @@ export default function AdminPage() {
   // recusa com o motivo, porque reconectar ali não resolveria.
   async function reconectarCliente(userId) {
     if (!userId) return
+    // Ação sobre a conta de uma cliente: nunca sem confirmar (Q4 da auditoria).
+    if (!window.confirm('Subir o robô desta cliente agora? Ela não precisa fazer nada. Se o WhatsApp exigir QR novo, a API recusa e avisa.')) return
     setReconectando(userId)
     setError('')
     try {

@@ -619,6 +619,10 @@ function WhatsAppTab() {
 
   async function enviarIndividual() {
     if (!destinatarioId || texto.trim().length < 3) return
+    const alvo = conectados.find((c) => c.userId === destinatarioId)
+    const quem = alvo ? (alvo.nome ? `${alvo.nome} (${alvo.email})` : alvo.email) : 'esta cliente'
+    // Mensagem sai pelo WhatsApp da própria cliente: nunca sem confirmar (Q4 da auditoria).
+    if (!window.confirm(`Mandar esta mensagem AGORA para ${quem}?\n\nNão tem como desfazer.`)) return
     setEnviando(true)
     setResultado(null)
     try {
