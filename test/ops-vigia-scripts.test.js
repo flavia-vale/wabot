@@ -28,7 +28,7 @@ test('ponto_retorno.sh não imprime o .env inteiro', () => {
 test('vigia_cron.sh usa trava e só notifica na transição para vermelho', () => {
   const s = read('vigia_cron.sh')
   assert.match(s, /flock -n/)
-  assert.match(s, /\$PREV" != red/)
+  assert.match(s, /"\$CUR" != "\$PREV"/)
 })
 
 test('vigia.mjs ignora snapshot-cron por padrão e separa worker_restart do erro', () => {
