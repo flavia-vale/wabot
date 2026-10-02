@@ -447,3 +447,23 @@ pagante. **Números mudam** (para baixo onde havia cortesia, para cima onde só
 havia cobrança de assinatura): avisar a dona antes do deploy em `main`.
 **Custo:** filtros de relação dentro do próprio `count`, nenhuma consulta por
 linha, zero RAM.
+
+## Observabilidade e resumo de logs sem carregar `MessageLog` inteiro (Q2 da auditoria, 2026-10-02)
+
+`GET /system/observability` (24 h) e `GET /logs/summary` (até 30 d) faziam
+`messageLog.findMany` **sem `take`** só para contar — toda abertura do admin
+trazia a tabela do período para a memória da API (teto PM2 de 500 MB).
+
+| Peça | Onde |
+|---|---|
+| Janelas/classificação (PURO) | `src/domain/admin/operationalLogs.js` |
+| Amostra: sucesso por `count` (total + um por janela), não-sucesso com teto de 20 000 | `loadOperationalLogSample` em `src/api/routes/admin.js` |
+| Guarda | `test/admin-logs-sem-carregar-tabela.test.js` (falha se voltar `messageLog.findMany` sem `take` em `admin.js`) |
+
+**Não regredir:** sucesso é a maioria das linhas e não precisa vir uma a uma;
+o que exige leitura de `errorMsg` (dedup, config, timeout, outros) vem com
+teto e `dataCoverage.truncated` avisa quando cortou. Janela nunca começa antes
+do `from` do período. `MessageLog` só tem índice por `userId` — consulta
+cross-user continua varrendo o período; o ganho aqui é RAM e transferência,
+não I/O. Índice `(status, sentAt)` fica como migration à parte, se o `count`
+pesar. Zero RAM nova (reduz a que já se usava).
