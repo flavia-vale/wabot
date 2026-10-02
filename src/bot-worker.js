@@ -461,10 +461,15 @@ function logMonitoredSourceDrop(jid, reason, details = {}) {
 // visibilidade admin), evitando que a operadora precise cruzar o jid na mão.
 const groupSubjectByJid = new Map()
 
+const DEFAULT_WORKER_CHAT_SCOPE_MODE = 'dm'
+
 // Fase 2 do plano de recepção (RCA 2026-08-26): "olhar só o que foi escolhido".
 // Inverte a lista de exceções acima — ver src/core/chatScopePolicy.js. Modo em
-// degraus, default `off`, rollback sem redeploy pela env.
-const CHAT_SCOPE_MODE = normalizeChatScopeMode(process.env.WA_CHAT_SCOPE_MODE)
+// degraus. Default `dm` desde 2026-10-02 (RCA "Cegueira com DMs fromMe"): conversa
+// individual nunca é usada pelo robô e era a porta das quedas 500 / cegueira
+// (medido em prod: 2.740 DMs abertas no bot.log, todas descartadas). Rollback sem
+// redeploy: WA_CHAT_SCOPE_MODE=off (pm2 delete + start).
+const CHAT_SCOPE_MODE = normalizeChatScopeMode(process.env.WA_CHAT_SCOPE_MODE ?? DEFAULT_WORKER_CHAT_SCOPE_MODE)
 const CHAT_SCOPE_PANIC_MS = Math.max(0, Number(process.env.WA_CHAT_SCOPE_PANIC_MS ?? DEFAULT_CHAT_SCOPE_PANIC_MS))
 const CHAT_SCOPE_SIGNAL_INTERVAL_MS = Math.max(5 * 60_000, Number(process.env.WA_CHAT_SCOPE_SIGNAL_INTERVAL_MS || 60 * 60_000))
 const CHAT_SCOPE_LOG_SAMPLE_PER_TYPE = Math.max(0, Number(process.env.WA_CHAT_SCOPE_LOG_SAMPLE || 5))
