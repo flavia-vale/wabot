@@ -23,6 +23,7 @@ import { buildFeatureGateError, canUseAdvancedPreservation, canUseChannelButton,
 import { normalizeRelayFooter, RELAY_FOOTER_MAX_CHARS } from '../../core/relayFooter.js'
 import { resolveDestinationPreservation } from '../../core/preservationConfig.js'
 import { resolveSendWindow } from '../../core/sendWindow.js'
+import { DELIVERY_NETWORK, getDeliveryNetworkCapabilities, resolveDeliveryNetwork } from '../../core/delivery/networks.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
 
@@ -110,7 +111,12 @@ export async function groupsRoutes(app, opts = {}) {
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { waJid: rawJid, name: rawName, role, kind: rawKind } = req.body ?? {}
+    const { waJid: rawJid, name: rawName, role, kind: rawKind, deliveryNetwork: rawDeliveryNetwork } = req.body ?? {}
+    // Feature 017: grupo de outro aplicativo (Telegram) entra só pelo link da
+    // tela Aplicativos — a cliente nunca digita identificador (FR-017).
+    if ((rawDeliveryNetwork !== undefined && resolveDeliveryNetwork(rawDeliveryNetwork) !== DELIVERY_NETWORK.WHATSAPP) || String(rawJid ?? '').startsWith('tg:')) {
+      return reply.code(400).send({ error: 'Grupos do Telegram são adicionados pela tela Aplicativos.' })
+    }
     const kind = (rawKind ?? JID_KIND.GROUP).toString()
     if (!ALLOWED_KINDS.has(kind)) return reply.code(400).send({ error: 'kind deve ser group ou channel' })
     const waJid = ensureJid(rawJid, kind === JID_KIND.CHANNEL ? JID_KIND.CHANNEL : JID_KIND.GROUP)
@@ -231,6 +237,16 @@ export async function groupsRoutes(app, opts = {}) {
   app.put('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
+
+    // Feature 017 (US3 cenário 5): o aplicativo de um destino não muda
+    // depois de criado; e opção que o aplicativo não aceita (botão "Ver
+    // canal") não é gravada — decidido pela capacidade, não pelo nome.
+    if (req.body?.deliveryNetwork !== undefined && resolveDeliveryNetwork(req.body.deliveryNetwork) !== resolveDeliveryNetwork(group.deliveryNetwork)) {
+      return reply.code(400).send({ error: 'O aplicativo de um grupo não pode ser trocado. Cadastre o grupo do outro aplicativo separadamente.' })
+    }
+    if (req.body?.channelButtonJid && !getDeliveryNetworkCapabilities(group.deliveryNetwork).acceptsButton) {
+      return reply.code(400).send({ error: 'Este aplicativo não mostra o botão "Ver canal".' })
+    }
 
     const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, watermarkText, watermarkColor, watermarkSize, watermarkPosition, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, relayFooterText, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
     if (allowedPlatforms !== undefined) {

@@ -94,6 +94,10 @@ export const DELIVERY_FAILURE_REASONS = Object.freeze({
       categoria: ERROR_CATEGORIES.TIMEOUT,
       texto: 'O Telegram pediu para o robô ir mais devagar. A oferta esperou a vez e foi descartada por ficar velha demais na fila.',
     }),
+    aplicativo_desligado: Object.freeze({
+      categoria: ERROR_CATEGORIES.CONFIG_BLOCK,
+      texto: 'O envio para o Telegram está desligado na sua conta (tela Aplicativos). Seus grupos continuam cadastrados; é só ligar de novo.',
+    }),
     robo_indisponivel: Object.freeze({
       categoria: ERROR_CATEGORIES.OTHER,
       texto: 'O Telegram ficou fora do ar para o robô do Espelha Grupos neste momento. Não é nada na sua conta; o envio volta sozinho quando o Telegram normalizar.',

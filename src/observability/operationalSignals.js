@@ -58,6 +58,13 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // Oferta espelhada saiu sem foto porque o card de preview não conseguiu
   // imagem. Durável para comparar por loja e por etapa ao longo dos dias.
   preview_card_no_image: 'ops_preview_card_no_image',
+  // Feature 017: oferta entregue noutro aplicativo (Telegram) com algo a
+  // menos (botão, card...) porque o aplicativo não aceita — nunca em silêncio.
+  delivery_degraded: 'ops_delivery_degraded',
+  // Feature 017: o robô único de um aplicativo mudou para fora do ar /
+  // bloqueado, ou passou a ser limitado no ritmo (vale para todas as contas).
+  delivery_network_down: 'ops_delivery_network_down',
+  delivery_network_throttled: 'ops_delivery_network_throttled',
   // Link de domínio próprio do grupo de origem desembrulhado até a loja.
   custom_domain_link_resolved: 'ops_custom_domain_link_resolved',
   // Sessão conectada e SEM receber mensagem útil, com evidência de tráfego

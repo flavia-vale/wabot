@@ -1700,6 +1700,21 @@ model DeliveryOutbox {
 // memória não sobreviveria a um restart da API). Populada só na Fatia 5
 // (Telegram como origem) — a tabela nasce nesta fatia para o schema já
 // acomodar a origem sem migração destrutiva futura.
+// Feature 017, Fatia 3: ligação da conta com um aplicativo de robô único.
+// `linkCode` vai no link "adicionar o robô ao grupo" (a cliente não copia
+// nada); `disabledAt` = aplicativo desligado pela cliente, nada apagado.
+model DeliveryNetworkLink {
+  id              String    @id @default(cuid())
+  userId          String
+  deliveryNetwork String
+  linkCode        String    @unique
+  disabledAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, deliveryNetwork])
+}
+
 model DeliveryInboxSeen {
   id              String   @id @default(cuid())
   deliveryNetwork String
