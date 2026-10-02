@@ -101,6 +101,7 @@ import { resolveWaWebVersion, WA_VERSION_REGISTRY_URL_DEFAULT, WA_FAILURE_VERSIO
 import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, shouldResetAuthForBadSession, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide, extractRemoteJidFromLogArgs } from './core/reconnectPolicy.js'
 import { registerStuckDrop, noteDecryptFailure, describeStuckCulprit } from './core/stuckCycleDetector.js'
 import { extractStreamErrorAck } from './core/stuckAckClassifier.js'
+import { createConnectionIntake, noteUpsert, noteAccepted, describeOfflineDrain } from './core/offlineDrainTelemetry.js'
 import { buildAuthResetSessionPatch, buildCloseSessionPatch, buildHeartbeatSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
@@ -1874,6 +1875,11 @@ let lastReceptionSignalAt = 0
 let failuresSinceLastAccepted = 0
 let stableDropsSinceLastAccepted = 0
 
+// Fila offline do WhatsApp por conexão (core/offlineDrainTelemetry.js): zera
+// no `open`; só log, sem ação.
+let connectionIntake = null
+let offlineDrainCheckTimer = null
+const OFFLINE_DRAIN_RECHECK_MS = 2 * 60_000
 function markUpsertReceived() { lastUpsertAtMs = Date.now() }
 
 // Auto-cura de recepção (RCA 2026-08-28). Linha de base da PRÓPRIA conta: só
@@ -1946,6 +1952,7 @@ function markMessageAccepted() {
   failuresSinceLastAccepted = 0
   stableDropsSinceLastAccepted = 0
   stuckCycleDrops = []
+  connectionIntake = noteAccepted(connectionIntake)
 }
 
 // `WA_RECEPTION_WINDOW_MS=0` desliga a classificação (rollback sem redeploy).
@@ -3935,6 +3942,7 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // concluída". O reset agora é decidido no close, só se a sessão foi estável
       // (shouldResetBackoff). Aqui só marcamos quando ela abriu.
       connectionOpenedAt = Date.now()
+      connectionIntake = createConnectionIntake(connectionOpenedAt)
       // Conectou: o orçamento de tentativas volta ao zero.
       everOpened = true
       consecutiveFailedReconnects = 0
@@ -5887,6 +5895,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     logger.info({ type, count: messages.length }, 'messages.upsert recebido')
     markUpsertReceived()
+    connectionIntake = noteUpsert(connectionIntake, type, messages.length)
     if (type !== 'notify' && type !== 'append') return
     const cutoff = Date.now() - INCOMING_MAX_AGE_MS
 
@@ -6128,6 +6137,26 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
     restartSessionAfterCryptoSurge().catch(error => logger.error({ err: error?.message }, 'Erro na rotina de recuperação automática'))
   }
   sock.ev.on('connection.update', ({ lastDisconnect }) => registerSessionError(lastDisconnect?.error))
+  // E11: o servidor terminou de mandar a fila offline. Foto agora e de novo em
+  // 2 min — `appendUpserts` parado com `maxPending` alto = dreno preso.
+  sock.ev.on('connection.update', ({ connection, receivedPendingNotifications, wabotOfflineCount }) => {
+    if (connection === 'close' && offlineDrainCheckTimer) {
+      clearTimeout(offlineDrainCheckTimer)
+      offlineDrainCheckTimer = null
+    }
+    if (receivedPendingNotifications !== true) return
+    try {
+      logger.info(describeOfflineDrain({ intake: connectionIntake, offlineCount: wabotOfflineCount, phase: 'entregue' }), 'fila offline do WhatsApp: servidor terminou de entregar')
+      if (offlineDrainCheckTimer) clearTimeout(offlineDrainCheckTimer)
+      offlineDrainCheckTimer = setTimeout(() => {
+        offlineDrainCheckTimer = null
+        try {
+          logger.info(describeOfflineDrain({ intake: connectionIntake, offlineCount: wabotOfflineCount, phase: 'depois_2min' }), 'fila offline do WhatsApp: dreno 2 min depois')
+        } catch {}
+      }, OFFLINE_DRAIN_RECHECK_MS)
+      offlineDrainCheckTimer.unref?.()
+    } catch {}
+  })
 }
 
 

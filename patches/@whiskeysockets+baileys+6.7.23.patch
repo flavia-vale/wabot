@@ -331,6 +331,20 @@ index 38bb9e0..3c1b783 100644
                  const [groupData, senderKeyMap] = await Promise.all([
                      (async () => {
                          let groupData = useCachedGroupMetadata && cachedGroupMetadata ? await cachedGroupMetadata(jid) : undefined;
+diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js b/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js
+index c819745..7cb598b 100644
+--- a/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js
++++ b/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js
+@@ -552,7 +552,8 @@ export const makeSocket = (config) => {
+             ev.flush();
+             logger.trace('flushed events for initial buffer');
+         }
+-        ev.emit('connection.update', { receivedPendingNotifications: true });
++        // wabot patch (medida da fila offline): a contagem do servidor vai junto no evento.
++        ev.emit('connection.update', { receivedPendingNotifications: true, wabotOfflineCount: offlineNotifs });
+     });
+     // update credentials when required
+     ev.on('creds.update', update => {
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Utils/signal.js b/node_modules/@whiskeysockets/baileys/lib/Utils/signal.js
 index 13bf52b..31093ab 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Utils/signal.js
