@@ -14,6 +14,7 @@
 
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { fileURLToPath } from 'url'
 
 const execFileP = promisify(execFile)
 
@@ -25,6 +26,8 @@ const STAGING_APPS = (process.env.STAGING_PM2_APPS || 'api-staging visual-stagin
   .trim()
   .split(/\s+/)
   .filter(Boolean)
+
+const SAFE_SAVE_SCRIPT = fileURLToPath(new URL('../../scripts/pm2-save-seguro.mjs', import.meta.url))
 
 const NOT_FOUND_RE = /not found|doesn't exist|process or namespace/i
 
@@ -75,8 +78,11 @@ export async function setStagingPower(action, { exec = execFileP } = {}) {
   } else {
     await exec(PM2_BIN, ['start', 'ecosystem.config.cjs', '--only', STAGING_APPS.join(',')], { cwd: STAGING_DIR })
   }
-  await exec(PM2_BIN, ['save']).catch(() => {})
+  // `pm2 save` PROTEGIDO (RCA 2026-10-01): este daemon é o mesmo da produção;
+  // um save cru com produção fora do ar apagaria bot-supervisor/dashboard do
+  // dump. Recusa do guarda não derruba o botão (o estado do staging já mudou).
+  await exec(process.execPath, [SAFE_SAVE_SCRIPT]).catch(() => {})
   return getStagingStatus({ exec })
 }
 
-export const __test = { STAGING_APPS, STAGING_DIR, PM2_BIN }
+export const __test = { STAGING_APPS, STAGING_DIR, PM2_BIN, SAFE_SAVE_SCRIPT }

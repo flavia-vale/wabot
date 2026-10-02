@@ -43,7 +43,9 @@ test("setStagingPower('off') para cada app, salva e retorna status", async () =>
   await setStagingPower('off', { exec: fakeExec(calls) })
   const stops = calls.filter((c) => c.args[0] === 'stop').map((c) => c.args[1])
   assert.deepEqual(stops, __test.STAGING_APPS)
-  assert.ok(calls.some((c) => c.args[0] === 'save'))
+  // Salva pelo guarda (nunca `pm2 save` cru — RCA 2026-10-01).
+  assert.ok(calls.some((c) => c.args[0] === __test.SAFE_SAVE_SCRIPT))
+  assert.ok(!calls.some((c) => c.args[0] === 'save'))
 })
 
 test("setStagingPower('off') tolera app inexistente (not found)", async () => {
