@@ -165,6 +165,20 @@ async function processRow(row, { db, adapter, caps, deliveryNetwork, allowed, he
   })
   if (link?.disabledAt) return drop(db, row, offer, buildDeliveryFailureCode(deliveryNetwork, 'aplicativo_desligado'))
 
+  // Anti-repetição por destino (Fatia 4): o espelhamento manda a janela que
+  // valeria para este destino (cupom: curta). O mesmo link já entregue NESTE
+  // grupo dentro da janela não sai de novo. É por destino — um envio no
+  // WhatsApp nunca bloqueia o Telegram, nem o contrário (FR-023).
+  const janelaMs = Number(offer?.janelaRepeticaoMs)
+  const linkConvertido = String(offer?.linkConvertido ?? '')
+  if (linkConvertido && Number.isFinite(janelaMs) && janelaMs > 0) {
+    const recent = await db.messageLog.findFirst({
+      where: { userId: row.userId, destGroup: row.destinationId, convertedUrl: linkConvertido, status: 'success', sentAt: { gte: new Date(now() - janelaMs) } },
+      select: { id: true },
+    })
+    if (recent) return drop(db, row, offer, 'skip:dedup_recent_link')
+  }
+
   // 5. Degradar.
   const { oferta, reducoes } = degradeFor(offer, caps)
   const reductions = serializeDeliveryReductions(reducoes)
@@ -223,6 +237,49 @@ export function startDeliveryOutboxSweep({ deliveryNetwork, db = defaultDb, env 
     } finally {
       running = false
     }
+  }, intervalMs)
+  timer.unref?.()
+  return { stop: () => clearInterval(timer) }
+}
+
+/**
+ * Faxina para quando o aplicativo está DESLIGADO no servidor (interruptor
+ * fora da lista ou sem o segredo do robô). Os robôs do WhatsApp leem o
+ * interruptor quando ligam, então podem continuar entregando ofertas à caixa
+ * de saída até o próximo reinício deles. Sem drenagem, essas linhas
+ * ficariam pendentes para sempre: aqui, passada a idade máxima, elas são
+ * descartadas com motivo próprio no histórico — nunca "entregues".
+ */
+export async function runDeliveryOutboxJanitorTick({ deliveryNetwork, db = defaultDb, now = () => Date.now() } = {}) {
+  const t0 = now()
+  const stale = await db.deliveryOutbox.findMany({
+    where: {
+      deliveryNetwork,
+      status: { in: [OUTBOX_STATUS.PENDING, OUTBOX_STATUS.SENDING] },
+      enqueuedAt: { lt: new Date(t0 - DEFAULT_OUTBOX_MAX_AGE_MIN * 60_000) },
+    },
+    take: BATCH_SIZE,
+  })
+  const errorMsg = buildDeliveryFailureCode(deliveryNetwork, 'robo_indisponivel')
+  for (const row of stale) {
+    try {
+      await drop(db, row, parseOffer(row), errorMsg)
+    } catch (err) {
+      logger.warn({ err: err?.message, outboxId: row.id }, 'caixa de saída: faxina falhou num item; seguindo')
+    }
+  }
+  const pruned = await db.deliveryOutbox.deleteMany({
+    where: {
+      status: { in: [OUTBOX_STATUS.DONE, OUTBOX_STATUS.DROPPED, OUTBOX_STATUS.FAILED] },
+      updatedAt: { lt: new Date(t0 - PRUNE_AFTER_MS) },
+    },
+  }).catch(() => ({ count: 0 }))
+  return { descartados: stale.length, podados: pruned?.count ?? 0 }
+}
+
+export function startDeliveryOutboxJanitor({ deliveryNetwork, db = defaultDb, intervalMs = 10 * 60_000 } = {}) {
+  const timer = setInterval(() => {
+    runDeliveryOutboxJanitorTick({ deliveryNetwork, db }).catch((err) => logger.warn({ err: err?.message, deliveryNetwork }, 'caixa de saída: faxina falhou'))
   }, intervalMs)
   timer.unref?.()
   return { stop: () => clearInterval(timer) }

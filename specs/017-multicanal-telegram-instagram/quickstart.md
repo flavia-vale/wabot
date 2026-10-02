@@ -77,7 +77,12 @@ pm2 delete api-staging
 cd ~/wabot-staging && pm2 start ecosystem.config.cjs --only api-staging
 ```
 
-⚠️ `pm2 delete` + `start`, **não** `restart --update-env` (pegadinha #1). **Não** reiniciar o `bot-supervisor` — o interruptor é lido na API e chega ao worker por `reloadConfig`.
+⚠️ `pm2 delete` + `start`, **não** `restart --update-env` (pegadinha #1).
+
+⚠️ **Correção (Fatia 4, 2026-10-02):** a montagem da config dos destinos acontece DENTRO do worker (`buildEntitledGroupConfig` em `src/bot-worker.js`), e cada worker lê o `.env` quando liga (`dotenv/config`). Então:
+- **Ligar o espelhamento WhatsApp → Telegram** só vale para robôs que ligaram DEPOIS de o interruptor estar no `.env`. Em produção (modo `remote`), colocar `DELIVERY_NETWORKS_ENABLED`/segredo no `.env` **antes** do deploy das fatias — esse deploy já reinicia o `bot-supervisor` (toca código de worker) e todos os robôs relêem o `.env`. Em staging (`inline`), o `pm2 delete`+`start` da API já reinicia os robôs.
+- **Filas, ofertas automáticas e a tela Aplicativos** dependem só da API (valem logo após o `pm2 delete`+`start` da API).
+- **Desligar** (tirar `telegram` do interruptor + `pm2 delete`+`start` da API) para de entregar NA HORA: a API não drena mais. Robôs que ainda leem o valor antigo continuam deixando ofertas na caixa de saída até reiniciarem; a faxina da API (`runDeliveryOutboxJanitorTick`, a cada 10 min) descarta essas linhas com motivo "robo_indisponivel" quando passam de 180 min. Nada é entregue.
 
 Roteiro (gates nº 2, 3, 5 e 6 da spec):
 

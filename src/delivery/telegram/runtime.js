@@ -11,7 +11,7 @@ import { DELIVERY_NETWORK, isDeliveryNetworkEnabled, registerDeliveryNetwork } f
 import { createHealthRecorder } from '../../core/delivery/networkHealth.js'
 import { getPlanAccess } from '../../billing/plans.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
-import { startDeliveryOutboxSweep } from '../../deliveryOutbox/sweep.js'
+import { startDeliveryOutboxJanitor, startDeliveryOutboxSweep } from '../../deliveryOutbox/sweep.js'
 import { createTelegramApi, readTelegramSecret } from './api.js'
 import { createTelegramAdapter } from './adapter.js'
 import { handleLinkUpdate } from './link.js'
@@ -30,10 +30,12 @@ export async function canUseMultiNetworkFor(db, userId) {
 
 export function startTelegramDelivery({ db = defaultDb, env = process.env, fetchImpl, extraUpdateHandlers = [] } = {}) {
   if (runtime) return runtime
-  if (!isDeliveryNetworkEnabled(DELIVERY_NETWORK.TELEGRAM, env)) return null
   const secret = readTelegramSecret(env)
-  if (!secret) {
-    logger.info('telegram: habilitado mas sem o segredo do robô; não iniciado')
+  if (!isDeliveryNetworkEnabled(DELIVERY_NETWORK.TELEGRAM, env) || !secret) {
+    if (isDeliveryNetworkEnabled(DELIVERY_NETWORK.TELEGRAM, env)) logger.info('telegram: habilitado mas sem o segredo do robô; não iniciado')
+    // Desligado: só a faxina roda (descarta com motivo o que sobrar na caixa
+    // de saída). Sem nenhuma chamada ao Telegram.
+    startDeliveryOutboxJanitor({ deliveryNetwork: DELIVERY_NETWORK.TELEGRAM, db })
     return null
   }
 
