@@ -23,10 +23,10 @@ index f4458db..e6912a6 100644
              const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid));
              await cipher.initOutgoing(session);
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
-index c46b096..a429a50 100644
+index c46b096..1657969 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 +++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
-@@ -7,7 +7,8 @@ import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaul
+@@ -7,11 +7,12 @@ import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaul
  import { WAMessageStatus, WAMessageStubType } from '../Types/index.js';
  import { aesDecryptCTR, aesEncryptGCM, cleanMessage, Curve, decodeMediaRetryNode, decodeMessageNode, decryptMessageNode, delay, derivePairingCodeKey, encodeBigEndian, encodeSignedDeviceIdentity, getCallStatusFromNode, getHistoryMsg, getNextPreKeys, getStatusFromReceiptType, hkdf, MISSING_KEYS_ERROR_TEXT, NACK_REASONS, NO_MESSAGE_FOUND_ERROR_TEXT, unixTimestampSeconds, xmppPreKey, xmppSignedPreKey } from '../Utils/index.js';
  import { makeMutex } from '../Utils/make-mutex.js';
@@ -36,6 +36,11 @@ index c46b096..a429a50 100644
  import { extractGroupMetadata } from './groups.js';
  import { makeMessagesSocket } from './messages-send.js';
  export const makeMessagesRecvSocket = (config) => {
+-    const { logger, retryRequestDelayMs, maxMsgRetryCount, getMessage, shouldIgnoreJid } = config;
++    const { logger, retryRequestDelayMs, maxMsgRetryCount, getMessage, shouldIgnoreJid, shouldIgnoreOwnDeviceDm, onIncomingMessageNode } = config;
+     const sock = makeMessagesSocket(config);
+     const { ev, authState, ws, processingMutex, signalRepository, query, upsertMessage, resyncAppState, onUnexpectedError, assertSessions, sendNode, relayMessage, sendReceipt, uploadPreKeys, sendPeerDataOperationMessage } = sock;
+     /** this mutex ensures that each retryRequest will wait for the previous one to finish */
 @@ -32,7 +33,12 @@ export const makeMessagesRecvSocket = (config) => {
              useClones: false
          });
@@ -113,7 +118,7 @@ index c46b096..a429a50 100644
                                  }
                                  catch (error) {
                                      logger.error({ key, ids, trace: error.stack }, 'error in sending message again');
-@@ -608,6 +648,17 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -608,6 +648,40 @@ export const makeMessagesRecvSocket = (config) => {
          }
      };
      const handleMessage = async (node) => {
@@ -121,17 +126,40 @@ index c46b096..a429a50 100644
 +        // propria conta (copia fromMe). O id travado de um stream:error 500 so aparecia no log depois
 +        // da queda; sem este registro nao da para saber o que o robo fez com ela antes. Nao muda
 +        // nenhum comportamento.
++        // wabot patch (RCA 2026-10-02, blindagem): DM que OUTRO aparelho da conta mandou para um
++        // contato (from = a propria conta, recipient = o contato). O robo nunca usa essas
++        // conversas, e processa-las derrubava a sessao (500 a cada ~50 min, conta cega). Fora do
++        // escopo -> <ack> e descarta ANTES de abrir, como ja e feito com grupo nao monitorado.
++        // Conversa consigo mesma (recipient = a propria conta) e mensagem interna entre aparelhos
++        // (sem recipient) seguem o caminho normal.
++        let ownDeviceDmRecipient;
 +        if (!isJidGroup(node.attrs.from) && !isJidNewsletter(node.attrs.from) && !isJidStatusBroadcast(node.attrs.from)) {
 +            const meId = authState.creds.me?.id;
 +            const meLid = authState.creds.me?.lid;
-+            if ((meId && areJidsSameUser(node.attrs.from, meId)) || (meLid && areJidsSameUser(node.attrs.from, meLid))) {
++            const isMe = (jid) => !!jid && ((meId && areJidsSameUser(jid, meId)) || (meLid && areJidsSameUser(jid, meLid)));
++            if (isMe(node.attrs.from)) {
 +                logger.info({ id: node.attrs.id, from: node.attrs.from, recipient: node.attrs.recipient, type: node.attrs.type, offline: node.attrs.offline }, 'wabot: mensagem de outro aparelho da conta chegou ao socket');
++                const recipient = node.attrs.recipient;
++                if (recipient && (isJidUser(recipient) || isLidUser(recipient)) && !isMe(recipient)) {
++                    ownDeviceDmRecipient = recipient;
++                }
 +            }
++        }
++        // wabot patch (blindagem): avisa o robo de QUAL chat veio cada mensagem, para que um
++        // stream:error que cite o id dela possa ser atribuido ao chat (quarentena por chat).
++        try {
++            onIncomingMessageNode?.({ id: node.attrs.id, chatJid: ownDeviceDmRecipient || node.attrs.from });
++        }
++        catch { }
++        if (ownDeviceDmRecipient && shouldIgnoreOwnDeviceDm?.(ownDeviceDmRecipient)) {
++            await sendMessageAck(node);
++            logger.info({ id: node.attrs.id, recipient: ownDeviceDmRecipient, offline: node.attrs.offline }, 'wabot: DM de outro aparelho da conta fora do escopo confirmada com ack, sem abrir');
++            return;
 +        }
          if (shouldIgnoreJid(node.attrs.from) && node.attrs.from !== '@s.whatsapp.net') {
              logger.debug({ key: node.attrs.key }, 'ignored message');
              await sendMessageAck(node);
-@@ -650,11 +701,44 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -650,11 +724,44 @@ export const makeMessagesRecvSocket = (config) => {
                      // message failed to decrypt
                      if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
                          if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
@@ -176,7 +204,7 @@ index c46b096..a429a50 100644
                                      return;
                                  }
                                  const encNode = getBinaryNodeChild(node, 'enc');
-@@ -668,6 +752,16 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -668,6 +775,16 @@ export const makeMessagesRecvSocket = (config) => {
                              }
                          });
                      }
@@ -193,7 +221,7 @@ index c46b096..a429a50 100644
                      else {
                          // no type in the receipt => message delivered
                          let type = undefined;
-@@ -680,14 +774,22 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -680,14 +797,22 @@ export const makeMessagesRecvSocket = (config) => {
                              // message was sent by us from a different device
                              type = 'sender';
                              // need to specially handle this case
@@ -217,7 +245,7 @@ index c46b096..a429a50 100644
                          // send ack for history message
                          const isAnyHistoryMsg = getHistoryMsg(msg.message);
                          if (isAnyHistoryMsg) {
-@@ -702,6 +804,33 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -702,6 +827,33 @@ export const makeMessagesRecvSocket = (config) => {
          }
          catch (error) {
              logger.error({ error, node }, 'error in handling message');
@@ -251,7 +279,7 @@ index c46b096..a429a50 100644
          }
      };
      const fetchMessageHistory = async (count, oldestMsgKey, oldestMsgTimestamp) => {
-@@ -846,7 +975,7 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -846,7 +998,7 @@ export const makeMessagesRecvSocket = (config) => {
      };
      const makeOfflineNodeProcessor = () => {
          const nodeProcessorMap = new Map([
@@ -260,7 +288,7 @@ index c46b096..a429a50 100644
              ['call', handleCall],
              ['receipt', handleReceipt],
              ['notification', handleNotification]
-@@ -867,7 +996,14 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -867,7 +1019,14 @@ export const makeMessagesRecvSocket = (config) => {
                          onUnexpectedError(new Error(`unknown offline node type: ${type}`), 'processing offline node');
                          continue;
                      }
@@ -276,7 +304,7 @@ index c46b096..a429a50 100644
                  }
                  isProcessing = false;
              };
-@@ -1020,7 +1156,7 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -1020,7 +1179,7 @@ export const makeMessagesRecvSocket = (config) => {
      }
      // recv a message
      ws.on('CB:message', (node) => {

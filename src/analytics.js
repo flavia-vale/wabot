@@ -181,6 +181,8 @@ export const ANALYTICS_EVENTS = new Set([
   // toda mensagem NOVA do canal reabria o ciclo decrypt-fail -> retry-receipt
   // -> stream:error -> queda, pra sempre (medido: 63% da frota afetada).
   'ops_wa_channel_desync_quarantine',
+  // Blindagem B (RCA 2026-10-02): chat fora da lista em quarentena por derrubar a sessão.
+  'ops_wa_chat_drop_quarantine',
   'ops_wa_reception_blind',
   'ops_wa_reception_self_heal',
   // Piloto de reforço de ativação (2026-09-23): mensagem de boas-vindas pelo
