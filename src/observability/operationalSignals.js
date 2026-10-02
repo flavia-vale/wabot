@@ -35,9 +35,6 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // Mesma mensagem repetindo no ack de um stream:error — loop de
   // retry-receipt travado derrubando a sessão em cadência (RCA 2026-07).
   wa_stuck_message_retry: 'ops_wa_stuck_message_retry',
-  // Quedas 500 com stuckMsg e id DIFERENTE a cada vez, sem nada aceito no
-  // meio (Camada B, core/stuckCycleDetector.js). Traz o tipo de chat culpado.
-  wa_stuck_cycle: 'ops_wa_stuck_cycle',
   // Camada 3 (issue #1216): grupo com sender-key dessincronizada disparou
   // auto-refresh sozinho (não-destrutivo).
   wa_group_desync_autoheal: 'ops_wa_group_desync_autoheal',

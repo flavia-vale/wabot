@@ -99,9 +99,6 @@ import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingSta
 import { createPairingAuthBackup } from './core/pairingAuthBackup.js'
 import { resolveWaWebVersion, WA_VERSION_REGISTRY_URL_DEFAULT, WA_FAILURE_VERSION_REJECTED } from './core/waVersion.js'
 import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, shouldResetAuthForBadSession, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide, extractRemoteJidFromLogArgs } from './core/reconnectPolicy.js'
-import { registerStuckDrop, noteDecryptFailure, describeStuckCulprit } from './core/stuckCycleDetector.js'
-import { extractStreamErrorAck } from './core/stuckAckClassifier.js'
-import { createConnectionIntake, noteUpsert, noteAccepted, describeOfflineDrain } from './core/offlineDrainTelemetry.js'
 import { buildAuthResetSessionPatch, buildCloseSessionPatch, buildHeartbeatSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
@@ -1586,21 +1583,6 @@ const RECONNECT_STABLE_CLOSE_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber
 const STUCK_MSG_WINDOW_MS = Math.max(5 * 60_000, envNumber('WA_STUCK_MSG_WINDOW_MS', 2 * 60 * 60_000))
 const STUCK_MSG_THRESHOLD = Math.max(0, envNumber('WA_STUCK_MSG_THRESHOLD', 2))
 let stuckMessageTimestamps = new Map()
-// Ciclo de mensagem travada com id DIFERENTE a cada queda (Camada B, ver
-// core/stuckCycleDetector.js). Escopo de módulo: atravessa reconexões e só
-// zera em markMessageAccepted. Só sinal (`ops_wa_stuck_cycle`), sem ação.
-// `WA_STUCK_CYCLE_THRESHOLD=0` desliga.
-const STUCK_CYCLE_WINDOW_MS = Math.max(10 * 60_000, envNumber('WA_STUCK_CYCLE_WINDOW_MS', 3 * 60 * 60_000))
-const STUCK_CYCLE_THRESHOLD = Math.max(0, envNumber('WA_STUCK_CYCLE_THRESHOLD', 3))
-const STUCK_CYCLE_CULPRIT_WINDOW_MS = 10 * 60_000
-let stuckCycleDrops = []
-let recentDecryptFailuresByJid = new Map()
-function noteDecryptFailureForCycle(args) {
-  try {
-    const jid = extractRemoteJidFromLogArgs(args)
-    if (jid) recentDecryptFailuresByJid = noteDecryptFailure(recentDecryptFailuresByJid, jid, Date.now(), { windowMs: STUCK_CYCLE_CULPRIT_WINDOW_MS })
-  } catch {}
-}
 // Auto-heal de grupo dessincronizado (issue #1216, Camada 3): investigação de produção
 // (jul/2026) achou um grupo NÃO-monitorado com sender-key do Signal dessincronizada
 // gerando centenas de falhas de decrypt e derrubando a sessão em cadência de ~50min (o
@@ -1875,11 +1857,6 @@ let lastReceptionSignalAt = 0
 let failuresSinceLastAccepted = 0
 let stableDropsSinceLastAccepted = 0
 
-// Fila offline do WhatsApp por conexão (core/offlineDrainTelemetry.js): zera
-// no `open`; só log, sem ação.
-let connectionIntake = null
-let offlineDrainCheckTimer = null
-const OFFLINE_DRAIN_RECHECK_MS = 2 * 60_000
 function markUpsertReceived() { lastUpsertAtMs = Date.now() }
 
 // Auto-cura de recepção (RCA 2026-08-28). Linha de base da PRÓPRIA conta: só
@@ -1951,8 +1928,6 @@ function markMessageAccepted() {
   // e o único evento que zera a cegueira acumulada.
   failuresSinceLastAccepted = 0
   stableDropsSinceLastAccepted = 0
-  stuckCycleDrops = []
-  connectionIntake = noteAccepted(connectionIntake)
 }
 
 // `WA_RECEPTION_WINDOW_MS=0` desliga a classificação (rollback sem redeploy).
@@ -2136,7 +2111,7 @@ function instrumentBaileysLoggerForHealth(baileysLogger) {
       value: (...args) => {
         try {
           for (const arg of args) {
-            if (typeof arg === 'string' && SESSION_HEALTH_SIGNAL_RE.test(arg)) { recordCryptoError(); handleGroupDecryptSignal(args); noteDecryptFailureForCycle(args); break }
+            if (typeof arg === 'string' && SESSION_HEALTH_SIGNAL_RE.test(arg)) { recordCryptoError(); handleGroupDecryptSignal(args); break }
           }
           if (level === 'error' && typeof target.debug === 'function') {
             for (const arg of args) {
@@ -3942,7 +3917,6 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // concluída". O reset agora é decidido no close, só se a sessão foi estável
       // (shouldResetBackoff). Aqui só marcamos quando ela abriu.
       connectionOpenedAt = Date.now()
-      connectionIntake = createConnectionIntake(connectionOpenedAt)
       // Conectou: o orçamento de tentativas volta ao zero.
       everOpened = true
       consecutiveFailedReconnects = 0
@@ -4029,18 +4003,6 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             'Mensagem travada em loop de retry-receipt colocada em quarentena durável; a próxima conexão não pedirá novo retry'
           )
           try { recordOperationalSignal('wa_stuck_message_retry', { userId, msgId: stuckMsgId, count: stuckResult.count }) } catch {}
-        }
-        if (STUCK_CYCLE_THRESHOLD > 0) {
-          const cycle = registerStuckDrop(stuckCycleDrops, { now, msgId: stuckMsgId, windowMs: STUCK_CYCLE_WINDOW_MS, threshold: STUCK_CYCLE_THRESHOLD })
-          stuckCycleDrops = cycle.state
-          if (cycle.cycle) {
-            const culprit = describeStuckCulprit(extractStreamErrorAck(lastDisconnect?.error?.data), recentDecryptFailuresByJid, now, { windowMs: STUCK_CYCLE_CULPRIT_WINDOW_MS })
-            logger.error(
-              { drops: cycle.count, distinctIds: cycle.distinctIds, windowMs: STUCK_CYCLE_WINDOW_MS, culprit },
-              'Ciclo de quedas 500 por mensagem travada com ids diferentes e nada aceito no meio — a quarentena por id não pega; ver docs/rca/whatsapp-sessao.md "Ciclo de mensagem travada"'
-            )
-            try { recordOperationalSignal('wa_stuck_cycle', { userId, drops: cycle.count, distinctIds: cycle.distinctIds, culpritKind: culprit.kind, culpritJid: culprit.jid, culpritSource: culprit.source }) } catch {}
-          }
         }
       }
       connectionOpenedAt = null
@@ -5895,7 +5857,6 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     logger.info({ type, count: messages.length }, 'messages.upsert recebido')
     markUpsertReceived()
-    connectionIntake = noteUpsert(connectionIntake, type, messages.length)
     if (type !== 'notify' && type !== 'append') return
     const cutoff = Date.now() - INCOMING_MAX_AGE_MS
 
@@ -6137,26 +6098,6 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
     restartSessionAfterCryptoSurge().catch(error => logger.error({ err: error?.message }, 'Erro na rotina de recuperação automática'))
   }
   sock.ev.on('connection.update', ({ lastDisconnect }) => registerSessionError(lastDisconnect?.error))
-  // E11: o servidor terminou de mandar a fila offline. Foto agora e de novo em
-  // 2 min — `appendUpserts` parado com `maxPending` alto = dreno preso.
-  sock.ev.on('connection.update', ({ connection, receivedPendingNotifications, wabotOfflineCount }) => {
-    if (connection === 'close' && offlineDrainCheckTimer) {
-      clearTimeout(offlineDrainCheckTimer)
-      offlineDrainCheckTimer = null
-    }
-    if (receivedPendingNotifications !== true) return
-    try {
-      logger.info(describeOfflineDrain({ intake: connectionIntake, offlineCount: wabotOfflineCount, phase: 'entregue' }), 'fila offline do WhatsApp: servidor terminou de entregar')
-      if (offlineDrainCheckTimer) clearTimeout(offlineDrainCheckTimer)
-      offlineDrainCheckTimer = setTimeout(() => {
-        offlineDrainCheckTimer = null
-        try {
-          logger.info(describeOfflineDrain({ intake: connectionIntake, offlineCount: wabotOfflineCount, phase: 'depois_2min' }), 'fila offline do WhatsApp: dreno 2 min depois')
-        } catch {}
-      }, OFFLINE_DRAIN_RECHECK_MS)
-      offlineDrainCheckTimer.unref?.()
-    } catch {}
-  })
 }
 
 

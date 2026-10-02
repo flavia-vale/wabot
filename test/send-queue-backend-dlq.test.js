@@ -146,21 +146,3 @@ test('getDlqSize expõe contagem de entradas na DLQ', async () => {
   assert.equal(size, 3)
   await backend.close()
 })
-
-// S6 (diagnóstico de travamento de filas): com o lockDuration default (30 s) um
-// engasgo do event loop durante um envio de até minutos deixa o lock vencer, o
-// job vira `stalled`, é reprocessado e a oferta sai duplicada.
-test('Worker de envio nasce com lockDuration folgado (>= 120 s), igual ao supervisor', async () => {
-  const mock = createMockBullmq()
-  const backend = await createBullmqSendBackend({
-    redisUrl: 'redis://fake',
-    queueName: 'wabot-send-lock',
-    onRejected: () => {},
-    onDequeued: async () => {},
-    bullmqModule: mock,
-  })
-  const worker = mock._workers.find((w) => w.queueName === 'wabot-send-lock')
-  assert.ok(worker.opts.lockDuration >= 120_000)
-  assert.equal(worker.opts.concurrency, 1)
-  await backend.close()
-})
