@@ -42,18 +42,18 @@ boot (`src/api/server.js`) mata o processo se ausente/malformada.
   admin e `getAffiliateMeData` decifram via `presentAffiliateProfile` /
   `decryptCredential`; o antifraude (`pixMatchesReferredUser`) decifra antes de
   comparar. Migração das linhas existentes:
-  `scripts/migrate-affiliate-pixkey-encrypt.mjs` (idempotente, mesmas precauções
+  `scripts/arquivo/migrate-affiliate-pixkey-encrypt.mjs` (idempotente, mesmas precauções
   de parar API + backup).
 
-**Migração das linhas existentes:** `scripts/migrate-credentials-encrypt.mjs`
+**Migração das linhas existentes:** `scripts/arquivo/migrate-credentials-encrypt.mjs`
 (idempotente). **Parar a API antes** (`pm2 stop api`) para evitar SQLITE_BUSY
 (pegadinha #8), rodar, religar. Em prod, rodar `scripts/backup_prod.sh` antes.
 
 ```bash
 # staging
-pm2 stop api-staging && cd ~/wabot-staging && node scripts/migrate-credentials-encrypt.mjs && pm2 start ecosystem.config.cjs --only api-staging
+pm2 stop api-staging && cd ~/wabot-staging && node scripts/arquivo/migrate-credentials-encrypt.mjs && pm2 start ecosystem.config.cjs --only api-staging
 # prod (backup antes!)
-scripts/backup_prod.sh && pm2 stop api && cd ~/wabot && node scripts/migrate-credentials-encrypt.mjs && pm2 start ecosystem.config.cjs --only api && pm2 save
+scripts/backup_prod.sh && pm2 stop api && cd ~/wabot && node scripts/arquivo/migrate-credentials-encrypt.mjs && pm2 start ecosystem.config.cjs --only api && pm2 save
 ```
 
 **Rollback:** como `decryptCredential` tolera texto puro, reverter o código

@@ -44,7 +44,7 @@ fetch_or_mark "${BASE_URL}/metrics" "${OUT_DIR}/baseline-metrics.txt"
 {
   echo "timestamp=${TS}"
   echo "mode=dry-run"
-  if bash "${ROOT_DIR}/scripts/p2_4_prod_cutover_guard.sh" dry-run; then
+  if bash "${ROOT_DIR}/scripts/arquivo/p2_4_prod_cutover_guard.sh" dry-run; then
     echo "cutover_dry_run=ok"
   else
     echo "cutover_dry_run=failed"
