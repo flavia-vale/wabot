@@ -77,6 +77,7 @@ import { storyAssetRoutes } from './routes/storyAssets.js'
 import { createStoryAssetStorageFromEnv } from '../instagram/storage/localStoryAssetStorage.js'
 import { startStoryAssetCleanup } from '../instagram/storage/storyAssetService.js'
 import { instagramRoutes } from './routes/instagram.js'
+import { deliveryNetworksRoutes } from './routes/deliveryNetworks.js'
 import { TRUSTED_PROXIES } from './trustedProxies.js'
 import { createSessionVersionCache, isLoginToken } from '../auth/sessionVersion.js'
 import { installEgressGuard } from './egressGuard.js'
@@ -672,6 +673,7 @@ app.register(adminEmailsRoutes, { prefix: '/api/admin/emails' })
 app.register(publicRoutes, { prefix: '/api/public' })
 app.register(storyAssetRoutes, { prefix: '/api/public', storage: storyAssetStorage })
 app.register(instagramRoutes, { prefix: '/api/instagram', storage: storyAssetStorage })
+app.register(deliveryNetworksRoutes, { prefix: '/api/delivery-networks' })
 app.register(preservationRoutes, { prefix: '/api/preservation' })
 app.register(offerAutomationRoutes, { prefix: '/api/offer-automations' })
 app.register(offerAutomationReviewRoutes, { prefix: '/api/offer-automations' })

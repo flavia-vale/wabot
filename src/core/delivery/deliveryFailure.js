@@ -50,8 +50,9 @@ export function parseDeliveryFailureCode(errorMsg) {
 // equivalente a CHANNEL_THROTTLED para "limite de ritmo do Telegram") entram
 // aqui nas fatias seguintes, sem duplicar classifyError/categorizeErrorMsg.
 export function categorizeDeliveryFailure(errorMsg) {
-  if (!isDeliveryFailureCode(errorMsg)) return ERROR_CATEGORIES.UNKNOWN
-  return ERROR_CATEGORIES.OTHER
+  const parsed = parseDeliveryFailureCode(errorMsg)
+  if (!parsed) return ERROR_CATEGORIES.UNKNOWN
+  return DELIVERY_FAILURE_REASONS[parsed.deliveryNetwork]?.[parsed.motivo]?.categoria ?? ERROR_CATEGORIES.OTHER
 }
 
 // Ponte para o classificador genérico existente — usada quando a falha de
@@ -59,4 +60,53 @@ export function categorizeDeliveryFailure(errorMsg) {
 // conhecido, em vez de inventar um caminho paralelo de classificação.
 export function classifyGenericDeliveryError(err, context = {}) {
   return classifyError(err, context)
+}
+
+// Motivos de falha conhecidos por rede, com o texto leigo que a cliente lê no
+// histórico (FR-028/SC-007). Cada motivo precisa de explicação PRÓPRIA — o
+// texto genérico de "erro" é o que este catálogo existe para evitar (ver
+// test/delivery-failure-taxonomy.test.js). Motivo novo entra aqui, com
+// texto, antes de qualquer código gravar `error:delivery:<rede>:<motivo>`.
+// `categoria` é sempre uma das já existentes em ERROR_CATEGORIES.
+export const DELIVERY_FAILURE_REASONS = Object.freeze({
+  telegram: Object.freeze({
+    robo_nao_adicionado: Object.freeze({
+      categoria: ERROR_CATEGORIES.CONFIG_BLOCK,
+      texto: 'O robô do Espelha Grupos não está no seu grupo do Telegram. Adicione o robô ao grupo (tela Aplicativos) e as próximas ofertas voltam a sair.',
+    }),
+    sem_permissao: Object.freeze({
+      categoria: ERROR_CATEGORIES.CONFIG_BLOCK,
+      texto: 'O robô do Espelha Grupos está no seu grupo do Telegram, mas não pode publicar. Torne o robô administrador com permissão de enviar mensagens.',
+    }),
+    destino_apagado: Object.freeze({
+      categoria: ERROR_CATEGORIES.CONFIG_BLOCK,
+      texto: 'O grupo do Telegram não existe mais ou o robô foi tirado dele. Confira o grupo na tela Aplicativos.',
+    }),
+    plano_pausado: Object.freeze({
+      categoria: ERROR_CATEGORIES.CONFIG_BLOCK,
+      texto: 'Seu plano mudou e o envio para o Telegram foi pausado. Nada foi apagado: ao voltar para o Premium, os grupos voltam a receber sozinhos.',
+    }),
+    oferta_incompativel: Object.freeze({
+      categoria: ERROR_CATEGORIES.CONFIG_BLOCK,
+      texto: 'Esta oferta tem algo que o Telegram não aceita e não dava para enviar sem isso. As outras ofertas seguem normalmente.',
+    }),
+    limite_de_ritmo: Object.freeze({
+      categoria: ERROR_CATEGORIES.TIMEOUT,
+      texto: 'O Telegram pediu para o robô ir mais devagar. A oferta esperou a vez e foi descartada por ficar velha demais na fila.',
+    }),
+    robo_indisponivel: Object.freeze({
+      categoria: ERROR_CATEGORIES.OTHER,
+      texto: 'O Telegram ficou fora do ar para o robô do Espelha Grupos neste momento. Não é nada na sua conta; o envio volta sozinho quando o Telegram normalizar.',
+    }),
+  }),
+})
+
+// Texto leigo de um código `error:delivery:*`. Motivo desconhecido ainda
+// ganha uma frase que diz QUAL aplicativo falhou — nunca o texto genérico.
+export function describeDeliveryFailure(errorMsg) {
+  const parsed = parseDeliveryFailureCode(errorMsg)
+  if (!parsed) return null
+  const reason = DELIVERY_FAILURE_REASONS[parsed.deliveryNetwork]?.[parsed.motivo]
+  if (reason) return reason.texto
+  return 'A oferta não chegou neste aplicativo. As outras entregas seguem normalmente; se continuar, fale com o suporte.'
 }
