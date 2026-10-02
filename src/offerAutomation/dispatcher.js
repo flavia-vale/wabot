@@ -1,6 +1,7 @@
 import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey, buildOfferCandidateLimit, resolveShopeeOfferPrice } from './shopeeOffers.js'
 import { resolveSearchListType } from './searchListType.js'
 import { sendBroadcast, isRunning } from '../manager.js'
+import { needsWhatsappSession, withDeliveryNetworkHandOff } from '../deliveryOutbox/handOff.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
 import { applyVariation, resolveCopyVariationPoolJson } from '../core/copyVariation.js'
@@ -268,7 +269,7 @@ export async function resolveOffers({ automation, sentItemIds, creds, fetchOffer
 }
 
 export async function runAutomation(automation, {
-  sendBroadcastFn = sendBroadcast,
+  sendBroadcastFn: rawSendBroadcastFn = sendBroadcast,
   isRunningFn = isRunning,
   fetchOffersFn = defaultFetchOffers,
   dbOverride,
@@ -278,6 +279,9 @@ export async function runAutomation(automation, {
   now = () => new Date(),
 } = {}) {
   const dbInstance = dbOverride ?? db
+  // Feature 017: destino de outro aplicativo (Telegram) vai para a caixa de
+  // saída e não depende da sessão do WhatsApp.
+  const sendBroadcastFn = withDeliveryNetworkHandOff(rawSendBroadcastFn)
   const source = automationSource(automation)
   if (!source) return { skipped: 'invalid_source' }
 
@@ -287,7 +291,9 @@ export async function runAutomation(automation, {
   // rodando" a cada tick do cron, floodando log e gastando CPU/IO à toa.
   // (Promoção Awin/Rakuten não tem preço para o card do Story — fora da v1.)
   const instagramDestinations = isPromotionSource(source) ? [] : (automation.instagramDestinations ?? []).map(link => link.destination ?? link).filter(destination => destination?.id && destination.enabled !== false)
-  const whatsappAvailable = automation.destGroupJid ? await isRunningFn(automation.userId) : false
+  const whatsappAvailable = automation.destGroupJid
+    ? (needsWhatsappSession([automation.destGroupJid]) ? await isRunningFn(automation.userId) : true)
+    : false
   if (!whatsappAvailable && !instagramDestinations.length) return { skipped: 'bot_not_running' }
 
   let sentItemIds

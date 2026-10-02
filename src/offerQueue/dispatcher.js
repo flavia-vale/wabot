@@ -1,6 +1,7 @@
 import dbDefault from '../db.js'
 import { sanitizePriceCents } from '../core/clientCouponPolicy.js'
 import { isRunning as isRunningDefault, sendBroadcast as sendBroadcastDefault } from '../manager.js'
+import { needsWhatsappSession, withDeliveryNetworkHandOff } from '../deliveryOutbox/handOff.js'
 import { startOfSaoPauloDayUtc } from './time.js'
 import { isOutsideOperatingHours } from './operatingHours.js'
 import { createAndEnqueueStory } from '../instagram/storyDeliveryService.js'
@@ -108,7 +109,9 @@ export async function evaluateQueueGate(queue, deps = {}) {
 
 async function drainQueueUnlocked(queue, deps = {}) {
   const db = deps.db ?? dbDefault
-  const sendBroadcast = deps.sendBroadcast ?? sendBroadcastDefault
+  // Feature 017: destino de outro aplicativo (Telegram) vai para a caixa de
+  // saída; WhatsApp segue pelo sendBroadcast de sempre.
+  const sendBroadcast = withDeliveryNetworkHandOff(deps.sendBroadcast ?? sendBroadcastDefault)
   const sendStory = deps.sendStory ?? createAndEnqueueStory
   const instagramRuntime = deps.instagramRuntime ?? getInstagramDeliveryRuntime()
   const now = deps.now ? deps.now() : new Date()
@@ -155,7 +158,7 @@ async function drainQueueUnlocked(queue, deps = {}) {
       }
     }
     if (targetJids.length) {
-      const online = await (deps.isRunning ?? isRunningDefault)(queue.userId)
+      const online = needsWhatsappSession(targetJids) ? await (deps.isRunning ?? isRunningDefault)(queue.userId) : true
       if (!online) throw new Error('Bot não está rodando')
       // Preço guardado no item (o Criar oferta leu da loja): o robô usa para o
       // "de X por Y" do cupom. Snapshot ilegível = preço desconhecido, nunca erro.

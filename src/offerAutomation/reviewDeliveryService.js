@@ -1,5 +1,6 @@
 import dbDefault from '../db.js'
 import { sendBroadcast as sendBroadcastDefault, isRunning as isRunningDefault } from '../manager.js'
+import { needsWhatsappSession, withDeliveryNetworkHandOff } from '../deliveryOutbox/handOff.js'
 import { createAndEnqueueStory } from '../instagram/storyDeliveryService.js'
 import { getInstagramDeliveryRuntime } from '../instagram/publishing/runtime.js'
 import { DELIVERY_SOURCE_TYPE } from '../domain/delivery/constants.js'
@@ -41,7 +42,9 @@ export async function deliverApprovedReviewItems(automation, deps = {}) {
   try {
     const db = deps.db ?? dbDefault
     const now = deps.now ? deps.now() : new Date()
-    const sendBroadcast = deps.sendBroadcast ?? sendBroadcastDefault
+    // Feature 017: destino de outro aplicativo (Telegram) vai para a caixa de
+    // saída e não depende da sessão do WhatsApp.
+    const sendBroadcast = withDeliveryNetworkHandOff(deps.sendBroadcast ?? sendBroadcastDefault)
     const isRunning = deps.isRunning ?? isRunningDefault
     const sendStory = deps.sendStory ?? createAndEnqueueStory
     const runtime = deps.instagramRuntime === undefined ? getInstagramDeliveryRuntime() : deps.instagramRuntime
@@ -75,7 +78,7 @@ export async function deliverApprovedReviewItems(automation, deps = {}) {
           throw Object.assign(new Error('Oferta sem preço válido; busque novas opções'), { permanent: true })
         }
         if (targets.whatsapp?.jid && !progress.whatsapp) {
-          if (!await isRunning(automation.userId)) throw new Error('Bot não está conectado')
+          if (needsWhatsappSession([targets.whatsapp.jid]) && !await isRunning(automation.userId)) throw new Error('Bot não está conectado')
           await sendBroadcast(automation.userId, ensureRenderedAutomationPrice(item.renderedText, product), [targets.whatsapp.jid], { imageUrl: item.imageUrl || undefined, imageRefererUrl: item.imageRefererUrl || undefined, source: 'offerAutomation' })
           progress.whatsapp = true
           await db.offerAutomationReviewItem.updateMany({ where: { id: item.id, status: REVIEW_STATUS.SENDING }, data: { deliverySnapshot: JSON.stringify(progress) } })

@@ -32,7 +32,7 @@
 // quem já tem período pago e começa no vencimento. A rota
 // `/create-subscription` aplica a mesma regra (`canStartSubscription`).
 
-const PAID_PLANS = new Set(['basic', 'pro'])
+const PAID_PLANS = new Set(['basic', 'pro', 'premium'])
 
 function toDate(value) {
   if (!value) return null

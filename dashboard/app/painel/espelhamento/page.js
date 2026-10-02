@@ -36,6 +36,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { deliveryNetworkDisplayName, getDeliveryNetworkCapabilities } from '../../../../src/core/delivery/networks.js'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
@@ -1911,7 +1912,13 @@ export default function EspelhamentoPage() {
             />
           </CfgRow>
 
-          {g.kind !== 'channel' ? (
+          {!getDeliveryNetworkCapabilities(g.deliveryNetwork).acceptsButton ? (
+            // Feature 017 (FR-008): decidido pela CAPACIDADE do aplicativo,
+            // nunca pelo nome dele.
+            <CfgRow label={'Botão "Ver canal"'} hint={`O ${deliveryNetworkDisplayName(g.deliveryNetwork)} não mostra esse botão. A oferta sai igual, só sem ele.`} last>
+              <span className="pnl-hint">—</span>
+            </CfgRow>
+          ) : g.kind !== 'channel' ? (
             <CfgRow
               label={'Botão "Ver canal" no fim das ofertas'}
               hint={'Com canal escolhido, a mensagem leva o botão "Ver canal" no fim e a foto sempre vem da mensagem de origem. Sem canal, ela sai igual, só sem o botão. Se a oferta de origem não tiver foto, a mensagem sai mesmo assim — só sem imagem e sem o botão.'}

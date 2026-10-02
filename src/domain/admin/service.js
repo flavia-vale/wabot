@@ -278,7 +278,7 @@ export function createAdminService({
     const where = {
       status: 'active',
       ...(planFilter ? { plan: planFilter } : {}),
-      ...(onlyPaidEnabled ? { plan: { in: ['basic', 'pro'] } } : {}),
+      ...(onlyPaidEnabled ? { plan: { in: ['basic', 'pro', 'premium'] } } : {}),
       ...(search ? { email: { contains: String(search).trim() } } : {}),
       AND: [
         { OR: [{ waSession: { is: null } }, { waSession: { is: { status: { not: 'connected' } } } }] },
@@ -330,7 +330,7 @@ export function createAdminService({
         const botRunning = running.has(user.id)
         const riskUser = { ...user, lastActivityAt: effectiveLastActivityAt }
         const riskFlags = buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running: botRunning })
-        const planWeight = user.plan === 'pro' ? 35 : user.plan === 'basic' ? 25 : 10
+        const planWeight = user.plan === 'premium' ? 40 : user.plan === 'pro' ? 35 : user.plan === 'basic' ? 25 : 10
         const successWeight = Math.min(25, successCount * 2)
         const noContactWeight = user.lastSupportContactAt ? 0 : 15
         const configPenalty = (!groupCounts.monitor || !groupCounts.post || !user._count?.credentials) ? 10 : 0
@@ -393,7 +393,7 @@ export function createAdminService({
     const total = enriched.length
     const paginated = enriched.slice(skip, skip + limit)
     const paidAtRisk = enriched.filter(user => user.everPaid).length
-    const estimatedMrrAtRisk = enriched.reduce((sum, user) => sum + (user.plan === 'pro' ? 69 : user.plan === 'basic' ? 39 : 0), 0)
+    const estimatedMrrAtRisk = enriched.reduce((sum, user) => sum + (user.plan === 'premium' ? 99 : user.plan === 'pro' ? 69 : user.plan === 'basic' ? 39 : 0), 0)
     const noRecentSupportContact = enriched.filter(user => !user.lastSupportContactAt).length
 
     return {

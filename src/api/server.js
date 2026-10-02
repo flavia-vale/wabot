@@ -78,6 +78,7 @@ import { createStoryAssetStorageFromEnv } from '../instagram/storage/localStoryA
 import { startStoryAssetCleanup } from '../instagram/storage/storyAssetService.js'
 import { instagramRoutes } from './routes/instagram.js'
 import { deliveryNetworksRoutes } from './routes/deliveryNetworks.js'
+import { startTelegramDelivery } from '../delivery/telegram/runtime.js'
 import { TRUSTED_PROXIES } from './trustedProxies.js'
 import { createSessionVersionCache, isLoginToken } from '../auth/sessionVersion.js'
 import { installEgressGuard } from './egressGuard.js'
@@ -908,6 +909,10 @@ startOfferQueueCron()
 startAwinSyncScheduler({ logger: app.log })
 startRakutenSyncScheduler({ logger: app.log })
 startGroupMemberSamplesSweep()
+// Feature 017 (multicanal): robô do Telegram dentro da API (leitor único +
+// caixa de saída). Não liga nada sem DELIVERY_NETWORKS_ENABLED incluir
+// telegram e sem o segredo do robô no .env. Exige `api` com instances: 1.
+startTelegramDelivery({ db })
 const stopDlqMaintenance = startDlqMaintenanceJob({ db })
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)

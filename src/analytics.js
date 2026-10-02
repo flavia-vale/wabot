@@ -148,6 +148,10 @@ export const ANALYTICS_EVENTS = new Set([
   // Flapping de socket (closes 500/428/408 repetidos) que disparou o cooldown
   // longo — fonte raiz do spam de "A sincronização foi concluída".
   'ops_wa_flap_cooldown',
+  // Feature 017 (multicanal): redução de formato e estado do robô único.
+  'ops_delivery_degraded',
+  'ops_delivery_network_down',
+  'ops_delivery_network_throttled',
   // badSession (500) repetido sem conexão estável → auth limpo p/ re-pareamento.
   'ops_wa_bad_session_reset',
   // Quedas periódicas de sessão estável (ex.: 500/428/408 a cada ~50min) que

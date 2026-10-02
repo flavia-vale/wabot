@@ -50,9 +50,9 @@ export function __resetDeliveryNetworkRegistryForTests() {
   registry.clear()
 }
 
-// Declaração de capacidades por rede (FR-007, data-model.md §4.1). Nesta
-// fatia só o WhatsApp tem entrada real — Telegram entra na Fatia 3 e
-// Instagram permanece "declarado e indisponível" (FR-034) até a fase 2.
+// Declaração de capacidades por rede (FR-007, data-model.md §4.1). O
+// Instagram não tem entrada: o Stories dele segue o caminho próprio em
+// src/instagram/ (decisão T001, 2026-10-02).
 // `capabilities` é estático e puro: nenhuma chamada externa, é isso que
 // permite a tela decidir o que oferecer sem nenhuma rede (FR-008).
 export const CAPABILITIES = Object.freeze({
@@ -71,7 +71,35 @@ export const CAPABILITIES = Object.freeze({
     canReadSource: true,
     rateLimits: null,
   }),
+  // Fatia 3 (T044/T065). Limites de ritmo: estimativas PÚBLICAS da
+  // documentação do Telegram (~30 mensagens/s no robô inteiro, ~20 por
+  // minuto por grupo) — não são medição própria; calibrar em homologação (Q6).
+  [DELIVERY_NETWORK.TELEGRAM]: Object.freeze({
+    id: DELIVERY_NETWORK.TELEGRAM,
+    available: true,
+    displayName: 'Telegram',
+    acceptsText: true,
+    acceptsImage: true,
+    requiresImage: false,
+    acceptsButton: false,
+    acceptsClickableCard: false,
+    acceptsVideo: true,
+    acceptsWatermark: true,
+    singleDestination: false,
+    canReadSource: true,
+    rateLimits: Object.freeze({
+      globalPerSecond: 25,
+      perDestinationPerMinute: 18,
+    }),
+  }),
 })
+
+// Teto de entregas por conta em cada passada da caixa de saída (rodízio —
+// uma conta em volume alto não toma a vez das outras, FR-039).
+export function resolveFairSharePerUser(env = process.env) {
+  const n = Number.parseInt(String(env?.DELIVERY_FAIR_SHARE_PER_USER ?? ''), 10)
+  return Number.isFinite(n) && n > 0 ? n : 5
+}
 
 export function getDeliveryNetworkCapabilities(id) {
   const normalized = resolveDeliveryNetwork(id)
@@ -161,4 +189,19 @@ export function listDeliveryNetworksForAccount({ allowMultiNetwork = false, env 
         : null,
     }
   })
+}
+
+// Prefixo do identificador de destino/origem de cada aplicativo que não é
+// WhatsApp (R10). Endereço do WhatsApp nunca começa assim, então a decisão
+// "por qual aplicativo sai" vem do próprio identificador gravado.
+const DESTINATION_PREFIXES = Object.freeze([
+  [DELIVERY_NETWORK.TELEGRAM, 'tg:'],
+])
+
+export function deliveryNetworkOfDestinationId(destinationId) {
+  const value = String(destinationId ?? '')
+  for (const [network, prefix] of DESTINATION_PREFIXES) {
+    if (value.startsWith(prefix)) return network
+  }
+  return DELIVERY_NETWORK.WHATSAPP
 }

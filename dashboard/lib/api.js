@@ -135,6 +135,12 @@ async function apiFetch(path, options = {}) {
 
 export const api = {
   groupMembers: ({ signal } = {}) => apiFetch('/api/group-members', { signal }),
+  // Feature 017 (tela Aplicativos).
+  deliveryNetworks: () => apiFetch('/api/delivery-networks'),
+  telegramStatus: () => apiFetch('/api/delivery-networks/telegram/status'),
+  telegramDestinations: () => apiFetch('/api/delivery-networks/telegram/destinations'),
+  telegramDisable: () => apiFetch('/api/delivery-networks/telegram/disable', { method: 'POST', body: JSON.stringify({}) }),
+  telegramEnable: () => apiFetch('/api/delivery-networks/telegram/enable', { method: 'POST', body: JSON.stringify({}) }),
   smartLinks: ({ signal } = {}) => apiFetch('/api/smart-links', { signal }),
   smartLinkSummary: ({ signal } = {}) => apiFetch('/api/smart-links/summary', { signal }),
   createSmartLink: (body) => apiFetch('/api/smart-links', { method: 'POST', body: JSON.stringify(body) }),

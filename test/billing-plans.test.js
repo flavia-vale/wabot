@@ -130,10 +130,11 @@ test('buildFeatureGateError returns stable upgrade payload', () => {
 
 test('Instagram Stories retorna gate específico do plano superior', () => {
   assert.deepEqual(buildFeatureGateError(FEATURE_CODES.INSTAGRAM_STORIES), {
-    error: 'A publicação de Stories no Instagram estará disponível em um novo plano acima do Pro.',
+    error: 'A publicação de Stories no Instagram faz parte do plano Premium. Para liberar, escolha o Premium na tela Plano.',
     code: 'FEATURE_REQUIRES_PREMIUM',
     feature: 'instagram_stories',
     requiredPlan: 'premium',
+    upgradePath: '/painel/plano',
   })
 })
 

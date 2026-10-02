@@ -50,7 +50,7 @@ export function normalizeWaPhone(phone) {
 }
 
 /** Planos que significam "esta conta paga". Trial e vazio ficam de fora. */
-const PLANOS_PAGOS = new Set(['basic', 'pro'])
+const PLANOS_PAGOS = new Set(['basic', 'pro', 'premium'])
 
 export function isPayingPlan(plan) {
   return PLANOS_PAGOS.has(String(plan ?? '').trim().toLowerCase())
