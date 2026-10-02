@@ -71,7 +71,7 @@ Shopee detecta o User-Agent do WebView do WhatsApp e bloqueia **qualquer página
 web** `shopee.com.br/...`. O que escapa é o short link `s.shopee.com.br/XXX` da
 `generateShortLink`, que ao ser tocado **abre direto o app** (deep-link),
 exatamente como os links de produto. Um probe contra a API real
-(`scripts/shopee-linktype-probe.mjs`) provou que a API gera um short link
+(`scripts/arquivo/shopee-linktype-probe.mjs`) provou que a API gera um short link
 app-deeplink para a origem **natural** do cupom (qualquer caminho `/m/...`,
 `/buyer/voucher`, etc.). Há duas invariantes importantes:
 
@@ -627,7 +627,7 @@ e no computador a foto do card não apareceu (causa não confirmada; hipótese: 
 para mostrar o link oficial da loja e contar ao mesmo tempo. Só reavaliar quando
 houver **domínios próprios parecidos com os das lojas, em https**. Nenhum código
 liga o recurso sozinho (`clickTrackingEnabled` nasce `false`). Para desligar as
-contas de teste: `node scripts/desligar-rastreio-cliques.mjs` (lista) e
+contas de teste: `node scripts/arquivo/desligar-rastreio-cliques.mjs` (lista) e
 `--aplicar` (desliga; vale em ~60 s, sem reiniciar).
 
 **⚠️ Checklist obrigatório em staging antes de ligar para cliente real** — o

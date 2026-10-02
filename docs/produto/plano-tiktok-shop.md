@@ -107,7 +107,7 @@ e amostras reais. Nenhum sprint seguinte começa sem o gate aprovado.
   default + `tiktokshop`), migration DML
   `prisma/migrations/<ts>_botconfig_platforms_add_tiktokshop` (mesmo cuidado da
   vírgula inicial da AliExpress), CSV default em `src/api/routes/config.js`,
-  `src/bot-worker.js`, `scripts/reset-legacy-botconfig-fields.mjs`; whitelist
+  `src/bot-worker.js`, `scripts/arquivo/reset-legacy-botconfig-fields.mjs`; whitelist
   em `src/api/routes/groups.js:238`. Teste
   `test/migrations-botconfig-platforms-tiktokshop.test.js`. Passa por staging.
 - **#S2-6 Tela "IDs de afiliada"** — entrada em

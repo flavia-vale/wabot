@@ -11,7 +11,7 @@ ROOT_DIR="${ROOT_DIR:-$HOME/wabot-staging}"
 DASHBOARD_BASE_URL="${DASHBOARD_BASE_URL:-http://178.105.54.0:3006}"
 API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:3004}"
 P3_SOAK_EVIDENCE_FILE="${P3_SOAK_EVIDENCE_FILE:-$ROOT_DIR/docs/p3-soak-evidence.md}"
-P24_GUARD_SCRIPT="${P24_GUARD_SCRIPT:-$ROOT_DIR/scripts/p2_4_prod_cutover_guard.sh}"
+P24_GUARD_SCRIPT="${P24_GUARD_SCRIPT:-$ROOT_DIR/scripts/arquivo/p2_4_prod_cutover_guard.sh}"
 ADMIN_BEARER_TOKEN="${ADMIN_BEARER_TOKEN:-}"
 
 [[ -f "$P24_GUARD_SCRIPT" ]] || { echo "ERRO: script P2.4 não encontrado: $P24_GUARD_SCRIPT"; exit 1; }
