@@ -24,6 +24,9 @@ import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.
 import { isSessionLive, RECEPTION_BLIND_WINDOW_MS } from '../../domain/session/sessionLiveness.js'
 import { withPayingStatus } from '../../domain/admin/payingStatus.js'
 import { loadEverPaidUserIds, currentPayingWhere, formerPayingWhere, stalePayingWhere } from '../../domain/admin/payingLoader.js'
+import { sendAdminAlert } from '../../email/adminAlerts.js'
+import { resolveDashboardUrl } from '../../email/layout.js'
+import { createProbeTracker, buildProbeAlertVars, PROBE_ALERT_SLUG, PROBE_WINDOW_MS } from '../../domain/admin/adminProbePolicy.js'
 import { SESSION_TELEMETRY_EVENT, buildSessionTelemetryReport } from '../../domain/admin/sessionTelemetry.js'
 import { withSharedPhoneStatus } from '../../domain/admin/sharedPhoneStatus.js'
 import { loadSharedPhoneCounts } from '../../domain/admin/sharedPhoneLoader.js'
@@ -711,6 +714,10 @@ export async function writeAdminAuditLog(req, data) {
   })
 }
 
+// Um rastreador por processo da API (sem Redis): a janela é curta e perder a
+// contagem num restart só atrasa o aviso em alguns minutos.
+const adminProbeTracker = createProbeTracker()
+
 async function requireAdmin(req, reply, permission = 'admin:read') {
   const user = await db.user.findUnique({
     where: { id: req.user.sub },
@@ -732,6 +739,22 @@ async function requireAdmin(req, reply, permission = 'admin:read') {
       reason: `Permissão exigida: ${permission}`,
       status: 'denied',
     })
+    // Q10 da auditoria: muitas negativas da MESMA conta em poucos minutos é
+    // sondagem por script, não cliente perdida. Vira 429 e avisa a dona.
+    const probe = adminProbeTracker.recordDenial({ key: req.user?.sub || req.ip })
+    if (probe.justCrossed) {
+      sendAdminAlert({
+        db,
+        slug: PROBE_ALERT_SLUG,
+        key: `conta=${req.user?.sub || req.ip}`,
+        vars: buildProbeAlertVars({ email: user?.email, userId: req.user?.sub, count: probe.count, windowMs: PROBE_WINDOW_MS, ip: req.ip, dashboardUrl: resolveDashboardUrl() }),
+        logger: req.log,
+      }).catch(() => {})
+    }
+    if (probe.burst) {
+      reply.code(429).send({ error: 'Muitas tentativas. Tente de novo mais tarde.' })
+      return false
+    }
     reply.code(403).send({ error: 'Acesso admin negado' })
     return false
   }

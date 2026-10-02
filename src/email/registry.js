@@ -1511,6 +1511,36 @@ O que dá para fazer: desligar o staging enquanto não estiver validando, ou aum
 [[botao:Ver a capacidade do servidor|{{link_capacidade}}]]`,
   },
   {
+    // Q10 da auditoria (2026-10-02): uma conta trial sondou /api/admin/* por
+    // script (80 chamadas em 6 min). O 403 segurou, a auditoria gravou, mas
+    // ninguém foi avisado. Este chega na hora, uma vez por conta a cada 24 h.
+    slug: 'admin_sondagem_admin',
+    name: '[Interno] Alguém está testando as rotas do admin',
+    description: 'Avisa a administradora quando uma conta logada toma muitas negativas seguidas nas rotas internas do admin — sinal de alguém testando o sistema por script. As chamadas já foram barradas.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'resumo', description: 'Quem tentou, quantas vezes e em quanto tempo', example: 'conta@exemplo.com tentou 20 vezes rotas internas do admin em 10 minutos' },
+      { name: 'conta', description: 'E-mail da conta', example: 'conta@exemplo.com' },
+      { name: 'ip', description: 'Endereço de onde vieram as chamadas', example: '2804:...' },
+      { name: 'link_clientes', description: 'Lista de clientes já filtrada por essa conta', example: 'https://espelhagrupos.com.br/admin/clientes?search=conta%40exemplo.com' },
+    ],
+    title: 'Alguém está testando as rotas do admin',
+    subject: '[BOTinho] {{resumo}}',
+    body: `{{resumo}}.
+
+Todas as chamadas foram **barradas** (a conta não tem papel admin) e, a partir de agora, ela recebe "muitas tentativas" até a janela esvaziar. Nada vazou.
+
+Conta: **{{conta}}** · de onde: {{ip}}
+
+O que dá para fazer: abrir a conta na lista de clientes e, se for abuso, bloquear.
+
+[[botao:Ver a conta|{{link_clientes}}]]`,
+  },
+  {
     // Vigia do servidor (scripts/vigia.mjs via vigia_cron.sh). RCA 2026-10-01:
     // o pm2 perdeu o bot-supervisor e os robôs de todas as clientes ficaram
     // parados ~20 min até alguém olhar por acaso. Aviso que só mora no log

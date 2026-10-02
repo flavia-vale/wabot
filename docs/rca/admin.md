@@ -501,3 +501,15 @@ Zero RAM: mesmas consultas, agora cada uma só na tela que a mostra.
 próprio (Receita, Operação, Hoje) nasce como página em `dashboard/app/admin/`.
 Próximo corte previsto: abas Online e Sucesso saem do Início quando a caixa
 "Hoje" (G1) for validada em staging.
+
+## Rajada de 403 no admin: 429 por conta + aviso (Q10 da auditoria, 2026-10-02)
+
+Em 26/09 uma conta trial fez 80 chamadas por `curl` a `/api/admin/*` em 6 min.
+Tudo 403 e auditado, ninguém avisado; o limite de requisições é só global por
+IP. `src/domain/admin/adminProbePolicy.js` (puro) conta negativas por conta
+numa janela de 10 min: na 20ª a resposta vira 429 e `requireAdmin` manda o
+e-mail interno `admin_sondagem_admin` (uma vez por conta a cada 24 h, pelo
+cooldown de `sendAdminAlert`). **RAM:** um `Map` por processo da API com no
+máximo 500 contas × 20 horários (poucos KB), sinalizado. A auditoria da
+negativa continua sendo gravada antes de qualquer resposta. Guarda:
+`test/admin-rajada-403.test.js`.
