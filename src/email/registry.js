@@ -1539,6 +1539,37 @@ Medido em {{quando}}.
 Para religar com segurança: \`cd ~/wabot && scripts/religar-producao.sh\` (só mostra o que faria; \`APLICAR=1\` aplica). Roteiro: docs/ops/runbook-pm2-sumiu.md.`,
   },
   {
+    // M4 da auditoria do painel admin (2026-10-02): pagante fora do ar, conectada
+    // sem receber e envio preso eram sinais que só apareciam com o painel
+    // aberto na hora certa. Um modelo só; cada situação avisa separado (cooldown
+    // por assunto).
+    slug: 'admin_operacao_atencao',
+    name: '[Interno] Algo na operação precisa de atenção',
+    description: 'Avisa a administradora quando há cliente pagante com o WhatsApp fora do ar há mais de 2 h, pagante conectada sem receber há mais de 3 h, ou envios presos em "enviando".',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'resumo', description: 'Frase curta do que aconteceu', example: '2 cliente(s) pagante(s) com o WhatsApp fora do ar há mais de 2 h' },
+      { name: 'lista', description: 'Quem/quantos são (até 10)', example: '- Ana (ana@exemplo.com) — fora há 3 h (ninguem)' },
+      { name: 'acao', description: 'O que fazer agora', example: 'Abra Admin → Online e use Reconectar.' },
+      { name: 'link_cobrancas', description: 'Link do painel de administração', example: 'https://espelhagrupos.com.br/admin' },
+    ],
+    title: '{{resumo}}',
+    subject: '[Operação] {{resumo}}',
+    body: `{{resumo}}.
+
+{{lista}}
+
+O que fazer: {{acao}}
+
+[[botao:Abrir o painel|{{link_cobrancas}}/online]]
+
+Este aviso sai no máximo uma vez a cada 12 horas para cada situação.`,
+  },
+  {
     slug: 'admin_cobranca_recusada',
     name: '[Interno] Uma cobrança foi recusada',
     description: 'Avisa a administradora quando a cobrança de uma assinatura é recusada, com cliente, valor e o código que o Mercado Pago devolveu.',
