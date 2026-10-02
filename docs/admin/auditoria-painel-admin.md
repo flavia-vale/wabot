@@ -12,7 +12,7 @@ Toda afirmação aponta `arquivo:linha`. O que depende de dado de produção est
 2. **"Pagante" tem 4 definições diferentes** e "online" tem 3 janelas de heartbeat distintas (90 s, 2 min, 5 min). O Início conta pagante pelo campo `plan` (`admin.js:772`), exatamente o que `payingStatus.js:7-9` proíbe. Números de telas diferentes não batem e ninguém sabe qual está certo.
 3. **Vê-se o problema, não se age.** Não existe no painel: parar robô, sincronizar assinatura com o Mercado Pago, testar chave de loja, ver/reprocessar a DLQ de envio (rotas existem em `admin.js:3814-3870`, tela não), exportar/anonimizar LGPD, rodar diagnóstico de um cliente. São ~25 scripts que a dona roda por SSH.
 4. **Quase nenhum alerta chega à dona antes do cliente reclamar.** Há 8 e-mails internos (`src/email/registry.js`), mas robô de pagante caído/cego, fila/DLQ crescendo, swap/OOM, credencial de loja vencida e supervisor morto **não geram aviso nenhum**. Capacidade alerta só em log (`server.js:751-755`).
-5. **Custo escondido e ruído.** `/admin/online` faz polling a cada 15 s (`online/page.js:302-305`), cada chamada roda consulta de 48 h sem `take` (`admin.js:885`) **e grava uma linha de auditoria** (`admin.js:1536`): ~5.760 linhas/dia por aba aberta, guardadas 180 dias. `/logs/summary` lê até 30 dias de `MessageLog` sem limite (`admin.js:3409`). Marketing & Growth mostra número inventado (visitas = usuários × 12, `marketing-growth/page.js:184`).
+5. **Custo escondido e ruído.** Medido em produção (2026-10-02, 7 dias): a tabela de auditoria é 75 % telemetria do **painel da cliente** (`session.telemetry`, 1.568 linhas, gravada por `src/api/routes/session.js:429-438`), não ação de admin; houve 80 acessos negados (`admin.access_denied`); o polling do Online gerou só 100 leituras (não é custo real hoje). A fila de envio roda **em memória** (`QUEUE_BACKEND` ausente no `.env`), então o card "Trabalhos parados", o alerta "Send DLQ pendente" (`admin.js:391`) e as 4 rotas `send-dlq/*` **não medem nada em prod**. `/logs/summary` lê até 30 dias de `MessageLog` sem limite (`admin.js:3409`). Marketing & Growth mostra número inventado (visitas = usuários × 12, `marketing-growth/page.js:184`).
 
 **As 5 mudanças de maior impacto**
 
@@ -200,7 +200,9 @@ crontab -l 2>/dev/null | grep -c healthcheck_alerts
 
 | Ponto | Arquivo | Custo | Proposta (sem RAM nova) |
 |---|---|---|---|
-| Polling 15 s sem `visibilityState` + auditoria por leitura | `online/page.js:302`, `admin.js:1536`, `admin.js:681` | ~5.760 consultas 48 h + 5.760 linhas `AdminAuditLog`/dia por aba | polling 60 s só com aba visível; **não auditar leituras repetitivas** (auditar só escrita e exportação) |
+| Telemetria do painel da cliente gravada em `AdminAuditLog` | `src/api/routes/session.js:429-438` | **medido: 1.568 linhas/7 d (75 % da tabela)**, retidas 180 d; polui a trilha de auditoria e a tela de "telemetria" lê daí (`admin.js:3722`) | gravar em `AnalyticsEvent` (já existe) ou em log; auditoria só para ação de admin |
+| Polling 15 s sem `visibilityState` + auditoria por leitura | `online/page.js:302`, `admin.js:1536`, `admin.js:681` | **medido: 100 leituras/7 d** — ninguém deixa a aba aberta; o risco é só se passar a deixar | polling 60 s só com aba visível; auditar só escrita (baixa prioridade) |
+| 80 acessos negados em 7 d | `admin.js:716` | **apurado 2026-10-02:** uma única conta **trial sem papel admin** (negada até em `admin:read`) chamando rotas do admin por URL direta; 44 `tech:read`, 20 `admin:read`, 16 `support:read`. O 403 segurou todas e ficou auditado | front não deve nem montar `/admin/*` sem `adminMe` ok (hoje a página carrega e dispara as chamadas); para bloquear a conta hoje é preciso SQL — a rota `users/:id/block` não tem tela (seção 4) |
 | `logs/summary` sem `take`, até 30 d | `admin.js:3390-3409` | carrega todo `MessageLog` do período em memória da API (500 MB de teto PM2) | `groupBy` no SQLite ou teto 20k como em `errors/observability` |
 | `system/observability` sem `take` 24 h | `admin.js:1692` | idem | `groupBy status` |
 | `buildFleetScenarios`: eventos 48 h sem `take` + `distinct` do Prisma em memória | `admin.js:871-891` | roda a cada polling | `groupBy userId` |
@@ -208,9 +210,11 @@ crontab -l 2>/dev/null | grep -c healthcheck_alerts
 | `GET /batches` N+1 (120 queries) | `adminEmails.js:330-335` | leve | um `groupBy` |
 | `AnalyticsEvent` sem retenção | `schema.prisma:824` | cresce para sempre | retenção 90 d para `ops_*` (confirmar tamanho antes) |
 
-Comando para medir o custo real da auditoria de leitura (decide prioridade do item 1):
+Medido em 2026-10-02 (7 dias): `session.telemetry` 1.568 · `admin.finance.overview.read` 122 · `admin.online.read` 100 · `admin.subscriptions.list` 97 · `admin.access_denied` 80. Datas no SQLite são **milissegundos** (`createdAt > (strftime('%s','now','-7 days')*1000)`).
+
+Comando para saber quem está sendo negado (decide se é papel sem permissão ou tentativa externa):
 ```bash
-sqlite3 prisma/prod.db "SELECT action, COUNT(*) FROM AdminAuditLog WHERE createdAt > datetime('now','-7 days') GROUP BY action ORDER BY 2 DESC LIMIT 10"
+sqlite3 prisma/prod.db "SELECT reason, COALESCE(actorUserId,'-'), COUNT(*) FROM AdminAuditLog WHERE action='admin.access_denied' AND createdAt > (strftime('%s','now','-7 days')*1000) GROUP BY 1,2 ORDER BY 3 DESC LIMIT 10"
 ```
 E o tamanho do `AnalyticsEvent`:
 ```bash
@@ -392,12 +396,13 @@ Cada fatia = 1 PR contra `develop`, com teste. **RAM: todas zero** (leitura/rota
 
 | # | Título | Problema | Arquivos | Critério de aceite | Impacto |
 |---|---|---|---|---|---|
-| Q1 | Polling do Online: 60 s, só aba visível, sem auditar leitura | 5.760 consultas + linhas de auditoria/dia | `dashboard/app/admin/online/page.js:302`, `src/api/routes/admin.js:1536` | teste falha se `setInterval` < 60 s ou sem `visibilityState`; `admin.online.read` não grava mais | ●●● |
+| Q1 | Tirar a telemetria do painel da cliente de `AdminAuditLog` | 75 % da tabela de auditoria não é auditoria (medido) | `src/api/routes/session.js:429-438`, leitor em `admin.js:3718-3737` | grava em `AnalyticsEvent` (`event: 'session_telemetry'`); tela de telemetria lê de lá; teste falha se `session.telemetry` voltar a `adminAuditLog.create` | ●●○ |
+| Q1b | Polling do Online: 60 s, só aba visível, sem auditar leitura | risco futuro (hoje 100 leituras/7 d) | `dashboard/app/admin/online/page.js:302`, `admin.js:1536` | teste falha se `setInterval` < 60 s ou sem `visibilityState` | ●○○ |
 | Q2 | `logs/summary` e `system/observability` com `groupBy` ou teto 20k | lê `MessageLog` inteiro | `admin.js:3409`, `:1692` | teste com 25k linhas não passa de 20k em memória; números iguais aos de antes | ●●○ |
 | Q3 | Pagante canônico no overview/finance/roi | 4 definições | `admin.js:772, 2060, 2422` → `payingLoader` | teste `admin-paying-tag` falha se `plan: { in: PAID_PLANS }` significar pagante em `admin.js` | ●●● |
 | Q4 | Confirmação + motivo em reconectar, DLQ reprocessar, pagar elegíveis, WhatsApp individual | destrutivas sem confirm | `online/page.js:316`, `page.js:2513`, `observabilidade:157`, `afiliados:462`, `emails:625` | `test/dialogos-no-celular` cobre; grep por `confirm(` nas 5 ações | ●●○ |
 | Q5 | Apagar Marketing & Growth (mantendo `CampanhaCanaisFunil` em `/admin/funil`) | dados fictícios | `marketing-growth/*`, `funil/page.js`, `lib/api.js:470-509` | tela some; teste `campanha-canais-funil` passa; rotas `marketing/*` só as usadas | ●●○ |
-| Q6 | Tirar Pipeline e Teste-shard do menu; esconder shard sem env | ferramentas de dev no admin | `page.js:2919-2920` | link só com `tech:read` **e** env; teste de nav | ●○○ |
+| Q6 | Tirar Pipeline e Teste-shard do menu; esconder shard sem env; **não montar `/admin/*` sem papel admin** | ferramentas de dev no admin; cliente trial carregou páginas do admin 80× em 7 d (medido) | `page.js:2919-2920`, `dashboard/app/admin/layout.js` (hoje só `metadata`) | link só com `tech:read` **e** env; layout consulta `adminMe` e redireciona para `/painel` quando 403; teste de nav | ●●○ |
 | Q7 | Lista de e-mails fixa → permissão | `sucesso-cliente/page.js:11` | idem + `ROLE_PERMISSIONS` | grep falha se e-mail literal em `dashboard/app/admin` | ●○○ |
 | Q8 | Auditoria em approve/reject/settings/override de afiliados; `confirmTotal` obrigatório no envio em massa | escritas sem rastro | `affiliate.js:392, 411, 598, 670`, `adminEmails.js:296` | teste de rota verifica `AdminAuditLog` | ●●○ |
 | Q9 | Mover scripts obsoletos para `scripts/arquivo/` + README | 20+ scripts one-shot no meio dos úteis | `scripts/` | lista do apêndice B(c); testes que importam continuam passando | ●○○ |
@@ -410,7 +415,7 @@ Cada fatia = 1 PR contra `develop`, com teste. **RAM: todas zero** (leitura/rota
 | M2 | Ficha 360° — aba Robô com ações | ver sem agir | `clientes/[id]/page.js`; rotas `online/:id/reconnect`, nova `POST /users/:id/session/stop` (usa `manager` como `parar-sessao.mjs`), `GET /send-dlq/:userId` | reconectar/parar/DLQ na ficha com confirm + motivo; auditados |
 | M3 | Ficha 360° — aba Financeiro com Sincronizar MP + Testar renovação | só SSH | nova `src/domain/payments/subscriptionSync.js` extraída de `sincronizar-assinatura.mjs`; script passa a importar | mostra diff antes de gravar; `billing:write`; teste puro da extração |
 | M4 | Alertas para a dona (dentro dos sweeps existentes) | nada avisa | `src/email/adminAlerts.js`, `registry.js`, `server.js:296-307` (sweep 15 min) | 5 gatilhos: pagante caído > 2 h, cego > 3 h, DLQ > 0, swap ativo + < 20 % RAM, supervisor sem heartbeat; silêncio 12 h; teste de política puro. **RAM zero** (mesmo `setInterval`) |
-| M5 | Tela Operação → Filas (DLQ por cliente) | rotas sem tela | nova `dashboard/app/admin/operacao/filas/page.js`; rotas `admin.js:3814-3870` | listar/retry/purge 2×; teste de visibilidade |
+| M5 | Tela Operação → Filas: envios presos em `sending` e fila em memória por cliente | **fila é em memória em prod** (`QUEUE_BACKEND` ausente): DLQ Redis, card "Trabalhos parados" e rotas `send-dlq/*` não medem nada | `src/jobs/stuckSendLogs.js`, `MessageLog status='sending'`, `admin.js:391, 422, 3814-3870`; remover o card/alerta de DLQ do Início | tela mostra presos em `sending` por cliente com [Reprocessar]; card de DLQ some enquanto o backend for memória; rotas `send-dlq` ficam atrás de `QUEUE_BACKEND=bullmq` |
 | M6 | Credencial de loja no painel | só a cliente sabe | expor último resultado de `credentialExpiry/sweep.js` por usuário; card na ficha → Lojas e linha na caixa | sem sondagem nova; dado vem do `AnalyticsEvent credential_expiry_alert_sent` |
 | M7 | Retenção de `AnalyticsEvent ops_*` (90 d) | cresce para sempre | `server.js:202-208` | **antes**: rodar o `sqlite3` da seção 3.5; depois: `deleteMany` diário em lote |
 | M8 | Tela Auditoria (quem fez o quê) | log gravado, nunca lido | nova rota `GET /audit?days=30` + tela em Operação | filtra por ação/alvo; só `owner`/`admin` |
@@ -425,7 +430,7 @@ Cada fatia = 1 PR contra `develop`, com teste. **RAM: todas zero** (leitura/rota
 | G4 | Diagnóstico de 1 cliente no painel | `diag-nao-conecta`, `diag-envios-vazios` só SSH | extrair regras para `src/domain/admin/diagnostics/*.js`; scripts passam a importar; rota `GET /users/:id/diagnostico` | saída em frases leigas; sem `bot.log` (só banco/Redis); teste puro |
 | G5 | Design system no admin | Tailwind cinza, sem tokens | migrar telas novas para `pnl-*`/tokens; adicionar seção "Admin" ao DS v2 (decidir com a dona antes) | `test/painel-escala-de-fontes` passa no admin |
 
-**Ordem sugerida:** Q1 → Q3 → Q4 → Q2 → M1 → M4 → M2 → G1 → M3 → M5/M6 → G2 → demais. Q1 e Q3 mudam número que a dona já olha todo dia: avisar antes do deploy em `main`.
+**Ordem sugerida (após dados de 2026-10-02):** Q3 → Q4 → Q1 → Q2 → M1 → M4 → M2 → G1 → M3 → M5/M6 → G2 → demais; Q1b fica para quando alguém passar a deixar o Online aberto. Q3 muda número que a dona já olha todo dia: avisar antes do deploy em `main`.
 
 ---
 
@@ -466,9 +471,10 @@ Permissões: `owner` tudo; `admin` sem `admin:write`/`billing:write`; `billing_a
 
 | Decide | Comando (rodar em `~/wabot`) | Leitura |
 |---|---|---|
-| Prioridade de Q1 | `sqlite3 prisma/prod.db "SELECT action, COUNT(*) FROM AdminAuditLog WHERE createdAt > datetime('now','-7 days') GROUP BY action ORDER BY 2 DESC LIMIT 5"` | se `admin.online.read` for o maior, Q1 vai primeiro |
+| Prioridade de Q1 | `sqlite3 prisma/prod.db "SELECT action, COUNT(*) FROM AdminAuditLog WHERE createdAt > (strftime('%s','now','-7 days')*1000) GROUP BY action ORDER BY 2 DESC LIMIT 5"` | **Rodado 2026-10-02:** `session.telemetry` 1.568 · finance.overview 122 · online.read 100 · subscriptions 97 · access_denied 80 → Q1 virou "tirar telemetria da auditoria"; polling é Q1b |
 | Prioridade de M7 | `sqlite3 prisma/prod.db "SELECT COUNT(*) FROM AnalyticsEvent WHERE event LIKE 'ops_%'"` | > 500k = M7 sobe |
 | Telegram existe? | `crontab -l 2>/dev/null \| grep -c healthcheck_alerts` | 0 = não há alerta de infra nenhum |
-| Fila é BullMQ? | `pm2 env $(pm2 id bot-supervisor \| tr -d '[] ') \| grep -c QUEUE_BACKEND=bullmq` | 0 = DLQ de envio não existe em prod; M5 muda de escopo |
+| Fila é BullMQ? | `grep -c '^QUEUE_BACKEND=bullmq' .env` | **Rodado 2026-10-02: 0** → fila em memória; DLQ de envio não existe em prod; M5 muda de escopo (feito acima) |
+| Quem é negado | `sqlite3 prisma/prod.db "SELECT reason, COALESCE(actorUserId,'-'), COUNT(*) FROM AdminAuditLog WHERE action='admin.access_denied' AND createdAt > (strftime('%s','now','-7 days')*1000) GROUP BY 1,2 ORDER BY 3 DESC LIMIT 10"` | **Rodado 2026-10-02:** 1 actor, conta trial sem `AdminUser`, 80 tentativas → 403 funcionando; vira requisito de Q6 (não montar `/admin/*` sem papel) e reforça a falta de botão "bloquear" |
 | Divergência de pagantes | `node scripts/diag-tag-pagante.mjs \| tail -n 5` vs. card do Início | diferença > 0 confirma Q3 |
-| Tamanho de `logs/summary` | `sqlite3 prisma/prod.db "SELECT COUNT(*) FROM MessageLog WHERE sentAt > datetime('now','-30 days')"` | > 100k = Q2 urgente |
+| Tamanho de `logs/summary` | `sqlite3 prisma/prod.db "SELECT COUNT(*) FROM MessageLog WHERE sentAt > (strftime('%s','now','-30 days')*1000)"` | > 100k = Q2 urgente |
