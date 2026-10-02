@@ -11,6 +11,8 @@ import {
   CREDENTIAL_BLOCK_STATUS_TAG,
 } from '../../../src/credentialBlockAlert/message.js'
 import { parseOutsideSendWindowReason } from '../../../src/core/sendWindow.js'
+import { describeDeliveryFailure } from '../../../src/core/delivery/deliveryFailure.js'
+import { deliveryNetworkDisplayName } from '../../../src/core/delivery/networks.js'
 
 // P3 (specs/013-inbound-leads-strategy): terceiro ponto de exibição da
 // Assumption (histórico de envios) — mesma fonte de vocabulário do aviso
@@ -44,6 +46,10 @@ function parseDedupAgeSuffix(errorMsg) {
 
 export function explainErrorMsg(errorMsg, platform) {
   if (!errorMsg) return null
+  // Feature 017: falha própria de um aplicativo (Telegram...) tem texto
+  // leigo por motivo, nunca o genérico (FR-028).
+  const deliveryFailure = describeDeliveryFailure(errorMsg)
+  if (deliveryFailure) return deliveryFailure
   if (errorMsg.startsWith('warning:amazon_cookies_expired')) {
     return 'Seus cookies da Amazon (sitestripe) expiraram. As ofertas continuam saindo com link longo de afiliado e creditando comissão, mas para voltar a gerar links curtos amzn.to, renove os cookies em IDs de afiliada → Amazon.'
   }
@@ -194,6 +200,12 @@ export function statusTagForLog(log) {
   if (falha) return falha.tag
   if (log?.errorMsg === 'error:worker_restart:requeued') return REQUEUED_TAG
   return statusTag(log?.status)
+}
+
+// Feature 017 (FR-027): aplicativo por onde a oferta saiu. Linha antiga, sem
+// `deliveryNetwork`, lê como WhatsApp — nunca "desconhecido".
+export function deliveryNetworkLabel(log) {
+  return deliveryNetworkDisplayName(log?.deliveryNetwork)
 }
 
 export { buildCredentialBlockHelp, describeConversionFailure, isCredentialBlockErrorMsg }

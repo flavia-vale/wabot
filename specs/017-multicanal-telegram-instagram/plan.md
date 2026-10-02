@@ -395,6 +395,17 @@ Os nove itens do "Gate manual obrigatório" da spec, com grupos reais de Telegra
 | **Q5** | **Quais controles de ritmo a cliente vê num destino de Telegram?** A spec diz que "preservação" ali significa respeitar os limites do aplicativo, não replicar as regras anti-ban do WhatsApp — mas não define quais campos aparecem na tela. | É decisão de produto sobre o que a cliente controla e o que o sistema decide sozinho. | Fatia 3 |
 | **Q6** | **Quais são os limites reais a adotar como orçamento do robô?** Os números correntes (~30 mensagens/s global, ~20/min por grupo) vêm da documentação pública do Telegram, **não de medição nossa**. | Precisam ser calibrados em homologação antes de virar constante. | Fatia 3 (calibração, não bloqueio) |
 
+### Decisões registradas da dona do produto
+
+| Data | Questão | Decisão |
+|---|---|---|
+| 2026-09-23 | Q1 — fronteira de plano | Multicanal só no plano **Premium** (acima do Pro), **R$ 99/mês**. Teste grátis e Pro **não** herdam (`canUseMultiNetwork` = `hasPremiumAccess`). |
+| 2026-09-23 | Q2 — robô de homologação | Será criado pela dona do produto, separado do de produção. Chaves já colocadas no `.env` de staging em 2026-10-02. |
+| 2026-09-23 | Q3 — nome do robô | **Espelha Grupos** ("o robô do Espelha Grupos"). |
+| 2026-09-23 | Memória | Autorizado o crescimento de < 30 MB dentro do processo `api`, sem processo PM2 novo. |
+| 2026-10-02 | T001 — Instagram | **Fica como está**: o Stories do Instagram segue no caminho próprio (`src/instagram/`), fora da estrutura nova. Na lista de aplicativos ele aparece como "tela própria", nunca selecionável como destino desta estrutura. |
+| 2026-10-02 | Compra do Premium | A tela de compra do Premium (R$ 99/mês) **entra junto** com a tela Aplicativos (Fatia 3), não numa entrega separada. |
+
 **Condição registrada (não é pergunta)**: a escolha de rodar o leitor dentro da API depende de `api` continuar em `instances: 1`. Se isso mudar, o leitor precisa de trava de dono única no Redis ou de processo dedicado — e aí a estimativa de memória volta à mesa com o número de 90–120 MB.
 
 ---

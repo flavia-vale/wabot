@@ -103,3 +103,62 @@ export function isDeliveryNetworkEnabled(id, env = process.env) {
   if (normalized === DELIVERY_NETWORK.WHATSAPP) return true
   return parseEnabledDeliveryNetworks(env).has(normalized)
 }
+
+// Nome de cada aplicativo como a cliente lê na tela. Diferente de
+// CAPABILITIES (que só declara rede que ENTREGA por este caminho), aqui entra
+// toda rede conhecida — o histórico precisa dar nome a qualquer linha, e o
+// nulo/desconhecido de linha antiga lê como WhatsApp (FR-027), nunca
+// "desconhecido".
+const DISPLAY_NAMES = Object.freeze({
+  [DELIVERY_NETWORK.WHATSAPP]: 'WhatsApp',
+  [DELIVERY_NETWORK.TELEGRAM]: 'Telegram',
+  [DELIVERY_NETWORK.INSTAGRAM]: 'Instagram',
+})
+
+export function deliveryNetworkDisplayName(value) {
+  return DISPLAY_NAMES[resolveDeliveryNetwork(value)]
+}
+
+// Situação de cada aplicativo na lista que a cliente vê (FR-034/US9):
+// - `disponivel`: entrega por este caminho e está ligado no servidor;
+// - `em_breve`: ainda não entrega (rede declarada, interruptor desligado ou
+//   capacidade ainda não declarada) — aparece, mas não pode ser escolhido;
+// - `tela_propria`: o Instagram Stories já funciona por um caminho próprio
+//   (src/instagram/, decisão T001 de 2026-10-02: fica como está). Aparece
+//   para a cliente saber que existe, mas é configurado na tela dele.
+// O direito de plano NUNCA tira um aplicativo da lista — só decide se ele
+// pode ser usado (`liberadoNoPlano`), para a cliente ver que o recurso existe.
+export const DELIVERY_NETWORK_STATUS = Object.freeze({
+  DISPONIVEL: 'disponivel',
+  EM_BREVE: 'em_breve',
+  TELA_PROPRIA: 'tela_propria',
+})
+
+const SEPARATE_PATH_NETWORKS = new Set([DELIVERY_NETWORK.INSTAGRAM])
+
+export function listDeliveryNetworksForAccount({ allowMultiNetwork = false, env = process.env } = {}) {
+  return Object.values(DELIVERY_NETWORK).map((id) => {
+    const caps = CAPABILITIES[id] ?? null
+    let status = DELIVERY_NETWORK_STATUS.EM_BREVE
+    if (SEPARATE_PATH_NETWORKS.has(id)) status = DELIVERY_NETWORK_STATUS.TELA_PROPRIA
+    else if (caps?.available && isDeliveryNetworkEnabled(id, env)) status = DELIVERY_NETWORK_STATUS.DISPONIVEL
+    const isWhatsapp = id === DELIVERY_NETWORK.WHATSAPP
+    return {
+      id,
+      displayName: DISPLAY_NAMES[id],
+      status,
+      selecionavel: status === DELIVERY_NETWORK_STATUS.DISPONIVEL && (isWhatsapp || allowMultiNetwork),
+      liberadoNoPlano: isWhatsapp || allowMultiNetwork,
+      capacidades: caps
+        ? {
+            aceitaBotao: caps.acceptsButton,
+            exigeImagem: caps.requiresImage,
+            aceitaVideo: caps.acceptsVideo,
+            aceitaMarcaDagua: caps.acceptsWatermark,
+            destinoUnico: caps.singleDestination,
+            leOrigem: caps.canReadSource,
+          }
+        : null,
+    }
+  })
+}
