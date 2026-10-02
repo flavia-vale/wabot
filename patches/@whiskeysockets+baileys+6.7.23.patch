@@ -23,7 +23,7 @@ index f4458db..e6912a6 100644
              const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid));
              await cipher.initOutgoing(session);
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
-index c46b096..416d372 100644
+index c46b096..a429a50 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 +++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 @@ -7,7 +7,8 @@ import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaul
@@ -193,7 +193,19 @@ index c46b096..416d372 100644
                      else {
                          // no type in the receipt => message delivered
                          let type = undefined;
-@@ -687,7 +781,11 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -680,14 +774,22 @@ export const makeMessagesRecvSocket = (config) => {
+                             // message was sent by us from a different device
+                             type = 'sender';
+                             // need to specially handle this case
+-                            if (isJidUser(msg.key.remoteJid)) {
++                            // wabot patch (RCA 2026-10-02): DM em LID tambem leva o aparelho autor
++                            // como participant, como no Baileys 7.x. Sem ele o servidor nao aceita o
++                            // <receipt type=sender>, espera 50 min pelo ack e derruba a conexao com
++                            // <stream:error><ack class=message/></stream:error> (500).
++                            if (isJidUser(msg.key.remoteJid) || isLidUser(msg.key.remoteJid)) {
+                                 participant = author;
+                             }
+                         }
                          else if (!sendActiveReceipts) {
                              type = 'inactive';
                          }
@@ -205,7 +217,7 @@ index c46b096..416d372 100644
                          // send ack for history message
                          const isAnyHistoryMsg = getHistoryMsg(msg.message);
                          if (isAnyHistoryMsg) {
-@@ -702,6 +800,33 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -702,6 +804,33 @@ export const makeMessagesRecvSocket = (config) => {
          }
          catch (error) {
              logger.error({ error, node }, 'error in handling message');
@@ -239,7 +251,7 @@ index c46b096..416d372 100644
          }
      };
      const fetchMessageHistory = async (count, oldestMsgKey, oldestMsgTimestamp) => {
-@@ -846,7 +971,7 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -846,7 +975,7 @@ export const makeMessagesRecvSocket = (config) => {
      };
      const makeOfflineNodeProcessor = () => {
          const nodeProcessorMap = new Map([
@@ -248,7 +260,7 @@ index c46b096..416d372 100644
              ['call', handleCall],
              ['receipt', handleReceipt],
              ['notification', handleNotification]
-@@ -867,7 +992,14 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -867,7 +996,14 @@ export const makeMessagesRecvSocket = (config) => {
                          onUnexpectedError(new Error(`unknown offline node type: ${type}`), 'processing offline node');
                          continue;
                      }
@@ -264,7 +276,7 @@ index c46b096..416d372 100644
                  }
                  isProcessing = false;
              };
-@@ -1020,7 +1152,7 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -1020,7 +1156,7 @@ export const makeMessagesRecvSocket = (config) => {
      }
      // recv a message
      ws.on('CB:message', (node) => {
