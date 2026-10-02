@@ -1323,7 +1323,7 @@ export async function paymentsRoutes(app) {
   app.post('/checkout', { onRequest: [app.authenticate] }, async (req, reply) => {
     const { plan, months: rawMonths } = req.body ?? {}
     const plans = await getBillingPlans()
-    if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
+    if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic, pro ou premium.')
 
     // Pré-pago (B11) só existe com a flag ligada; o valor nunca vem da tela.
     const months = rawMonths === undefined || rawMonths === null || rawMonths === '' ? 1 : Number(rawMonths)
@@ -1363,7 +1363,7 @@ export async function paymentsRoutes(app) {
     try {
       const { plan, payerEmail: informedPayerEmail } = req.body ?? {}
       const plans = await getBillingPlans()
-      if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
+      if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic, pro ou premium.')
 
       const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, plan: true, accessExpiresAt: true } })
       // 1ª cobrança imediata da assinatura = recusa do antifraude do MP em 8 de

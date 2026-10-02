@@ -59,7 +59,7 @@ const ROLE_PERMISSIONS = {
 // caminho é a liberação manual daqui. Sem ele nesta lista o recurso ficava
 // inalcançável para 100% das contas — nem por dentro do produto dava para ligar.
 const PAID_PLANS = ['basic', 'pro', 'premium']
-const PLAN_PRICES = { trial: 0, basic: 39, pro: 69 }
+const PLAN_PRICES = { trial: 0, basic: 39, pro: 69, premium: 99 }
 const EXPORT_LIMIT = 100
 const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = DEFAULT_OWNER_ADMIN_EMAILS
 const CANONICAL_OWNER_ADMIN_EMAILS = new Set(DEFAULT_BOOTSTRAP_ADMIN_EMAILS)
@@ -227,11 +227,11 @@ function parseCurrencyAmount(value) {
 
 async function getCurrentPlanPrices() {
   try {
-    const rows = await db.lpPlan.findMany({ where: { id: { in: ['basic', 'pro'] } } })
+    const rows = await db.lpPlan.findMany({ where: { id: { in: ['basic', 'pro', 'premium'] } } })
     const prices = { ...PLAN_PRICES }
     for (const row of rows) {
       const parsed = parseCurrencyAmount(row.price)
-      if (parsed !== null && (row.id === 'basic' || row.id === 'pro')) prices[row.id] = parsed
+      if (parsed !== null && (row.id === 'basic' || row.id === 'pro' || row.id === 'premium')) prices[row.id] = parsed
     }
     return prices
   } catch {
@@ -2063,6 +2063,7 @@ export async function adminRoutes(app) {
       failedPayments,
       activeBasic,
       activePro,
+      activePremium,
       trialsActive,
       expiring7d,
       expiring30d,
@@ -2083,6 +2084,7 @@ export async function adminRoutes(app) {
       db.payment.count({ where: { status: { notIn: ['approved', 'pending'] }, ...notTestUser } }),
       db.user.count({ where: { status: 'active', plan: 'basic', accessExpiresAt: { gt: now }, ...notTestAccount } }),
       db.user.count({ where: { status: 'active', plan: 'pro', accessExpiresAt: { gt: now }, ...notTestAccount } }),
+      db.user.count({ where: { status: 'active', plan: 'premium', accessExpiresAt: { gt: now }, ...notTestAccount } }),
       db.user.count({ where: { status: 'active', plan: 'trial', OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: now } }] } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 30) } } }),
@@ -2101,7 +2103,7 @@ export async function adminRoutes(app) {
     ])
 
     const currentPrices = await getCurrentPlanPrices()
-    const activeMrr = activeBasic * currentPrices.basic + activePro * currentPrices.pro
+    const activeMrr = activeBasic * currentPrices.basic + activePro * currentPrices.pro + activePremium * currentPrices.premium
 
     // Payment.amount e SubscriptionCharge.amount estão em reais (Float);
     // comissões em centavos (Int) → /100. Combinação em módulo puro e testado
@@ -2174,7 +2176,8 @@ export async function adminRoutes(app) {
       activeMrr,
       activeBasic,
       activePro,
-      paidActiveUsers: activeBasic + activePro,
+      activePremium,
+      paidActiveUsers: activeBasic + activePro + activePremium,
       trialsActive,
       expiring7d,
       expiring30d,
@@ -2419,7 +2422,7 @@ export async function adminRoutes(app) {
       ],
     }
 
-    const [payments, charges, commissions, refunds, activeBasic, activePro, prices] = await Promise.all([
+    const [payments, charges, commissions, refunds, activeBasic, activePro, activePremium, prices] = await Promise.all([
       db.payment.findMany({
         where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser },
         select: { userId: true, amount: true, provider: true, createdAt: true },
@@ -2445,6 +2448,7 @@ export async function adminRoutes(app) {
       }),
       db.user.count({ where: { status: 'active', plan: 'basic', accessExpiresAt: { gt: now }, ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
       db.user.count({ where: { status: 'active', plan: 'pro', accessExpiresAt: { gt: now }, ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
+      db.user.count({ where: { status: 'active', plan: 'premium', accessExpiresAt: { gt: now }, ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
       getCurrentPlanPrices(),
     ])
 
@@ -2496,7 +2500,7 @@ export async function adminRoutes(app) {
       revenueByMonth,
       now,
       projectionMonths,
-      activeMrr: activeBasic * prices.basic + activePro * prices.pro,
+      activeMrr: activeBasic * prices.basic + activePro * prices.pro + activePremium * prices.premium,
       costOverrides,
     })
 
