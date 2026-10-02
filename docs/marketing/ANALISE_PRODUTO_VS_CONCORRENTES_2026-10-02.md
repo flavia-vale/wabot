@@ -66,8 +66,8 @@ Ordem: impacto comercial (quantos concorrentes vendem o item como diferencial).
 | 4 | "Garimpo só Shopee" / "O Afilira BUSCA a oferta sozinho, o Espelha não" | ficha, Features, `_comparisonContent.js` L1010 | Shopee + promoções Awin/Rakuten | Corrigir; L1010 é fato errado contra nós |
 | 5 | "A partir de quanto o robô publica sozinho: R$69 (Pro)"; Pro = "o plano do piloto automático" | L801, L1061, L895, L964, L1172 | Basic espelha sozinho desde R$39 | Igualar ao `pricing.md` |
 | 6 | Hero: "você revisa o que quiser antes"; pílula "Revisão humana" | `Hero.jsx:121`, `app/page.js:62` | A fila de revisão está **desligada** (`OFFER_AUTOMATION_REVIEW_ENABLED`); espelhamento sai direto | Liberar a fila (seção 3, item 1) **ou** tirar a frase |
-| 7 | Selo do PRO "Canais + Automação + **Anti-banimento**" | `Pricing.jsx:113` | Regra da casa: nunca prometer anti-ban; a própria ficha diz "nenhum software garante" | "Canais + Automação + Ritmo de envio" |
-| 8 | "Grupos, Canais e Comunidades" sem dizer que canais é PRO; "Comunidades" não existe na ficha | L189, L270, L849, L968, L1381, L1482 | Canais = PRO; comunidades não confirmado [H] | Marcar "(canais no PRO)"; tirar "Comunidades" até testar |
+| 7 | ~~Selo do PRO "Anti-banimento"~~ | `Pricing.jsx:113` | É o **nome oficial da tela** (spec 018, coberto por `test/anti-banimento-textos-atualizados.test.js`), não promessa | Mantido (revisto em 02/10) |
+| 8 | "Grupos, Canais e Comunidades" sem dizer que canais é PRO | L189, L270, L849, L968, L1381, L1482 | Canais = PRO; **Comunidades existe** (o robô lista grupos de comunidade via `linkedParent`, `src/bot-worker.js`) | Marcar "Canais no Pro"; Comunidades fica |
 | 9 | "Sem cobrança por conexão extra de WhatsApp" | L1070 | 1 número por conta (multi-número só lista de espera) | Remover |
 | 10 | "Menor preço do mercado", "Broadcast em massa", "24/7 sem limites" | L84, L193 | FluxoPromo R$37 e LucreShop R$29,90 são mais baratos; temos teto por hora/dia de propósito | Remover os três |
 | 11 | "Converte link de cupom em todas as 6 lojas" | ficha, `llms.txt:16`, Magalu | Desligada por padrão no código, mas **ligada em produção** (`COUPON_LINK_CONVERT=true`, conferido 02/10) | ✅ Promessa vale. Só falta a página do ML citar cupom (hoje diz "link de produto") |
@@ -162,3 +162,8 @@ Contagem = concorrentes das 25 fichas + análises que anunciam o recurso.
 
 Páginas públicas que já estão no Google e mudarem de texto → entrar na leva 🔝 de
 reindexação em `ACOES_FLAVIA_2026-09-11.md` (só depois do deploy em `main`).
+
+
+---
+
+As correções da seção 2 foram aplicadas na branch `fix/textos-publicos-vs-produto` (02/10).
