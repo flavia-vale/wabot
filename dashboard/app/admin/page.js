@@ -10,6 +10,7 @@ import { PayingTag } from '@/components/PayingTag'
 import { TestAccountTag } from '@/components/TestAccountTag'
 import { HelpDot } from '@/components/HelpDot'
 import { CARD_HELP } from '@/lib/admin/cardHelp'
+import { canAccessCustomerSuccess as canAccessCustomerSuccessFor } from '@/lib/admin/access'
 
 const STAT_LABELS = {
   totalUsers: 'Clientes totais',
@@ -56,9 +57,6 @@ const RISK_FILTERS = [
   ['missing_post', 'Sem destino'],
   ['wa_disconnected', 'WhatsApp off'],
 ]
-const CS_ALLOWED_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
-const CS_PERMISSION_KEYS = ['customer_success', 'customer_success_ops', 'success']
-const resolveAdminEmail = (admin) => String(admin?.email || admin?.user?.email || admin?.profile?.email || '').toLowerCase().trim()
 const asArray = (value) => Array.isArray(value) ? value : []
 const asPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 
@@ -2829,12 +2827,8 @@ export default function AdminPage() {
     </section>
   )
 
-  const canAccessCustomerSuccess = useMemo(() => {
-    const email = resolveAdminEmail(admin)
-    const permissions = Array.isArray(admin?.permissions) ? admin.permissions : []
-    const hasPermission = permissions.some(permission => CS_PERMISSION_KEYS.includes(String(permission).toLowerCase().trim()))
-    return CS_ALLOWED_EMAILS.includes(email) || hasPermission || admin?.role === 'owner'
-  }, [admin])
+  // Decidido por permissão (support:read), nunca por e-mail fixo (Q7 da auditoria).
+  const canAccessCustomerSuccess = useMemo(() => canAccessCustomerSuccessFor(admin), [admin])
 
   async function applyFilters(e) {
     e?.preventDefault()

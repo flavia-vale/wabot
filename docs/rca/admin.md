@@ -467,3 +467,13 @@ ação de admin, retida 180 dias e soterrando a trilha de "quem fez o quê".
 é só ação de admin. O evento precisa estar em `ANALYTICS_EVENTS`, senão some
 sem erro. O painel passa a mostrar só eventos novos (os antigos ficam na
 auditoria até vencerem os 180 dias). Zero RAM: mesma escrita, mesmo sweep.
+
+## Acesso no admin por permissão, nunca por e-mail fixo (Q7 da auditoria, 2026-10-02)
+
+O Início e `/admin/sucesso-cliente` liberavam a fila de Sucesso do Cliente por
+uma lista de três e-mails escrita no código. Entrar ou sair alguém da equipe
+exigia deploy, e o backend já decide por papel (`/success/*` exige
+`support:read`). Regra única em `dashboard/lib/admin/access.js`
+(`canAccessCustomerSuccess`: owner ou `support:read`). Guarda:
+`test/admin-acesso-por-permissao.test.js` falha se voltar e-mail pessoal fixo
+em `dashboard/app/admin` ou `dashboard/lib/admin`. Zero RAM.
