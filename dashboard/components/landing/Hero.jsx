@@ -118,7 +118,7 @@ export function Hero({ tone, primaryCtaLabel = 'Testar 7 dias grátis', eyebrowL
     ? `${BRAND_DEFINITION_PT} Posta no seu grupo com intervalo controlado.`
     : tone === 'animado'
     ? `${BRAND_DEFINITION_PT} Posta no seu grupo no ritmo que você definir. ✨`
-    : `${BRAND_DEFINITION_PT} Posta no seu grupo com intervalo controlado, e você revisa o que quiser antes.`);
+    : `${BRAND_DEFINITION_PT} Posta no seu grupo com intervalo controlado, e você acompanha cada envio no histórico.`);
 
   return (
     <div className="wrap" style={{ position: 'relative' }}>

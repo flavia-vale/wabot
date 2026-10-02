@@ -97,7 +97,7 @@ const COMPETITORS = [
       { name: 'Pro', price: 'R$ 597,90/mês (R$ 497,90 no 1º mês)', notes: 'O valor recorrente, a partir do segundo mês, é R$ 597,90. 200 grupos de WhatsApp, 3 instâncias.' },
     ],
     strengths: [
-      'Cobre 10 lojas, mais que as cinco do nosso plano de entrada',
+      'Cobre 10 lojas, mais que as seis do nosso plano de entrada',
       'Publica também em Telegram, que não atendemos',
       'Vitrine de produtos com domínio próprio',
       'Rotador de links com pixel de Meta, TikTok e GA4 — permite anunciar em cima do próprio tráfego',

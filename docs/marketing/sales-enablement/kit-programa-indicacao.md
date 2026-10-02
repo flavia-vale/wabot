@@ -1,4 +1,4 @@
-# Kit do programa de indicação — BOTinho
+# Kit do programa de indicação — Espelha Grupos
 
 O programa já existe em produção (`dashboard/app/painel/afiliados/`,
 `dashboard/app/admin/afiliados/`) — este kit só organiza como oferecê-lo a
@@ -25,13 +25,13 @@ um cliente satisfeito. Não é preciso construir nada novo para usar isto.
 
 ## Por que este é o canal de aquisição mais barato disponível
 
-O público do BOTinho — pessoas que já divulgam ofertas de afiliado — já
+O público do Espelha Grupos — pessoas que já divulgam ofertas de afiliado — já
 entende e confia em programa de comissão por natureza do próprio trabalho.
 Não é preciso explicar o conceito, só apresentar a oportunidade.
 
 ## Texto pronto para oferecer a um cliente satisfeito
 
-> "Já que o BOTinho tá ajudando na sua rotina: sabia que dá pra ganhar
+> "Já que o Espelha Grupos tá ajudando na sua rotina: sabia que dá pra ganhar
 > comissão indicando outras pessoas que divulgam ofertas? Você recebe uma
 > % sobre a assinatura de quem você indicar. É só se candidatar dentro do
 > painel, em 'Programa de Afiliados' — te aprovamos e você já tem seu link

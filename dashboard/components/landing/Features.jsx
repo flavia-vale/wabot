@@ -74,8 +74,8 @@ const featureCards = [
     accent: true,
   },
   {
-    title: 'Ofertas automáticas da Shopee',
-    body: 'O robô busca ofertas da Shopee sozinho por tema e desconto mínimo, sem precisar de um grupo de origem para copiar.',
+    title: 'Ofertas automáticas',
+    body: 'O robô busca ofertas da Shopee sozinho por tema e desconto mínimo, sem precisar de um grupo de origem para copiar. Se você é afiliada na Awin ou na Rakuten, também traz as promoções das lojas em que foi aprovada.',
     icon: 'sparkles',
     pro: true,
   },
@@ -107,7 +107,7 @@ const featureCards = [
   },
   {
     title: 'Filas de envio no seu ritmo',
-    body: 'Defina intervalo entre envios, horário de descanso e limite por dia. As ofertas esperam na fila e saem sem atropelo.',
+    body: 'Defina intervalo entre envios, horário de descanso e limite por hora e por dia. As ofertas esperam na fila e saem sem atropelo.',
     icon: 'users',
     pro: true,
     accent: true,
