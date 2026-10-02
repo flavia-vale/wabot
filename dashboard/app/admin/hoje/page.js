@@ -89,12 +89,21 @@ export default function HojePage() {
   const [aviso, setAviso] = useState('')
   const [reconectando, setReconectando] = useState(null)
 
+  // Nenhum setState antes do primeiro await: a regra react-hooks/set-state-in-effect
+  // do lint do dashboard barra setState síncrono dentro de effect (CI vermelho em 2026-10-02).
   const carregar = useCallback(async () => {
-    setErro('')
-    try { setData(await api.adminInbox()) } catch (err) { setErro(err.message || 'Não consegui carregar a caixa.') } finally { setCarregando(false) }
+    try {
+      const inbox = await api.adminInbox()
+      setErro('')
+      setData(inbox)
+    } catch (err) {
+      setErro(err.message || 'Não consegui carregar a caixa.')
+    } finally {
+      setCarregando(false)
+    }
   }, [])
 
-  useEffect(() => { carregar() }, [carregar])
+  useEffect(() => { Promise.resolve().then(carregar) }, [carregar])
 
   async function reconectar(item) {
     // Ação sobre a conta de uma cliente: nunca sem confirmar (Q4 da auditoria).
