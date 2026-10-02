@@ -467,3 +467,15 @@ ação de admin, retida 180 dias e soterrando a trilha de "quem fez o quê".
 é só ação de admin. O evento precisa estar em `ANALYTICS_EVENTS`, senão some
 sem erro. O painel passa a mostrar só eventos novos (os antigos ficam na
 auditoria até vencerem os 180 dias). Zero RAM: mesma escrita, mesmo sweep.
+
+## Cerca do `/admin/*` e menu sem POC (Q6 da auditoria, 2026-10-02)
+
+Uma conta trial sem papel admin carregou páginas do admin por URL e disparou
+80 chamadas (todas 403). O backend segurou; a casca do admin não deveria nem
+ter montado. `dashboard/components/AdminGate.js` (usado em
+`app/admin/layout.js`) chama `GET /api/admin/me` antes de renderizar: 403 →
+`/painel`; 401 → login (já era do `apiFetch`); falha de rede → deixa montar,
+porque cada rota continua exigindo papel. "Teste shard" (POC) só aparece no
+menu com `tech:read` **e** `shardPocMode === 'enabled'`, que o `/me` passou a
+informar. Guarda: `test/admin-cerca-e-menu.test.js`. Custo: uma chamada leve
+a mais por abertura do admin; zero RAM.

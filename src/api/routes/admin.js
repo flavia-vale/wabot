@@ -1358,7 +1358,9 @@ export async function adminRoutes(app) {
 
   app.get('/me', async (req, reply) => {
     if (!(await requireAdmin(req, reply))) return
-    return req.admin
+    // Modo do teste de shard: o menu só mostra "Teste shard" quando a env
+    // está ligada de verdade (Q6 da auditoria) — POC não é tela de rotina.
+    return { ...req.admin, shardPocMode: String(process.env.WA_SESSION_SHARD_POC || 'observe') }
   })
 
   app.get('/shard-poc/overview', async (req, reply) => {
