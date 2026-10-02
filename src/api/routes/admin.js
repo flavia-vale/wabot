@@ -21,6 +21,7 @@ import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedacti
 import { buildErrorObservability, buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
+import { isSessionLive, RECEPTION_BLIND_WINDOW_MS } from '../../domain/session/sessionLiveness.js'
 import { withPayingStatus } from '../../domain/admin/payingStatus.js'
 import { loadEverPaidUserIds, currentPayingWhere, formerPayingWhere, stalePayingWhere } from '../../domain/admin/payingLoader.js'
 import { withSharedPhoneStatus } from '../../domain/admin/sharedPhoneStatus.js'
@@ -833,11 +834,7 @@ function safeIsoDate(value) {
 
 
 function isSessionOnline(session, now = new Date()) {
-  if (!session) return false
-  if (session.status === 'connected') return true
-  const heartbeatAt = session.lastHeartbeatAt ? new Date(session.lastHeartbeatAt).getTime() : 0
-  const heartbeatFresh = heartbeatAt && now.getTime() - heartbeatAt <= 2 * 60_000
-  return session.status === 'connecting' && heartbeatFresh && ['connecting', 'reconnecting'].includes(session.lifecycle)
+  return isSessionLive(session, now)
 }
 
 // Cenários da frota para os PRIMEIROS cards do admin (Fase 1B do plano de
@@ -860,7 +857,7 @@ const FLEET_DROPS_ALERT_24H = Math.max(1, Number(process.env.ADMIN_DROPS_ALERT_2
 // segundos DEPOIS da hora cheia. Nesse vão o evento anterior já passou de 60min
 // e o novo ainda não saiu — a conta some do card e a frota cega aparece como
 // zero. Card que pisca para zero é card em que ninguém confia.
-const FLEET_RECEPTION_BLIND_WINDOW_MS = Math.max(10 * 60_000, Number(process.env.ADMIN_RECEPTION_BLIND_WINDOW_MS || 3 * 60 * 60_000))
+const FLEET_RECEPTION_BLIND_WINDOW_MS = RECEPTION_BLIND_WINDOW_MS
 
 async function buildFleetScenarios(now = new Date()) {
   const since24h = addDays(now, -1)
