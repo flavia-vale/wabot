@@ -129,6 +129,17 @@ export function shouldIgnoreByChatScope(jid, {
 // worker e volta a deixar tudo passar. É a rede contra o cenário que não
 // conseguimos prever (endereçamento novo do WhatsApp, lista defasada, bug
 // nosso): falha para o lado de deixar passar, sem esperar alguém perceber.
+// Só descarte de GRUPO ou CANAL conta para o freio de emergência (RCA 2026-10-02).
+// O freio existe para o caso de uma fonte monitorada deixar de casar com a lista
+// e sair do ar em silêncio — e fonte monitorada é grupo ou canal. Conversa
+// individual descartada não tem como silenciar uma fonte: com o modo `dm` (default
+// desde 2026-10-02) o freio disparou em 3 contas cujos grupos só estavam quietos
+// por 30 min, desligando a proteção à toa (medido: 5, 14 e 3 mensagens de grupo
+// depois do freio).
+export function countsTowardChatScopePanic(type) {
+  return type === CHAT_JID_TYPES.GROUP || type === CHAT_JID_TYPES.NEWSLETTER
+}
+
 export function shouldAutoDisableChatScope({
   now = Date.now(),
   enabled = false,
