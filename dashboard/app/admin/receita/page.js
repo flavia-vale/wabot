@@ -891,7 +891,6 @@ export default function ReceitaPage() {
   }
 
   async function carregar() {
-    setError('')
     const [adminData, financeData, paymentsData, subscriptionsData, overdueData, paidData] = await Promise.all([
       api.adminMe(),
       api.adminFinanceOverview({ period: financePeriod }),
@@ -900,6 +899,7 @@ export default function ReceitaPage() {
       api.adminSubscriptions({ limit: 50, status: 'overdue' }).catch(() => null),
       api.adminSubscriptions({ limit: 50, status: 'paid' }).catch(() => null),
     ])
+    setError('')
     setAdmin(adminData)
     setFinance(financeData)
     setPayments(paymentsData)
@@ -910,7 +910,9 @@ export default function ReceitaPage() {
 
   useEffect(() => {
     let active = true
-    carregar()
+    // Chamada dentro de um callback, não no corpo do effect: a regra
+    // react-hooks/set-state-in-effect do lint do dashboard barra setState síncrono ali.
+    Promise.resolve().then(() => carregar())
       .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar a Receita.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }

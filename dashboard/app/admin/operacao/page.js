@@ -697,7 +697,6 @@ export default function OperacaoPage() {
   const [loading, setLoading] = useState(true)
 
   async function carregar() {
-    setError('')
     const [adminData, overviewData, systemObservabilityData, systemHealthData, systemMetricsData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, lpContentData, termsData] = await Promise.all([
       api.adminMe(),
       api.adminOverview().catch(() => null),
@@ -711,6 +710,7 @@ export default function OperacaoPage() {
       api.adminLpContent().catch(() => null),
       api.adminLegalTerms().catch(() => null),
     ])
+    setError('')
     setAdmin(adminData)
     setOverview(overviewData)
     setSystemObservability(systemObservabilityData)
@@ -728,7 +728,9 @@ export default function OperacaoPage() {
 
   useEffect(() => {
     let active = true
-    carregar()
+    // Chamada dentro de um callback, não no corpo do effect: a regra
+    // react-hooks/set-state-in-effect do lint do dashboard barra setState síncrono ali.
+    Promise.resolve().then(() => carregar())
       .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar a Operação.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
