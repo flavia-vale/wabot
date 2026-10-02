@@ -44,6 +44,9 @@ import { buildRoiReport } from '../../domain/admin/roi.js'
 import { costForMonth, monthIndex, monthKeyFromIndex, monthKeyOf, normalizeCostOverrides, resolveCostConfig, COST_CATEGORY_LABELS } from '../../domain/admin/operatingCosts.js'
 import { DEFAULT_OWNER_ADMIN_EMAILS, PRIMARY_OWNER_ADMIN_EMAIL } from '../../auth/reservedAdminEmails.js'
 import { isAdminMfaVerified } from '../adminMfa.js'
+import { getTelegramRuntime } from '../../delivery/telegram/runtime.js'
+import { DELIVERY_NETWORK } from '../../core/delivery/networks.js'
+import { computeNetworkHealth } from '../../core/delivery/networkHealth.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -1423,6 +1426,17 @@ export async function adminRoutes(app) {
     const userId = String(req.params.userId || '')
     await writeAdminAuditLog(req, { action: 'admin.shard_poc.member.rollback', resource: 'waSession', resourceId: userId, targetUserId: userId })
     return reply.code(202).send(await rollbackSessionFromShard(userId, 'poc-1'))
+  })
+
+  // Feature 017, Fatia 6 (T080): estado do robô único do Telegram para o
+  // painel de operação. Desligado no servidor = "desligado", não erro.
+  app.get('/delivery-networks/health', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const runtime = getTelegramRuntime()
+    if (!runtime) return { aplicativos: [{ id: DELIVERY_NETWORK.TELEGRAM, nome: 'Telegram', ligado: false, estado: 'desligado', motivo: 'O Telegram não está ligado neste servidor.', desde: null }] }
+    const health = computeNetworkHealth(runtime.health.signals(DELIVERY_NETWORK.TELEGRAM))
+    const pendentes = await db.deliveryOutbox.count({ where: { deliveryNetwork: DELIVERY_NETWORK.TELEGRAM, status: 'pending' } }).catch(() => null)
+    return { aplicativos: [{ id: DELIVERY_NETWORK.TELEGRAM, nome: 'Telegram', ligado: true, ...health, pendentes }] }
   })
 
   app.get('/capacity/current', async (req, reply) => {

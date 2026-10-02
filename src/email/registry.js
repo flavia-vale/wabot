@@ -1693,6 +1693,40 @@ Nome repetido acontece, e a mesma pessoa pode ter recadastrado por ter perdido a
 Este aviso sai no máximo uma vez por dia para cada cadastro.`,
   },
   {
+    slug: 'admin_robo_aplicativo_parado',
+    name: '[Interno] O robô do Telegram parou para todo mundo',
+    description: 'Feature 017: avisa a administradora quando o robô único de um aplicativo (Telegram) fica fora do ar, é bloqueado ou passa a ser limitado no ritmo. Vale para todas as contas ao mesmo tempo; o WhatsApp não é afetado.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'aplicativo', description: 'Qual aplicativo', example: 'Telegram' },
+      { name: 'estado', description: 'O estado novo do robô', example: 'fora do ar' },
+      { name: 'motivo', description: 'O que isso significa, em uma frase', example: 'O aplicativo não está respondendo. As ofertas ficam guardadas e saem quando ele voltar.' },
+      { name: 'desde', description: 'Desde quando', example: '02/10/2026 18:20' },
+      { name: 'link_cobrancas', description: 'Link do painel de administração', example: 'https://espelhagrupos.com.br/admin' },
+    ],
+    title: 'O robô do Telegram precisa de atenção',
+    subject: '[Espelha Grupos] O robô do Telegram precisa de atenção',
+    body: `O robô do {{aplicativo}} mudou de estado e isso vale para TODAS as clientes que usam o {{aplicativo}}.
+
+[[lista]]
+Estado: {{estado}}
+O que significa: {{motivo}}
+Desde: {{desde}}
+[[/lista]]
+
+O WhatsApp de todas as contas continua funcionando normalmente.
+
+Se o estado for "bloqueado", o robô foi recusado inteiro (chave inválida ou robô banido): é preciso criar um robô novo, trocar o segredo no .env da API e reiniciar a API com pm2 delete + start. As clientes só precisam adicionar o robô novo aos grupos delas. O passo a passo está em docs/rca/multicanal.md.
+
+[[botao:Abrir o painel de operação|{{link_cobrancas}}]]
+
+Este aviso sai no máximo uma vez por dia para cada estado.`,
+  },
+  {
     slug: 'admin_pagamento_com_falha',
     name: '[Interno] Falha ao processar um pagamento',
     description: 'Avisa a administradora quando um aviso de pagamento do Mercado Pago não pôde ser processado por erro nosso — é o caso em que a cliente pagou e o acesso pode não ter sido liberado.',

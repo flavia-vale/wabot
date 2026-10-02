@@ -196,6 +196,7 @@ arquivo (nova versão), não editar tela a tela.
 | SEO, marketing, páginas públicas, dados de mercado, marca | `docs/rca/seo-marketing.md` |
 | Instagram Stories | `docs/rca/instagram.md` |
 | plano Basic × PRO, cadeados do painel, menu, Minha conta | `docs/rca/planos-basic-pro.md` |
+| Telegram / multicanal (aplicativos, robô único, caixa de saída, Premium) | `docs/rca/multicanal.md` |
 | membros dos grupos, painel Membros, rodízio de convites (Link Inteligente) | `docs/rca/grupos-membros.md` |
 | vários números por conta, número reserva, rodízio de envio entre números, lista de espera | `docs/rca/multi-numero.md` |
 | Awin (contas, sync de promoções, promoções nas ofertas automáticas, conversão de links) | `docs/rca/afiliados-awin.md` |

@@ -73,3 +73,26 @@ export function createHealthRecorder({ max = 200 } = {}) {
     },
   }
 }
+
+const BAD_STATES = new Set([NETWORK_HEALTH.LIMITADO, NETWORK_HEALTH.BLOQUEADO, NETWORK_HEALTH.INDISPONIVEL])
+
+// Decide o que avisar numa mudança de estado (T081/T083). Só a TRANSIÇÃO para
+// um estado ruim avisa — ficar no mesmo estado não repete o aviso (o cooldown
+// do e-mail cobre o resto). Sem medição nunca avisa.
+export function decideHealthAlert(previous, next) {
+  const prevState = previous?.estado ?? NETWORK_HEALTH.SEM_MEDICAO
+  const nextState = next?.estado ?? NETWORK_HEALTH.SEM_MEDICAO
+  if (prevState === nextState || !BAD_STATES.has(nextState)) return null
+  return {
+    sinal: nextState === NETWORK_HEALTH.LIMITADO ? 'delivery_network_throttled' : 'delivery_network_down',
+    estado: nextState,
+  }
+}
+
+export const NETWORK_HEALTH_LABEL = Object.freeze({
+  funcionando: 'funcionando',
+  limitado: 'limitado no ritmo',
+  bloqueado: 'bloqueado',
+  indisponivel: 'fora do ar',
+  sem_medicao: 'sem medição',
+})

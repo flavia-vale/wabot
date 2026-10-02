@@ -16,6 +16,7 @@ import { createTelegramApi, readTelegramSecret } from './api.js'
 import { createTelegramAdapter } from './adapter.js'
 import { handleLinkUpdate } from './link.js'
 import { startTelegramUpdatesLoop } from './updatesLoop.js'
+import { startHealthWatch } from './healthWatch.js'
 
 let runtime = null
 
@@ -56,12 +57,16 @@ export function startTelegramDelivery({ db = defaultDb, env = process.env, fetch
     track: trackAnalyticsEventSafe,
   })
 
+  const healthWatch = startHealthWatch({ health, db })
+
   runtime = {
     adapter,
     health,
+    healthWatch,
     stop() {
       updates.stop()
       sweep?.stop()
+      healthWatch.stop()
       runtime = null
     },
   }
