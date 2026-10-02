@@ -468,12 +468,13 @@ ação de admin, retida 180 dias e soterrando a trilha de "quem fez o quê".
 sem erro. O painel passa a mostrar só eventos novos (os antigos ficam na
 auditoria até vencerem os 180 dias). Zero RAM: mesma escrita, mesmo sweep.
 
-## Acesso no admin por permissão, nunca por e-mail fixo (Q7 da auditoria, 2026-10-02)
+## Auditoria nas escritas de afiliado e confirmação obrigatória no disparo (Q8 da auditoria, 2026-10-02)
 
-O Início e `/admin/sucesso-cliente` liberavam a fila de Sucesso do Cliente por
-uma lista de três e-mails escrita no código. Entrar ou sair alguém da equipe
-exigia deploy, e o backend já decide por papel (`/success/*` exige
-`support:read`). Regra única em `dashboard/lib/admin/access.js`
-(`canAccessCustomerSuccess`: owner ou `support:read`). Guarda:
-`test/admin-acesso-por-permissao.test.js` falha se voltar e-mail pessoal fixo
-em `dashboard/app/admin` ou `dashboard/lib/admin`. Zero RAM.
+Aprovar/rejeitar afiliado, mudar a regra geral de comissão e dar percentual
+especial (`affiliate.js`) escreviam sem `AdminAuditLog`; comissões e saques já
+gravavam. Agora as quatro gravam antes/depois (`admin.affiliate.approve`,
+`.reject` com motivo, `.settings.update`, `.commission_override`). No disparo
+de e-mail em massa (`adminEmails.js` `/send`), `confirmTotal` era opcional:
+sem ele, saía para a base sem conferir. Agora é obrigatório (400) e segue 409
+quando a lista mudou. Guarda: `test/admin-afiliados-auditoria.test.js`.
+Zero RAM.
