@@ -27,10 +27,11 @@ test('ROI desconta o reembolso no mês em que o PIX saiu', () => {
 test('painel expõe ação auditada, conciliação e os dois cards de pagantes', () => {
   const route = readFileSync(new URL('../src/api/routes/admin.js', import.meta.url), 'utf8')
   const page = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+  const receita = readFileSync(new URL('../dashboard/app/admin/receita/page.js', import.meta.url), 'utf8')
   assert.match(route, /app\.post\('\/payments\/:paymentId\/refund'/)
   assert.match(route, /admin\.payment\.refund\.create/)
-  assert.match(page, /Marcar reembolso/)
-  assert.match(page, /Conciliar com o Financeiro/)
+  assert.match(receita, /Marcar reembolso/)
+  assert.match(receita, /Conciliar com o Financeiro/)
   assert.match(page, /label="Pagantes atuais"/)
   assert.match(page, /label="Pagantes online"/)
 })
