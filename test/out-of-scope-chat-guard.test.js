@@ -31,13 +31,25 @@ test('A: falha para DEIXAR PASSAR (desligada, lista não carregada, jid vazio, c
 })
 
 test('B: nunca põe em quarentena fonte/destino, a própria conta ou status', () => {
-  assert.equal(isChatQuarantinable('120363000000000001@g.us', { allowedJids: allowed, selfJids: self }), false)
-  assert.equal(isChatQuarantinable('120363000000000002@newsletter', { allowedJids: allowed, selfJids: self }), false)
-  assert.equal(isChatQuarantinable('60155429409001:39@lid', { allowedJids: allowed, selfJids: self }), false)
-  assert.equal(isChatQuarantinable('status@broadcast', { allowedJids: allowed, selfJids: self }), false)
-  assert.equal(isChatQuarantinable('', { allowedJids: allowed, selfJids: self }), false)
-  assert.equal(isChatQuarantinable('78765438816421@lid', { allowedJids: allowed, selfJids: self }), true)
-  assert.equal(isChatQuarantinable('120363999999999999@g.us', { allowedJids: allowed, selfJids: self }), true)
+  const opts = { ready: true, allowedJids: allowed, selfJids: self }
+  assert.equal(isChatQuarantinable('5511999990000:3@s.whatsapp.net', opts), false)
+  assert.equal(isChatQuarantinable('60155429409001:39@lid', opts), false)
+  assert.equal(isChatQuarantinable('status@broadcast', opts), false)
+  assert.equal(isChatQuarantinable('', opts), false)
+  assert.equal(isChatQuarantinable('78765438816421@lid', opts), true)
+  assert.equal(isChatQuarantinable('5511977776666@s.whatsapp.net', opts), true)
+})
+
+test('B: NUNCA grupo nem canal — nem fora da lista (grupo monitorado não pode sair do ar em silêncio)', () => {
+  const opts = { ready: true, allowedJids: allowed, selfJids: self }
+  assert.equal(isChatQuarantinable('120363000000000001@g.us', opts), false)
+  assert.equal(isChatQuarantinable('120363999999999999@g.us', opts), false)
+  assert.equal(isChatQuarantinable('120363000000000002@newsletter', opts), false)
+  assert.equal(isChatQuarantinable('120363999999999998@newsletter', opts), false)
+})
+
+test('B: lista de escolhidos ainda não carregada → nada entra nem fica em quarentena', () => {
+  assert.equal(isChatQuarantinable('78765438816421@lid', { ready: false, allowedJids: new Set(), selfJids: self }), false)
 })
 
 test('índice id → chat é limitado e devolve o chat da mensagem', () => {
@@ -106,6 +118,8 @@ test('worker: ganchos passados ao socket e quarentena por chat ligada à queda 5
   assert.match(worker, /onIncomingMessageNode: \(\{ id, chatJid \}\) => recentInboundChats\.record\(id, chatJid\)/)
   assert.match(worker, /recentInboundChats\.get\(stuckMsgId\)/)
   assert.match(worker, /chatDropQuarantine\.isQuarantined\(jid\)/)
+  // Toda checagem da regra B passa pela lista carregada (ready).
+  assert.equal((worker.match(/isChatQuarantinable\(/g) || []).length, (worker.match(/isChatQuarantinable\([^)]*ready: allowedChatJidsReady/g) || []).length)
   // Escopo de módulo: precisa sobreviver a reconexões (mesma lição do msgRetryCounterCache).
   const startInner = worker.indexOf('async function startBotInner')
   assert.ok(startInner > 0)
