@@ -57,3 +57,8 @@ test('o sinal durável é agregado por janela, nunca por mensagem', () => {
 test('o estado do escopo é exposto nas métricas para a visão admin', () => {
   assert.match(source, /chatScope: getChatScopeSnapshot\(\)/)
 })
+
+test('freio de emergência conta só grupo/canal descartado (RCA 2026-10-02)', () => {
+  assert.match(source, /if \(countsTowardChatScopePanic\(type\)\) chatScopeIgnoredSinceLastAccepted \+= 1/)
+  assert.doesNotMatch(source, /\n  chatScopeIgnoredSinceLastAccepted \+= 1\n/)
+})

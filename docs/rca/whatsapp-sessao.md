@@ -668,6 +668,11 @@ boas-vindas e o recibo. A descoberta de "Canais que sigo" **não** passa por aí
 (vem de `messaging-history.set` / `chats.upsert`), então ignorar canal
 não-monitorado não apaga o picker.
 
+**Freio só conta grupo/canal descartado (2026-10-02, `countsTowardChatScopePanic`).**
+No 1º dia do default `dm` o freio desligou o filtro em 4 robôs; em 3 deles os grupos
+só estavam quietos 30 min (5, 14 e 3 mensagens de grupo logo depois). Conversa
+individual descartada não silencia fonte monitorada, então não conta mais.
+
 **Freio de emergência (`shouldAutoDisableChatScope`) — não remover.** Se a conta
 ESTAVA recebendo, parou por completo por `WA_CHAT_SCOPE_PANIC_MS` (default
 30min) e o contador de ignoradas continua subindo, a regra **se desliga sozinha**

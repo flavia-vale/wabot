@@ -57,7 +57,7 @@ import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { createUnsupportedStoreSignal } from './observability/unsupportedStoreSignal.js'
 import { linkRemovedSkipReason } from './core/unsupportedStore.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet, shouldIgnoreDesyncedChannel } from './core/ignoredJidPolicy.js'
-import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
+import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, countsTowardChatScopePanic, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { sanitizeMessageForLog, sanitizeResendText, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
@@ -488,7 +488,9 @@ let lastChatScopeSignalAt = 0
 
 function recordChatScopeIgnored(type, jid) {
   chatScopeIgnoredByType.set(type, (chatScopeIgnoredByType.get(type) || 0) + 1)
-  chatScopeIgnoredSinceLastAccepted += 1
+  // Freio de emergência: só grupo/canal descartado conta (conversa individual
+  // não tem como silenciar uma fonte monitorada — ver countsTowardChatScopePanic).
+  if (countsTowardChatScopePanic(type)) chatScopeIgnoredSinceLastAccepted += 1
   // Amostra limitada: os primeiros N endereços distintos por tipo, para dar
   // rastro sem inflar o log (mensagem ignorada é evento de alto volume).
   if (CHAT_SCOPE_LOG_SAMPLE_PER_TYPE <= 0) return
