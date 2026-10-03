@@ -1,0 +1,26 @@
+/* Escopo do /admin (G5 passo 2, DS v2.1 seção "Admin").
+ *
+ * D12: o DS lista --pro, --pro-soft, --pro-ink e --pnl-shadow*, mas o :root do
+ * globals.css não os define (existem só em painel.css/landing.css). Em vez de
+ * carregar painel.css inteiro (D4) ou mexer no :root das outras telas, o admin
+ * declara aqui, no próprio escopo, os mesmos valores do DS. */
+.admin-root {
+  --pro: #6F4FE8;
+  --pro-soft: #ECE7FA;
+  --pro-ink: #4B34A8;
+  --pnl-shadow: 0 30px 60px -30px rgba(62, 156, 122, 0.30), 0 8px 24px -8px rgba(31, 45, 42, 0.08);
+  --pnl-shadow-soft: 0 12px 30px -12px rgba(62, 156, 122, 0.20);
+  /* Texto de aviso: o laranja do DS mais escuro, para ler sobre fundo claro
+   * (derivado do --warn; o painel usa um tom fixo equivalente em .pnl-tag.is-flight). */
+  --warn-ink: color-mix(in srgb, var(--warn) 55%, var(--ink));
+  color: var(--ink);
+}
+
+/* Tabela densa do DS (adm-table): cabeçalho 10,5/700 em caixa alta, zebra e hover. */
+.admin-root .adm-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.admin-root .adm-table th { text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+.admin-root .adm-table td { padding: 10px 16px; border-top: 1px solid var(--line); vertical-align: middle; }
+.admin-root .adm-table tbody tr:nth-child(even) { background: var(--bg); }
+.admin-root .adm-table tbody tr:hover { background: var(--bg-soft); }
+.admin-root .adm-table .num { text-align: right; }
+.admin-root .adm-scroll { overflow-x: auto; }

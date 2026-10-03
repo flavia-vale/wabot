@@ -18,6 +18,31 @@
   --font-mono: var(--font-sans);
 }
 
+/* Tokens do design system como utilitários do Tailwind (bg-ds-ink, text-ds-danger,
+ * border-ds-line...). `inline` = a classe usa var(--token) direto, então segue o
+ * valor do escopo onde está (ex.: --pro* declarados em app/admin/admin.css).
+ * Só gera CSS para as classes realmente usadas; hoje: telas novas do /admin. */
+@theme inline {
+  --color-ds-bg: var(--bg);
+  --color-ds-bg-soft: var(--bg-soft);
+  --color-ds-surface: var(--surface);
+  --color-ds-ink: var(--ink);
+  --color-ds-ink-soft: var(--ink-soft);
+  --color-ds-ink-faint: var(--ink-faint);
+  --color-ds-accent: var(--accent);
+  --color-ds-accent-strong: var(--accent-strong);
+  --color-ds-accent-2: var(--accent-2);
+  --color-ds-accent-3: var(--accent-3);
+  --color-ds-warn: var(--warn);
+  --color-ds-warn-ink: var(--warn-ink);
+  --color-ds-danger: var(--danger);
+  --color-ds-pro: var(--pro);
+  --color-ds-pro-soft: var(--pro-soft);
+  --color-ds-pro-ink: var(--pro-ink);
+  --color-ds-line: var(--line);
+  --color-ds-line-strong: var(--line-strong);
+}
+
 code, kbd, samp, pre {
   font-family: inherit;
 }
