@@ -293,3 +293,44 @@ export function resolveBackendMode({ queueBackendEnv, redisUrl }) {
   if (explicit === 'bullmq') return redisUrl ? 'bullmq' : 'memory-fallback'
   return 'memory'
 }
+
+// Vários números por conta, Fase 2 (docs/rca/multi-numero.md): o processo
+// ativo enfileira na fila de OUTRO número (segundo remetente) sem consumir
+// dela. Mesmas regras de jobId/delay do backend e mesma guarda de
+// serialização — job que não atravessa o Redis não é aceito aqui.
+export async function createBullmqProducer({ redisUrl, queueName, bullmqModule = null }) {
+  const { Queue } = bullmqModule ?? (await import('bullmq'))
+  const queue = new Queue(queueName, { connection: { url: redisUrl } })
+  return {
+    queueName,
+    async enqueue(job) {
+      if (findUnserializableField(job)) return false
+      const delay = job?.notBefore != null ? Math.max(0, Number(job.notBefore) - Date.now()) : 0
+      const jobId = delay > 0 ? `defer:${job.logId}:${job.notBefore}` : String(job.logId)
+      return queue
+        .add('send', job, { removeOnComplete: 500, removeOnFail: 500, jobId, ...(delay > 0 ? { delay } : {}) })
+        .then(() => true)
+        .catch(err => {
+          logger.warn({ err: err.message, logId: job?.logId, queueName }, 'Falha ao enfileirar na fila do outro número')
+          return false
+        })
+    },
+    // Tira da fila do outro número tudo que ainda não saiu (esperando ou
+    // adiado) e entrega a `onJob`. Usado quando o outro número caiu: o ativo
+    // pega de volta. Job só é removido depois que `onJob` aceitou.
+    async reclaim(onJob, { limit = 500 } = {}) {
+      const jobs = await queue.getJobs(['waiting', 'delayed'], 0, limit - 1)
+      let moved = 0
+      for (const bullJob of jobs) {
+        const accepted = await onJob(bullJob.data).catch(() => false)
+        if (!accepted) continue
+        await bullJob.remove().catch(() => {})
+        moved++
+      }
+      return moved
+    },
+    async close() {
+      await queue.close().catch(() => {})
+    },
+  }
+}

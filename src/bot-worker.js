@@ -51,7 +51,7 @@ import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, effectiveDestinationImageMode, resolveOfferAppearance } from './core/imageModePolicy.js'
 import { renderDestinationWatermark } from './core/destinationWatermark.js'
 import db from './db.js'
-import { getAuthInfoDir, getDedupFile, getKnownChannelsFile, getSentMessagesDir } from './paths.js'
+import { getAuthInfoDir, getDedupFile, getKnownChannelsFile, getSentMessagesDir, getSendSpoolDir } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { createUnsupportedStoreSignal } from './observability/unsupportedStoreSignal.js'
@@ -65,7 +65,7 @@ import { decryptCredential } from './credentialCrypto.js'
 import { persistCredentialPatch } from './credentialPatch.js'
 import { describeLogoutReason } from './core/logoutReason.js'
 import { createMessageQueue } from './messageQueue.js'
-import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
+import { createMemorySendBackend, createBullmqSendBackend, createBullmqProducer, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { buildMirrorDedupKeys } from './core/mirrorDedupKey.js'
 import { checkAndSetGlobalDedup } from './core/globalDedup.js'
 import { detectKind, JID_KIND } from './core/jid.js'
@@ -130,6 +130,12 @@ import { buildRedisOptions } from './core/redisFactory.js'
 import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { loadWorkerIdentity } from './core/workerIdentity.js'
+import { multiNumberEnabled } from './domain/session/multiNumberFlag.js'
+import { buildMembershipRows } from './domain/session/groupMembership.js'
+import { rotationEnabledByEnv, sendQueueNameFor, isRoutableJob } from './domain/session/senderRouting.js'
+import { createRotationRouter } from './core/rotationRouter.js'
+import { spoolPayload, unspoolPayload, removeSpoolFiles, sweepSpool } from './core/sendSpool.js'
+import { standbyProcessKey } from './domain/session/workerIdentity.js'
 import { STANDBY_PROCESS_SLOT } from './domain/session/workerIdentity.js'
 import { recordWaConnectionEventSafe as recordWaConnectionEventSafeBase } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
@@ -186,6 +192,22 @@ export async function createBotSessionRuntime({
 const SESSION_IDENTITY = await loadWorkerIdentity(userId, { db })
 userId = SESSION_IDENTITY.userId
 const IS_STANDBY = SESSION_IDENTITY.role === 'standby'
+// Fase 2: rastreio por número só com a flag ligada (desligada = mesmas escritas de antes).
+const MULTI_NUMBER_ON = multiNumberEnabled()
+// Fase 2 (rodízio): o processo de prontidão também ENVIA o que o ativo mandar
+// para a fila dele. Continua sem escutar origens. Desligado = Fase 1.
+const ROTATION_ON = MULTI_NUMBER_ON && rotationEnabledByEnv()
+const CAN_SEND = !IS_STANDBY || ROTATION_ON
+// Fase 2b: o espelhamento também entra no rodízio (envio montado no ativo e
+// gravado em disco — src/core/sendSpool.js). Flag própria: depende do teste
+// de mídia reenviada por outro número (portão 4 do plano).
+const MIRROR_ROTATION_ON = ROTATION_ON && String(process.env.MULTI_NUMBER_ROTATION_RELAY ?? '').trim().toLowerCase() === 'true'
+const SEND_SPOOL_DIR = getSendSpoolDir(userId)
+const spoolCodec = {
+  encodeProto: message => proto.Message.encode(message).finish(),
+  decodeProto: bytes => proto.Message.decode(bytes),
+  isProtoMessage: value => value instanceof proto.Message,
+}
 // Eventos de conexão contam a história do número QUE ENVIA (admin, funil,
 // alertas). A prontidão não entra neles.
 const recordWaConnectionEventSafe = payload => { if (!IS_STANDBY) recordWaConnectionEventSafeBase(payload) }
@@ -782,6 +804,12 @@ async function persistWorkerHeartbeat(state, { reconnectScheduled = false } = {}
     lastHeartbeatAt: new Date(),
     ownerInstance: OWNER_INSTANCE,
     ...buildHeartbeatSessionPatch({ state, reconnectScheduled }),
+  }
+  // Vários números por conta, Fase 2: o estado de recepção vai junto no
+  // heartbeat (sem escrita nova) para a troca por "conectado mas cego".
+  if (MULTI_NUMBER_ON && !IS_STANDBY) {
+    const reception = getReceptionHealth()
+    if (reception?.state) Object.assign(patch, { receptionState: reception.state, receptionStateAt: new Date() })
   }
 
   await persistSessionPatch(patch).catch(err => {
@@ -1589,6 +1617,42 @@ const stuckSendLogsTimer = IS_STANDBY ? null : setInterval(() => {
 
 // Força re-emissão de sender_keys do WhatsApp via groupFetchAllParticipating().
 // Compartilhado entre o watchdog e o endpoint manual /refresh-wa-state.
+// Vários números por conta, Fase 2: grava em quais grupos ESTE número (login)
+// está. Só com a flag ligada e conta com número extra; reaproveita o mesmo
+// groupFetchAllParticipating (nenhuma chamada nova ao WhatsApp quando vem do
+// refresh). Best-effort: falha não derruba nada.
+const MEMBERSHIP_SYNC_MS = 60 * 60_000
+let lastMembershipSyncAt = 0
+async function accountHasExtraNumbers() {
+  if (!MULTI_NUMBER_ON) return false
+  const row = await db.user.findUnique({ where: { id: userId }, select: { extraNumbers: true } }).catch(() => null)
+  return Number(row?.extraNumbers) > 0
+}
+async function syncGroupMembership(reason, groups = null) {
+  if (!MULTI_NUMBER_ON || !activeSock) return { ok: false, reason: 'off' }
+  if (!(await accountHasExtraNumbers())) return { ok: false, reason: 'no_extra_numbers' }
+  try {
+    const all = groups ?? await activeSock.groupFetchAllParticipating()
+    const rows = buildMembershipRows({ groups: all, selfIds: [activeSock.user?.id, activeSock.user?.lid] })
+    const slot = SESSION_IDENTITY.authSlot
+    const now = new Date()
+    await db.$transaction([
+      db.waGroupMembership.deleteMany({ where: { userId, slot } }),
+      db.waGroupMembership.createMany({ data: rows.map(r => ({ ...r, userId, slot, refreshedAt: now })) }),
+    ])
+    lastMembershipSyncAt = Date.now()
+    logger.info({ reason, slot, count: rows.length }, 'Pertença do número aos grupos gravada')
+    return { ok: true, count: rows.length }
+  } catch (err) {
+    logger.warn({ reason, err: err?.message }, 'Falha ao gravar a pertença do número aos grupos')
+    return { ok: false, reason: 'error' }
+  }
+}
+const membershipTimer = setInterval(() => {
+  if (Date.now() - lastMembershipSyncAt >= MEMBERSHIP_SYNC_MS) void syncGroupMembership('hourly')
+}, 5 * 60_000)
+membershipTimer.unref?.()
+
 async function triggerWaGroupsRefresh(reason = 'manual') {
   if (!activeSock) return { ok: false, reason: 'not_connected' }
   if (waGroupsRefreshInFlight) return { ok: false, reason: 'in_flight' }
@@ -1606,6 +1670,7 @@ async function triggerWaGroupsRefresh(reason = 'manual') {
     }
     lastWaGroupsRefreshAt = Date.now()
     logger.info({ reason, count, durationMs: lastWaGroupsRefreshAt - startedAt }, 'WA groups refresh concluído')
+    if (groups) void syncGroupMembership(`refresh:${reason}`, groups)
     return { ok: true, count }
   } catch (err) {
     logger.error({ reason, err: err?.message }, 'WA groups refresh falhou')
@@ -1833,7 +1898,9 @@ const SMART_DELAY_TYPING_CHARS_PER_SECOND = Math.max(1, envNumber('SMART_DELAY_T
 // Regra centralizada em resolveBackendMode() (src/sendQueueBackend.js).
 const SEND_QUEUE_BACKEND_ENV = String(process.env.QUEUE_BACKEND || '').toLowerCase()
 const REDIS_URL = process.env.REDIS_URL || ''
-const BULLMQ_QUEUE_NAME = process.env.BULLMQ_QUEUE_NAME || `wabot-send-${userId}`
+// Fila por PROCESSO: a da conta continua `wabot-send-<userId>`; o segundo
+// remetente (<userId>~n2) tem a sua (vários números, Fase 2).
+const BULLMQ_QUEUE_NAME = sendQueueNameFor({ processKey: SESSION_IDENTITY.processKey, isStandby: IS_STANDBY, override: process.env.BULLMQ_QUEUE_NAME || '' })
 const MSG_QUEUE_CONCURRENCY = Math.max(1, envNumber('MSG_QUEUE_CONCURRENCY', 2))
 // Default subido de 15s -> 25s: dentro do orçamento da incomingQueue cabe
 // scrape de título (3s) + conversão de afiliado (rede) + dedup + DB write.
@@ -2405,8 +2472,97 @@ async function enqueueSendJob(job) {
   if (job.type === 'broadcast') sendMetrics.broadcastQueuedTotal++
   else if (job.type === 'scheduled') sendMetrics.scheduledQueuedTotal++
   else sendMetrics.convertedQueuedTotal++
+  if (await routeToOtherNumber(job, normalizedJob)) return true
   return sendBackend.enqueue(normalizedJob)
 }
+
+// ---------------------------------------------------------------------------
+// Rodízio de envio (vários números, Fase 2 — docs/rca/multi-numero.md). Só o
+// processo ATIVO decide (é ele que escuta e deduplica). Grupo cujo dono é o
+// outro número vai para a fila dele; qualquer dúvida → envia aqui, como antes.
+// ---------------------------------------------------------------------------
+const rotationRouter = ROTATION_ON && !IS_STANDBY
+  ? createRotationRouter({ db, userId, localSlot: SESSION_IDENTITY.authSlot, logger })
+  : null
+let otherNumberProducer = null
+async function getOtherNumberProducer() {
+  if (otherNumberProducer) return otherNumberProducer
+  if (resolveBackendMode({ queueBackendEnv: SEND_QUEUE_BACKEND_ENV, redisUrl: REDIS_URL }) !== 'bullmq') return null
+  otherNumberProducer = await createBullmqProducer({
+    redisUrl: REDIS_URL,
+    queueName: sendQueueNameFor({ processKey: standbyProcessKey(userId), isStandby: true, override: process.env.BULLMQ_QUEUE_NAME || '' }),
+  })
+  return otherNumberProducer
+}
+async function routeMirrorToOtherNumber(job, normalizedJob) {
+  const slot = await rotationRouter.chooseSlot(job.destJid)
+  if (slot === SESSION_IDENTITY.authSlot) return false
+  const producer = await getOtherNumberProducer()
+  if (!producer) return false
+  // Monta AGORA (no dequeue do outro número não existe o contexto da origem).
+  const payload = await job.buildPayload()
+  // Quem cair para o envio local reaproveita o que já foi montado.
+  normalizedJob.buildPayload = async () => payload
+  const spooled = await spoolPayload(payload, { dir: SEND_SPOOL_DIR, jobId: job.logId, ...spoolCodec })
+  const routed = { ...normalizedJob, buildPayload: undefined, onDone: undefined, preparedPayload: spooled.payload, spoolFiles: spooled.files }
+  const accepted = !findUnserializableField(routed) && await producer.enqueue(routed)
+  if (!accepted) {
+    await removeSpoolFiles({ dir: SEND_SPOOL_DIR, files: spooled.files })
+    return false
+  }
+  // O aviso de "Mensagem enviada" deste job fica com o outro número.
+  doneCallbacks.delete(job.logId)
+  rotationRouter.noteRouted(slot)
+  logger.info({ logId: job.logId, destJid: job.destJid, slot }, 'Rodízio: espelhamento entregue ao outro número')
+  return true
+}
+
+async function routeToOtherNumber(job, normalizedJob) {
+  if (rotationRouter && MIRROR_ROTATION_ON && typeof job.buildPayload === 'function' && String(job.destJid ?? '').endsWith('@g.us')) {
+    return routeMirrorToOtherNumber(job, normalizedJob).catch(err => {
+      logger.warn({ err: err?.message, logId: job.logId }, 'Rodízio: espelhamento fica neste número')
+      return false
+    })
+  }
+  if (!rotationRouter || !isRoutableJob(job, { findUnserializableField })) return false
+  try {
+    const slot = await rotationRouter.chooseSlot(job.destJid)
+    if (slot === SESSION_IDENTITY.authSlot) return false
+    const producer = await getOtherNumberProducer()
+    if (!producer) return false
+    const accepted = await producer.enqueue(normalizedJob)
+    if (accepted) {
+      rotationRouter.noteRouted(slot)
+      logger.info({ logId: job.logId, destJid: job.destJid, slot }, 'Rodízio: envio entregue ao outro número')
+    }
+    return accepted
+  } catch (err) {
+    logger.warn({ err: err?.message, logId: job.logId }, 'Rodízio: falha ao rotear; envio fica neste número')
+    return false
+  }
+}
+// O outro número caiu há mais de 10 min: o ativo pega de volta o que ficou na
+// fila dele (sem isso as ofertas esperariam ele voltar).
+const RECLAIM_AFTER_MS = 10 * 60_000
+let otherNumberDownSince = null
+const reclaimTimer = rotationRouter ? setInterval(async () => {
+  try {
+    await rotationRouter.getPlan()
+    if (rotationRouter.remoteIsUp()) { otherNumberDownSince = null; return }
+    otherNumberDownSince ??= Date.now()
+    if (Date.now() - otherNumberDownSince < RECLAIM_AFTER_MS || !sendBackend) return
+    const producer = await getOtherNumberProducer()
+    if (!producer) return
+    const moved = await producer.reclaim(data => Promise.resolve(sendBackend.enqueue(data)))
+    if (moved > 0) logger.warn({ moved }, 'Rodízio: outro número fora do ar — envios trazidos de volta para este número')
+  } catch (err) {
+    logger.warn({ err: err?.message }, 'Rodízio: falha ao trazer envios de volta')
+  }
+}, 60_000) : null
+reclaimTimer?.unref?.()
+// Spool do espelhamento: limpa por idade (24 h) e teto de tamanho.
+const spoolSweepTimer = MIRROR_ROTATION_ON ? setInterval(() => { void sweepSpool({ dir: SEND_SPOOL_DIR }) }, 60 * 60_000) : null
+spoolSweepTimer?.unref?.()
 
 function getRetryDelayMs(attempt) {
   const exponential = SEND_RETRY_BASE_MS * 2 ** Math.max(0, attempt - 1)
@@ -2426,6 +2582,7 @@ async function waitDestinationRateLimit(destJid) {
 }
 
 async function finishSendJob(job, result) {
+  if (Array.isArray(job?.spoolFiles) && job.spoolFiles.length) await removeSpoolFiles({ dir: SEND_SPOOL_DIR, files: job.spoolFiles })
   const onDone = doneCallbacks.get(job.logId)
   doneCallbacks.delete(job.logId)
   await finalizeSendJob(onDone, job, result)
@@ -3407,6 +3564,8 @@ async function processSendJob(job) {
         if (!sockForAttempt) throw new Error('Bot não conectado')
         if (payload === null) {
           if (typeof job.buildPayload === 'function') payload = await job.buildPayload()
+          // Rodízio (2b): envio montado pelo outro número e gravado em disco.
+          else if (job.preparedPayload) payload = await unspoolPayload(job.preparedPayload, { dir: SEND_SPOOL_DIR, decodeProto: spoolCodec.decodeProto })
           else if (job.payloadRecipe) payload = await buildPayloadFromRecipe(job.payloadRecipe, { destJid: job.destJid })
           else payload = job.payload
         }
@@ -3466,6 +3625,8 @@ async function processSendJob(job) {
             sentAt: new Date(),
             // Já saiu: o texto completo do reenvio não serve mais.
             resendText: null,
+            // Vários números por conta: qual número (login) mandou.
+            ...(MULTI_NUMBER_ON ? { senderSlot: SESSION_IDENTITY.authSlot } : {}),
             ...(entrega.kind ? { deliveryKind: entrega.kind } : {}),
             ...(Number.isFinite(entrega.originImageBytes) ? { originImageBytes: entrega.originImageBytes } : {}),
             // Feature 017 (arquitetura multicanal de entrega), T023: este é o
@@ -3871,7 +4032,7 @@ async function startBot() {
 }
 
 async function startBotInner() {
-  if (!IS_STANDBY && !sendBackend) sendBackend = await createSendBackend()
+  if (CAN_SEND && !sendBackend) sendBackend = await createSendBackend()
   await getConfig()
   if (!IS_STANDBY && !interruptedSendLogsMarked) {
     interruptedSendLogsMarked = true
@@ -4178,6 +4339,8 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // durável de "esta conta já conectou alguma vez" (mesmo usado por
       // `waEverConnected` nos gatilhos de e-mail). Precisa vir antes, senão a
       // mensagem de boas-vindas do piloto reenviaria em toda reconexão.
+      // Pertença aos grupos (Fase 2) — com folga para a sessão assentar.
+      setTimeout(() => { void syncGroupMembership('open') }, 20_000).unref?.()
       if (IS_STANDBY) {
         await handleStandbyOpen({ phone })
       } else {
@@ -6415,6 +6578,10 @@ async function shutdown(code = 0, { exit = registerProcessHandlers } = {}) {
   clearInterval(scheduledMessagesTimer)
   clearInterval(stuckSendLogsTimer)
   clearInterval(monitorSilenceTimer)
+  clearInterval(membershipTimer)
+  if (reclaimTimer) clearInterval(reclaimTimer)
+  if (spoolSweepTimer) clearInterval(spoolSweepTimer)
+  await otherNumberProducer?.close?.()
   if (dedupFlushTimer) clearTimeout(dedupFlushTimer)
   if (knownChannelsFlushTimer) clearTimeout(knownChannelsFlushTimer)
 

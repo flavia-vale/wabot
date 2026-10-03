@@ -46,6 +46,10 @@ model User {
   // `activeWaSlot` = qual número envia agora (1 = o principal); trocar é um
   // único UPDATE com guarda, então nunca há dois números ativos.
   waExtraSessions       WaExtraSession[]
+  waGroupMemberships    WaGroupMembership[]
+  // Fase 2: a conta ligou "Dividir os envios entre os números".
+  rotationEnabled       Boolean   @default(false)
+  destinationSenders    DestinationSender[]
   extraNumbers          Int       @default(0)
   activeWaSlot          Int       @default(1)
   waSlotSwitchedAt      DateTime?
@@ -121,6 +125,11 @@ model WaSession {
   // e-mail da conta anterior, para a tela oferecer recuperar a senha em vez de
   // virar parede. Nulo = nenhuma recusa pendente.
   blockNotice        String?
+  // Vários números por conta, Fase 2 (docs/rca/multi-numero.md): estado de
+  // recepção do robô (`computeReceptionState`), gravado no heartbeat que já
+  // existe. Alimenta a troca por "conectado mas cego". Só com a flag ligada.
+  receptionState     String?
+  receptionStateAt   DateTime?
   updatedAt          DateTime  @updatedAt
 
   @@index([status, lastHeartbeatAt])
@@ -148,6 +157,38 @@ model WaExtraSession {
 
   @@unique([userId, slot])
   @@index([status, lastHeartbeatAt])
+}
+
+// Em quais grupos cada NÚMERO da conta está (vários números, Fase 2 —
+// docs/rca/multi-numero.md). `slot` = número (login), não processo. Gravado
+// pelo próprio robô ao conectar e 1x/hora com o groupFetchAllParticipating que
+// já existe. Base do rodízio: só é dono de um grupo o número que está nele.
+model WaGroupMembership {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slot        Int
+  waJid       String
+  name        String?
+  isAdmin     Boolean  @default(false)
+  refreshedAt DateTime @default(now())
+
+  @@unique([userId, slot, waJid])
+  @@index([userId, waJid])
+}
+
+// Rodízio (vários números, Fase 2): qual número (slot) é o DONO de cada grupo
+// de destino. Gravado pelo robô ativo; mantido enquanto o dono continuar
+// membro e conectado. slot nulo = nenhum número da conta está no grupo.
+model DestinationSender {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destJid    String
+  slot       Int?
+  assignedAt DateTime @default(now())
+
+  @@unique([userId, destJid])
 }
 
 // Histórico de qual conta conectou qual número de WhatsApp.
@@ -712,6 +753,9 @@ model MessageLog {
   // Valores em src/core/deliveryKind.js. Nulo = envio anterior ao registro
   // (linha antiga) ou tipo que não passa pelo pipeline de oferta espelhada.
   deliveryKind String?
+  // Vários números por conta, Fase 2: qual número (slot) enviou. Nulo =
+  // envio antes do rastreio ou com a flag desligada.
+  senderSlot   Int?
   // Tamanho, em bytes, da imagem que veio na MENSAGEM DE ORIGEM. 0 = a origem
   // não trouxe imagem nenhuma. É o que separa "saiu sem foto porque não havia
   // foto" de "saiu sem foto mesmo tendo foto na origem" — o caso que a cliente

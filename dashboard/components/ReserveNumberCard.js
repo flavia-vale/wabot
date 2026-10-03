@@ -10,6 +10,7 @@ import { api } from '@/lib/api'
 import { ProTag } from '@/components/pro/ProGate'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ReservePurchaseCard } from '@/components/ReservePurchaseCard'
+import { RotationCard } from '@/components/RotationCard'
 
 const QR_POLL_MS = 3000
 const STATE_POLL_MS = 10000
@@ -161,6 +162,7 @@ export function ReserveNumberCard({ initialState }) {
           <button type="button" className="pnl-btn" disabled={Boolean(busy)} onClick={() => setConfirmSwitch(true)}>
             {activeIsTwo ? 'Voltar para o número de antes' : 'Usar a reserva para enviar agora'}
           </button>
+          <RotationCard />
         </div>
       )}
 

@@ -67,11 +67,13 @@ test('retomada da prontidão: só com flag, só conta com número extra pago, ch
   }
 })
 
-test('estrutural: a prontidão não envia, não espelha e só aceita comandos de socket', () => {
+test('estrutural: a prontidão não espelha, só aceita comandos de socket e só envia com o rodízio', () => {
   const src = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
   assert.match(src, /const scheduledMessagesTimer = IS_STANDBY \? null :/)
   assert.match(src, /const stuckSendLogsTimer = IS_STANDBY \? null :/)
-  assert.match(src, /if \(!IS_STANDBY && !sendBackend\) sendBackend = await createSendBackend\(\)/)
+  // Fase 2: a prontidão só cria fila de envio com o rodízio ligado.
+  assert.match(src, /const CAN_SEND = !IS_STANDBY \|\| ROTATION_ON/)
+  assert.match(src, /if \(CAN_SEND && !sendBackend\) sendBackend = await createSendBackend\(\)/)
   assert.match(src, /markUpsertReceived\(\)\n\s+\/\/[^\n]*\n\s+if \(IS_STANDBY\) return/)
   assert.match(src, /STANDBY_IPC_TYPES = new Set\(\['stop', 'requestPairingCode', 'listGroups', 'metrics'\]\)/)
   assert.match(src, /if \(IS_STANDBY\) \{\n\s+await handleStandbyOpen\(\{ phone \}\)\n\s+\} else \{/)

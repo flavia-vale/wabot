@@ -28,3 +28,10 @@ export function getSentMessagesDir(userId) {
 export function getKnownChannelsFile(userId) {
   return resolve(getLogsBaseDir(), `known_channels_${String(userId)}.json`)
 }
+
+// Vários números por conta, Fase 2b (docs/rca/multi-numero.md): conteúdo de
+// envio montado pelo número ativo e enviado pelo outro número (imagem, mensagem
+// original). Fora do auth_info (que vai para o backup) e limpo por idade.
+export function getSendSpoolDir(userId) {
+  return resolve(resolveFromEnv('SEND_SPOOL_DIR', `${getLogsBaseDir()}/send-spool`), String(userId))
+}

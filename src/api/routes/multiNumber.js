@@ -8,6 +8,8 @@ import { canStartReserve, reserveHeadroom } from '../../domain/session/reserveCa
 import { normalizePairingPhone } from '../../domain/session/service.js'
 import { switchActiveNumber } from '../../core/numberSwitch.js'
 import { NUMBER_SWITCHED_EVENT } from '../../jobs/numberFailover.js'
+import { missingDestinations } from '../../domain/session/groupMembership.js'
+import { rotationEnabledByEnv } from '../../domain/session/senderRouting.js'
 import { writeAnalyticsEvent } from '../../events/store.js'
 import {
   MULTI_NUMBER_WAITLIST_EVENTS,
@@ -26,6 +28,8 @@ import {
 // Não liga sessão nem reserva vaga: só registra a intenção.
 const SESSION_VIEW = { phone: true, status: true, lifecycle: true, lastHeartbeatAt: true, blockNotice: true }
 const MANUAL_SWITCH_MIN_INTERVAL_MS = 60_000
+// Pertença gravada há menos de 2 h vale (o robô regrava a cada hora).
+const MEMBERSHIP_FRESH_MS = 2 * 60 * 60_000
 
 function parseBlockNotice(raw) {
   try { return raw ? JSON.parse(raw) : null } catch { return null }
@@ -219,14 +223,23 @@ export async function multiNumberRoutes(app, opts = {}) {
     if (!state) return
     if (state.standby?.status !== 'connected') return reply.code(409).send({ error: 'O número reserva ainda não está conectado.' })
     const userId = req.user.sub
-    const [destinations, standbyGroups] = await Promise.all([
-      db.group.findMany({ where: { userId, role: 'post', kind: 'group' }, select: { waJid: true, name: true } }),
-      Promise.resolve(manager.listGroups(standbyProcessKey(userId))).catch(() => null),
-    ])
-    if (!Array.isArray(standbyGroups)) return reply.code(502).send({ error: 'Não foi possível ler os grupos do número reserva agora.' })
-    const present = new Set(standbyGroups.map(g => g.waJid))
-    const missing = destinations.filter(g => !present.has(g.waJid))
-    return { total: destinations.length, missing }
+    const destinations = await db.group.findMany({ where: { userId, role: 'post', kind: 'group' }, select: { waJid: true, name: true } })
+    // Fase 2: lê a pertença gravada pelo próprio robô (WaGroupMembership) do
+    // número que está de prontidão; sem dado recente, pergunta ao robô ao vivo.
+    const standbySlot = otherSlot(state.activeWaSlot)
+    const stored = await db.waGroupMembership.findMany({
+      where: { userId, slot: standbySlot, refreshedAt: { gte: new Date(Date.now() - MEMBERSHIP_FRESH_MS) } },
+      select: { waJid: true },
+    })
+    let memberJids = stored.map(r => r.waJid)
+    let source = 'stored'
+    if (!stored.length) {
+      const live = await Promise.resolve(manager.listGroups(standbyProcessKey(userId))).catch(() => null)
+      if (!Array.isArray(live)) return reply.code(502).send({ error: 'Não foi possível ler os grupos do número reserva agora.' })
+      memberJids = live.map(g => g.waJid)
+      source = 'live'
+    }
+    return { total: destinations.length, missing: missingDestinations({ destinations, memberJids }), source }
   })
 
   // Troca manual (ex.: "voltar para o número 1"). Só com o outro número
@@ -251,5 +264,55 @@ export async function multiNumberRoutes(app, opts = {}) {
       metadata: JSON.stringify({ from: result.from, to: result.to, reason: 'manual', mode: 'manual' }),
     }, { db }).catch(() => {})
     return { ok: true, activeWaSlot: result.to, previousSlot: otherSlot(result.to) }
+  })
+
+  // ---------------------------------------------------------------------------
+  // Rodízio de envio (Fase 2): ligar/desligar por conta e ver quem envia cada
+  // grupo. Sem MULTI_NUMBER_ROTATION_ENABLED = 404 (a tela não mostra).
+  // ---------------------------------------------------------------------------
+  app.get('/rotation', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!multiNumberEnabled(env) || !rotationEnabledByEnv(env)) return reply.code(404).send({ error: 'Recurso indisponível' })
+    const state = await loadReserveState(req.user.sub)
+    if (!state?.access?.allowed) return reply.code(403).send({ error: 'Recurso indisponível', code: 'RESERVE_NOT_ALLOWED' })
+    const userId = req.user.sub
+    const [user, groups, owners, members, sent] = await Promise.all([
+      db.user.findUnique({ where: { id: userId }, select: { rotationEnabled: true } }),
+      db.group.findMany({ where: { userId, role: 'post', kind: 'group' }, select: { waJid: true, name: true } }),
+      db.destinationSender.findMany({ where: { userId }, select: { destJid: true, slot: true } }),
+      db.waGroupMembership.findMany({ where: { userId }, select: { slot: true, waJid: true } }),
+      db.messageLog.groupBy({
+        by: ['senderSlot'],
+        where: { userId, status: 'success', sentAt: { gte: new Date(Date.now() - 86400_000) } },
+        _count: { _all: true },
+      }),
+    ])
+    const ownerBy = new Map(owners.map(o => [o.destJid, o.slot]))
+    const memberOf = slot => new Set(members.filter(m => m.slot === slot).map(m => m.waJid))
+    const in1 = memberOf(1)
+    const in2 = memberOf(2)
+    const seen = new Set()
+    const list = groups.filter(g => !seen.has(g.waJid) && seen.add(g.waJid)).map(g => ({
+      waJid: g.waJid,
+      name: g.name,
+      senderSlot: ownerBy.get(g.waJid) ?? null,
+      members: { 1: in1.has(g.waJid), 2: in2.has(g.waJid) },
+    }))
+    const sent24h = Object.fromEntries(sent.filter(r => r.senderSlot != null).map(r => [r.senderSlot, r._count._all]))
+    // 2b (espelhamento no rodízio) tem flag própria; a tela diz a verdade sobre ela.
+    const mirrorRotation = String(env.MULTI_NUMBER_ROTATION_RELAY ?? '').trim().toLowerCase() === 'true'
+    return { enabled: Boolean(user?.rotationEnabled), activeWaSlot: state.activeWaSlot, groups: list, sent24h, mirrorRotation }
+  })
+
+  app.post('/rotation', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!multiNumberEnabled(env) || !rotationEnabledByEnv(env)) return reply.code(404).send({ error: 'Recurso indisponível' })
+    const state = await requireReserve(req, reply)
+    if (!state) return
+    const enabled = req.body?.enabled === true
+    await db.user.update({ where: { id: req.user.sub }, data: { rotationEnabled: enabled } })
+    await writeAnalyticsEvent({
+      id: randomUUID(), userId: req.user.sub, event: 'multi_number_rotation_toggled', createdAt: new Date(),
+      metadata: JSON.stringify({ enabled }),
+    }, { db }).catch(() => {})
+    return { ok: true, enabled }
   })
 }
