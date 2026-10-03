@@ -170,7 +170,7 @@ export default function HojePage() {
           <div style={s.chips}>
             <span style={s.chip('var(--accent-3)')}>{pagantesAgora} pagante(s) precisando de ação agora</span>
             <span style={s.chip('var(--bg-soft)')}>{semana.length} conversa(s) para esta semana</span>
-            {data.servidor?.enviosPresos > 0 && <span style={s.chip('var(--accent-2)')}>{data.servidor.enviosPresos} envio(s) presos há mais de {data.servidor.presosDesdeMin} min</span>}
+            {data.servidor?.enviosPresos > 0 && <Link href="/admin/operacao#filas" style={{ ...s.chip('var(--accent-2)'), textDecoration: 'none' }}>{data.servidor.enviosPresos} envio(s) presos há mais de {data.servidor.presosDesdeMin} min — ver Filas</Link>}
           </div>
 
           <div style={s.chips} role="group" aria-label="Filtrar por motivo">
