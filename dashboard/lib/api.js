@@ -363,6 +363,7 @@ export const api = {
   adminOnlineReconnect: (id, reason) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}/reconnect`, { method: 'POST', ...(reason ? { body: JSON.stringify({ reason }) } : {}) }),
   adminSessionStop: (id, reason) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/session/stop`, { method: 'POST', body: JSON.stringify({ reason }) }),
   adminDiagnosticoEnvios: (id, hours = 6) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/diagnostico/envios?hours=${encodeURIComponent(hours)}`),
+  adminDiagnosticoConexao: (id, days = 3) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/diagnostico/conexao?days=${encodeURIComponent(days)}`),
   adminFilas: () => apiFetch('/api/admin/filas'),
   adminFilasReprocessar: (id, reason) => apiFetch(`/api/admin/filas/${encodeURIComponent(id)}/reprocessar`, { method: 'POST', body: JSON.stringify({ reason }) }),
   adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`),

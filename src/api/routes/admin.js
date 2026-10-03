@@ -5,6 +5,9 @@ import { carregarVisaoEntrega } from '../../ops/deliveryQuality.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
 import { stopSessionOnPurpose, validateStopReason } from '../../domain/session/stopSession.js'
 import { diagnoseEnvios } from '../../domain/admin/diagnostics/envios.js'
+import { diagnoseConexao } from '../../domain/admin/diagnostics/conexao.js'
+import { existsSync } from 'node:fs'
+import { getAuthInfoDir } from '../../paths.js'
 import { getPlanEntitlements } from '../../billing/plans.js'
 import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
 import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot, stopBot,getBotMetrics, moveSessionToShard, rollbackSessionFromShard, getShardMetrics, getSupervisorNodesSnapshot, getSupervisorBootedAtMs } from '../../manager.js'
@@ -1800,6 +1803,61 @@ export async function adminRoutes(app) {
       dlqTotal,
     })
     await writeAdminAuditLog(req, { action: 'admin.user.diagnostico_envios', resource: 'user', resourceId: userId, targetUserId: userId, after: { veredito: result.veredito.eloId } })
+    return result
+  })
+
+  // "Por que não conecta", elo por elo, em frases leigas. Só banco (WaSession,
+  // WaConnectionEvent, AnalyticsEvent) + existência da pasta de credencial —
+  // nunca o log de arquivo. Regras em src/domain/admin/diagnostics/conexao.js, o mesmo
+  // módulo do scripts/diag-nao-conecta.mjs.
+  app.get('/users/:id/diagnostico/conexao', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const userId = String(req.params.id || '')
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, status: true, accessExpiresAt: true },
+    }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const days = Math.min(14, Math.max(1, Number(req.query?.days) || 3))
+    const nowMs = Date.now()
+    const since = new Date(nowMs - days * 86_400_000)
+    const [session, workerRunning, eventos, telaRows, recusas, versao] = await Promise.all([
+      db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true, lastHeartbeatAt: true, lastDisconnectCode: true, blockNotice: true } }).catch(() => null),
+      isRunningSafe(userId),
+      db.waConnectionEvent.findMany({ where: { userId, occurredAt: { gte: since } }, orderBy: { occurredAt: 'desc' }, take: 80, select: { type: true, code: true, occurredAt: true } }).catch(() => []),
+      db.analyticsEvent.findMany({ where: { userId, event: SESSION_TELEMETRY_EVENT, createdAt: { gte: since } }, orderBy: { createdAt: 'desc' }, take: 120, select: { createdAt: true, metadata: true } }).catch(() => []),
+      db.analyticsEvent.groupBy({ by: ['userId'], where: { event: 'ops_session_capacity_limit', createdAt: { gte: since } }, _count: { _all: true } }).catch(() => []),
+      db.analyticsEvent.count({ where: { event: 'ops_wa_version_rejected', createdAt: { gte: since } } }).catch(() => 0),
+    ])
+    const tela = telaRows.map((row) => {
+      let meta = {}
+      try { meta = typeof row.metadata === 'string' ? JSON.parse(row.metadata || '{}') : (row.metadata || {}) } catch { /* linha malformada: ignora */ }
+      return { event: meta.event, at: row.createdAt }
+    }).filter(t => t.event)
+    let credencial = null
+    try {
+      const dir = getAuthInfoDir(userId)
+      credencial = { existe: existsSync(dir), backupPareamento: existsSync(`${dir}.pairing-backup`) }
+    } catch { credencial = null }
+
+    const result = diagnoseConexao({
+      nowMs,
+      days,
+      user,
+      session,
+      eventos,
+      tela,
+      credencial,
+      vagas: {
+        recusasDela: recusas.find(r => r.userId === userId)?._count?._all ?? 0,
+        recusasServidor: recusas.reduce((sum, r) => sum + (r._count?._all ?? 0), 0),
+        limite: process.env.MAX_SESSIONS_PER_PROCESS || null,
+      },
+      versaoRecusadaServidor: versao,
+      workerRunning,
+    })
+    await writeAdminAuditLog(req, { action: 'admin.user.diagnostico_conexao', resource: 'user', resourceId: userId, targetUserId: userId, after: { veredito: result.veredito.eloId } })
     return result
   })
 

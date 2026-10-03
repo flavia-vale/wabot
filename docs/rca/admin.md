@@ -579,3 +579,27 @@ continua separado de `manual_reconnect_requested` (mede a promessa do produto).
 DLQ continua nas rotas `/send-dlq/:userId` já existentes (Operação → Filas).
 Custo: 6 consultas pequenas por clique em "Verificar agora", zero processo
 novo, zero RAM.
+
+## G4 — "Por que não conecta" na ficha do cliente (2026-10-03)
+
+**O que era:** `scripts/diag-nao-conecta.mjs` só rodava por SSH. A atendente
+não tinha como separar "QR venceu", "sem vaga", "WhatsApp recusou a versão
+(405)" e "tempo esgotado (408)" — causas que pedem ações opostas.
+
+**Onde mora:** regras puras em `src/domain/admin/diagnostics/conexao.js`
+(`diagnoseConexao`: elos conta → vaga → tela → WhatsApp → credencial, cada um
+com problema + "o que fazer" em frase leiga). Rota
+`GET /api/admin/users/:id/diagnostico/conexao` (`support:read`, auditada como
+`admin.user.diagnostico_conexao`), bloco "Por que não conecta?" na aba Robô da
+ficha, ao lado de "Por que não envia?". O script importa o mesmo módulo e
+imprime o `[VEREDITO]`. Teste: `test/admin-diagnostico-conexao.test.js`.
+
+**Não regredir:**
+- Só banco (`WaSession`, `WaConnectionEvent`, `AnalyticsEvent`) + existência da
+  pasta de credencial. NUNCA `bot.log` na rota (é da frota inteira).
+- A telemetria da tela mora em `AnalyticsEvent('session_telemetry')` desde
+  2026-10-02; o script lia `AdminAuditLog` (vazio) e foi corrigido.
+- 405 com `ops_wa_version_rejected` em várias contas = problema geral, nunca
+  pedir para a cliente parear de novo (ver `whatsapp-sessao.md`).
+- Sem jargão (`405`, `socket`, `handshake`, `pairing`) nas frases da tela.
+- Custo: 6 consultas pequenas por clique, zero processo novo, zero RAM.
