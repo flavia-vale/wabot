@@ -235,6 +235,7 @@ export function createTelegramAdapter({ api, db, now = () => Date.now(), cacheTt
     send,
     migrateDestination,
     destinationReadiness,
+    checkDestination: (destinationId) => destinationReadiness(chatIdOf(destinationId)),
     botUsername,
     botId,
   }

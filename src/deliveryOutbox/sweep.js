@@ -16,6 +16,9 @@ import { planOutboxTick } from '../core/delivery/fairShare.js'
 import { HEALTH_SIGNAL } from '../core/delivery/networkHealth.js'
 import { shouldDropExpiredQueueJob, buildQueueExpiredReason } from '../core/queueExpiry.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
+import { resolveDestinationPreservation } from '../core/preservationConfig.js'
+import { resolveSendWindow, sendWindowState } from '../core/sendWindow.js'
+import { startOfSaoPauloDayUtc } from '../offerQueue/time.js'
 import { writeDeliveryHistory as writeHistory } from '../domain/delivery/history.js'
 
 export const OUTBOX_STATUS = Object.freeze({
@@ -176,11 +179,37 @@ async function markDoneWithRetry(db, id, attempts = 3) {
   return false
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+const GROUP_REFUSAL_CODES = ['robo_nao_adicionado', 'destino_apagado']
+
+async function deferRow(db, row, untilMs) {
+  await db.deliveryOutbox.update({ where: { id: row.id }, data: { notBeforeAt: new Date(untilMs) } })
+  return { resumo: 'adiados' }
+}
+
+async function destinationSendLimits(db, userId, group) {
+  const [preset, defaultPreset] = await Promise.all([
+    group?.preservationPresetId ? db.preservationPreset?.findFirst?.({ where: { id: group.preservationPresetId, userId } }) : null,
+    db.preservationPreset?.findFirst?.({ where: { userId, isDefault: true } }),
+  ].map((p) => Promise.resolve(p).catch(() => null)))
+  return resolveDestinationPreservation(group, { preset: preset ?? null, defaultPreset: defaultPreset ?? null })
+}
+
+async function recentlyRefusedByGroup(db, destinationId, deliveryNetwork, streak = 3) {
+  const last = await db.deliveryOutbox.findMany({
+    where: { destinationId, deliveryNetwork, status: { in: [OUTBOX_STATUS.DONE, OUTBOX_STATUS.FAILED] } },
+    orderBy: { updatedAt: 'desc' },
+    take: streak,
+    select: { status: true, lastError: true },
+  })
+  if (last.length < streak) return false
+  return last.every((r) => r.status === OUTBOX_STATUS.FAILED && GROUP_REFUSAL_CODES.some((code) => String(r.lastError ?? '').endsWith(`:${code}`)))
+}
+
 async function processRow(row, { db, adapter, caps, deliveryNetwork, allowed, health, track, now, ctx = {} }) {
   const offer = parseOffer(row)
   const group = await db.group.findFirst({
     where: { userId: row.userId, waJid: row.destinationId, role: 'post', deliveryNetwork },
-    select: { id: true, queueMaxAgeMin: true },
   })
 
   // 3. Idade.
@@ -200,6 +229,41 @@ async function processRow(row, { db, adapter, caps, deliveryNetwork, allowed, he
     select: { disabledAt: true },
   })
   if (link?.disabledAt) return drop(db, row, offer, buildDeliveryFailureCode(deliveryNetwork, 'aplicativo_desligado'))
+
+  // Revisão crítica, item 12: o horário de envio e o limite diário que a
+  // cliente configurou para o destino valem também no Telegram (mesma
+  // preservação efetiva do WhatsApp: destino → preset → preset padrão).
+  // Fora do horário ou com o limite do dia batido, ADIA — nunca descarta; a
+  // idade máxima continua valendo.
+  const limits = await destinationSendLimits(db, row.userId, group)
+  const nowMs = now()
+  const window = resolveSendWindow(limits)
+  if (window) {
+    const state = sendWindowState(nowMs, window)
+    if (!state.open) return deferRow(db, row, nowMs + state.waitMs)
+  }
+  const dailyCap = Number(limits.dailyCap)
+  if (Number.isFinite(dailyCap) && dailyCap > 0) {
+    const dayStart = startOfSaoPauloDayUtc(new Date(nowMs))
+    const sentToday = await db.messageLog.count({
+      where: { userId: row.userId, destGroup: row.destinationId, status: 'success', sentAt: { gte: dayStart } },
+    })
+    if (sentToday >= dailyCap) return deferRow(db, row, dayStart.getTime() + DAY_MS + 60_000)
+  }
+
+  // Revisão crítica, item 14: robô tirado do grupo (ou grupo apagado) três
+  // vezes seguidas — não tenta mais enviar a cada oferta. Confere a prontidão
+  // (no máximo uma consulta por minuto por grupo) e, enquanto não voltar,
+  // registra a falha com o mesmo motivo, sem chamar o envio.
+  if (typeof adapter.checkDestination === 'function' && await recentlyRefusedByGroup(db, row.destinationId, deliveryNetwork)) {
+    const readiness = await adapter.checkDestination(row.destinationId)
+    if (!readiness?.pronto && readiness?.motivo) {
+      const errorMsg = buildDeliveryFailureCode(deliveryNetwork, readiness.motivo)
+      await db.deliveryOutbox.update({ where: { id: row.id }, data: { status: OUTBOX_STATUS.FAILED, lastError: errorMsg } })
+      await writeHistory(db, row, offer, { status: 'error', errorMsg })
+      return { resumo: 'falhas' }
+    }
+  }
 
   // Anti-repetição por destino (Fatia 4): o espelhamento manda a janela que
   // valeria para este destino (cupom: curta). O mesmo link já entregue NESTE
@@ -241,7 +305,7 @@ async function processRow(row, { db, adapter, caps, deliveryNetwork, allowed, he
   }
 
   const errorMsg = buildDeliveryFailureCode(deliveryNetwork, result?.motivo)
-  if (result?.sinal) health?.record(deliveryNetwork, result.sinal)
+  if (result?.sinal) health?.record(deliveryNetwork, result.sinal, now(), result.sinal === HEALTH_SIGNAL.LIMITE ? row.destinationId : null)
   const attempts = Number(row.attempts ?? 0) + 1
 
   // Temporário: volta para a fila com espera (adiar nunca é descartar), até

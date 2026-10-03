@@ -29,7 +29,7 @@ const MOTIVOS = Object.freeze({
   conflito: 'Outro servidor está lendo o mesmo robô (por exemplo, staging e produção com o mesmo robô). Ninguém consegue ligar grupo novo até isso ser resolvido.',
 })
 
-export function computeNetworkHealth(signals = [], { now = Date.now(), windowMs = 10 * 60_000, unavailableStreak = 3 } = {}) {
+export function computeNetworkHealth(signals = [], { now = Date.now(), windowMs = 10 * 60_000, unavailableStreak = 3, minLimitedDestinations = 2 } = {}) {
   const recent = signals
     .filter((s) => s && Number.isFinite(Number(s.at)) && now - Number(s.at) <= windowMs)
     .sort((a, b) => Number(a.at) - Number(b.at))
@@ -58,7 +58,12 @@ export function computeNetworkHealth(signals = [], { now = Date.now(), windowMs 
       return { estado: NETWORK_HEALTH.INDISPONIVEL, motivo: MOTIVOS.indisponivel, desde: sinceOf(HEALTH_SIGNAL.INDISPONIVEL) }
     }
   }
-  const limitedRecently = recent.some((s) => s.kind === HEALTH_SIGNAL.LIMITE && now - Number(s.at) <= 5 * 60_000)
+  // Revisão crítica, item 13: limite de ritmo em UM grupo (~20/min por grupo)
+  // é normal e não diz nada sobre o robô. Só conta como "robô limitado" se
+  // aparecer em vários grupos diferentes (ou sem grupo identificado).
+  const limits = recent.filter((s) => s.kind === HEALTH_SIGNAL.LIMITE && now - Number(s.at) <= 5 * 60_000)
+  const limitedKeys = new Set(limits.map((s, i) => s.chave ?? `sem-grupo-${i}`))
+  const limitedRecently = limitedKeys.size >= minLimitedDestinations
   if (limitedRecently) {
     const firstLimit = recent.find((s) => s.kind === HEALTH_SIGNAL.LIMITE)
     return { estado: NETWORK_HEALTH.LIMITADO, motivo: MOTIVOS.limitado, desde: new Date(Number(firstLimit.at)) }
@@ -71,10 +76,10 @@ export function computeNetworkHealth(signals = [], { now = Date.now(), windowMs 
 export function createHealthRecorder({ max = 200 } = {}) {
   const byNetwork = new Map()
   return {
-    record(network, kind, at = Date.now()) {
+    record(network, kind, at = Date.now(), chave = null) {
       if (!byNetwork.has(network)) byNetwork.set(network, [])
       const list = byNetwork.get(network)
-      list.push({ kind, at })
+      list.push({ kind, at, chave })
       if (list.length > max) list.splice(0, list.length - max)
     },
     signals(network) {

@@ -25,6 +25,7 @@ function fakeDb({ links = [], groups = [] } = {}) {
     deliveryNetworkLink: { findUnique: async ({ where }) => links.find((l) => l.linkCode === where.linkCode) ?? null },
     group: {
       findFirst: async ({ where }) => state.groups.find((g) => g.userId === where.userId && g.waJid === where.waJid && g.role === where.role) ?? null,
+      count: async ({ where }) => state.groups.filter((g) => g.userId === where.userId).length,
       create: async ({ data }) => { const g = { id: `g${state.groups.length + 1}`, ...data }; state.groups.push(g); state.created.push(g); return g },
       update: async (args) => { state.updated.push(args); return {} },
       updateMany: async (args) => { state.updated.push(args); return { count: 1 } },
