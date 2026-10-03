@@ -29,6 +29,7 @@ import { adminEmailsRoutes } from './routes/adminEmails.js'
 import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
 import { pruneClickTracking } from './clickTrackingRetention.js'
+import { purgeOldOpsEvents, OPS_RETENTION_DEFAULT_DAYS } from '../observability/opsEventRetention.js'
 import { preservationRoutes } from './routes/preservation.js'
 import { offerAutomationRoutes } from './routes/offerAutomation.js'
 import { offerAutomationReviewRoutes } from './routes/offerAutomationReview.js'
@@ -186,6 +187,9 @@ const ADMIN_AUDIT_RETENTION_DAYS = process.env.ADMIN_AUDIT_RETENTION_DAYS === un
 // Telemetria da tela Conexão WhatsApp (AnalyticsEvent `session_telemetry`):
 // ~1.500 linhas/semana em prod; sem poda, AnalyticsEvent cresce para sempre.
 const SESSION_TELEMETRY_RETENTION_DAYS = process.env.SESSION_TELEMETRY_RETENTION_DAYS === undefined ? 90 : Number(process.env.SESSION_TELEMETRY_RETENTION_DAYS)
+// Sinais operacionais `ops_*` (lista explícita em operationalSignals.js): 409 mil
+// linhas em prod em 2026-10-03. Leitores mais longos: 7 d (admin) e 14 d; 90 d cobre.
+const OPS_EVENT_RETENTION_DAYS = process.env.OPS_EVENT_RETENTION_DAYS === undefined ? OPS_RETENTION_DEFAULT_DAYS : Number(process.env.OPS_EVENT_RETENTION_DAYS)
 const LOG_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 async function cleanupByRetentionDays(model, dateField, retentionDays, logLabel) {
@@ -213,6 +217,11 @@ async function cleanupOldLogs() {
       app.log.error({ err: err.message }, 'Falha na limpeza automática da telemetria de sessão')
     })
   }
+  await purgeOldOpsEvents({ db, retentionDays: OPS_EVENT_RETENTION_DAYS }).then(({ deleted, batches, capped }) => {
+    if (deleted > 0) app.log.info({ deleted, batches, capped }, 'Sinais operacionais ops_* removidos por retenção automática')
+  }).catch(err => {
+    app.log.error({ err: err.message }, 'Falha na limpeza automática dos sinais operacionais')
+  })
   await pruneClickTracking({ db }).then(({ clicks, links }) => {
     if (clicks > 0 || links > 0) app.log.info({ clicks, links }, 'Cliques e links curtos removidos por retenção automática')
   }).catch(err => {
