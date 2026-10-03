@@ -1632,13 +1632,8 @@ export async function adminRoutes(app) {
 
   app.get('/online', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
-    const result = await buildAdminOnlineOverview({ query: req.query ?? {}, adminRole: req.admin.role })
-    await writeAdminAuditLog(req, {
-      action: 'admin.online.read',
-      resource: 'waConnectionEvent',
-      after: { totalSessions: result.summary.totalSessions, disconnectedAlerts: result.summary.disconnectedAlerts },
-    })
-    return result
+    // Leitura periódica: NÃO grava AdminAuditLog (RCA admin Q1b) — só escrita é auditada.
+    return buildAdminOnlineOverview({ query: req.query ?? {}, adminRole: req.admin.role })
   })
 
   // Botão "Tentar reconectar" da aba online. Sobe o robô da cliente sem que

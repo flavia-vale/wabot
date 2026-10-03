@@ -579,3 +579,13 @@ continua separado de `manual_reconnect_requested` (mede a promessa do produto).
 DLQ continua nas rotas `/send-dlq/:userId` já existentes (Operação → Filas).
 Custo: 6 consultas pequenas por clique em "Verificar agora", zero processo
 novo, zero RAM.
+
+## Polling do admin: ≥ 60 s, só aba visível, leitura sem auditoria (Q1b, 2026-10-03)
+
+**O que era:** `teste-shard` consultava a cada 5 s; `GET /api/admin/online` gravava
+`AdminAuditLog` (`admin.online.read`) a cada chamada (100 linhas/7 d em prod).
+**Onde mora:** `dashboard/app/admin/teste-shard/page.js` (60 s + `visibilityState`);
+`GET /online` em `src/api/routes/admin.js` sem auditoria de leitura.
+**Não regredir:** `test/admin-polling.test.js` varre `dashboard/app/admin/**` e
+falha com `setInterval` < 60 s ou sem `visibilityState`. Polling novo nunca
+audita cada leitura (só escrita). Zero RAM nova.
