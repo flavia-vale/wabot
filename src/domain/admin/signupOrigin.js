@@ -46,7 +46,7 @@ export function classifyLandingPage(landing) {
   // RCA 2026-09-18: as 5 páginas de loja do Tier 1 (02/09) e as páginas de
   // 11/09 não estavam aqui — cadastro vindo delas caía em "Direto / ambíguo",
   // e justamente essas são as páginas em que a estratégia de IA aposta.
-  if (/^\/(bot-|anti-ban|faq-antiban|protecao-|programa-de-afiliados|espelhar-|automacao-|automatizar-|padronizar-|postar-|reduzir-|rastrear-|grupo-para-canal|como-funciona|comparativos|melhores-bots|botinho-vs|glossario|conteudos|diagnostico-|benchmarks|estudos-de-caso|shopee-afiliados|mercado-livre-afiliados|amazon-afiliados|shein-afiliados|magalu-afiliados|quanto-ganha-|vendas-e-comissao-|copiaram-|espelha-grupos-e-confiavel|clonar-mensagens|metodologia-|confiabilidade-|seguranca-credenciais|quem-somos|calculadora-|checklist-)/.test(path)) {
+  if (/^\/(bot-|anti-ban|faq-antiban|protecao-|programa-de-afiliados|espelhar-|automacao-|automatizar-|padronizar-|postar-|reduzir-|rastrear-|grupo-para-canal|como-funciona|comparativos|melhores-bots|botinho-vs|glossario|conteudos|diagnostico-|benchmarks|estudos-de-caso|shopee-afiliados|mercado-livre-afiliados|amazon-afiliados|shein-afiliados|magalu-afiliados|netshoes-afiliados|kabum-afiliados|rakuten-afiliados|grupo-whatsapp-lotado|quanto-ganha-|vendas-e-comissao-|copiaram-|espelha-grupos-e-confiavel|clonar-mensagens|metodologia-|confiabilidade-|seguranca-credenciais|quem-somos|calculadora-|checklist-)/.test(path)) {
     return 'CONTEÚDO (página de busca)'
   }
   if (path === '/') return 'home (ambíguo)'

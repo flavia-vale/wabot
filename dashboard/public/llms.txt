@@ -110,11 +110,15 @@ Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress — six stores, on ever
 - Amazon: https://espelhagrupos.com.br/amazon-afiliados-whatsapp
 - SHEIN: https://espelhagrupos.com.br/shein-afiliados-whatsapp
 - Magalu: https://espelhagrupos.com.br/magalu-afiliados-whatsapp
+- Netshoes (Rakuten Advertising; converts only if the affiliate is approved by the store): https://espelhagrupos.com.br/netshoes-afiliados-whatsapp
+- KaBuM (Awin; converts only if the affiliate is approved by the store): https://espelhagrupos.com.br/kabum-afiliados-whatsapp
+- Rakuten Afiliados (affiliate network; stores approved in the affiliate's own account): https://espelhagrupos.com.br/rakuten-afiliados-whatsapp
 
 ## Commercial pages by use case
 
 - Bot para afiliados no WhatsApp: https://espelhagrupos.com.br/bot-afiliados-whatsapp
 - Bot de achadinhos no WhatsApp: https://espelhagrupos.com.br/bot-achadinhos-whatsapp
+- Grupo de WhatsApp lotado / limite de membros (1,024 per group; Smart Link sends each click to the group with the most room, Pro plan): https://espelhagrupos.com.br/grupo-whatsapp-lotado
 - Bot que busca ofertas da Shopee sozinho (automatic Shopee offers by keyword, Pro plan): https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp
 - Espelhar grupos de ofertas vale a pena? (when mirroring pays off, the common criticisms and the control for each one): https://espelhagrupos.com.br/espelhar-grupos-de-ofertas-vale-a-pena
 - Bot de ofertas para afiliados: https://espelhagrupos.com.br/bot-ofertas-afiliados-whatsapp

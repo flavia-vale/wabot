@@ -296,6 +296,13 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/amazon-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/amazon-afiliados-whatsapp', '2026-09-02'), indexable: true },
   { path: '/shein-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/shein-afiliados-whatsapp', '2026-09-02'), indexable: true },
   { path: '/magalu-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/magalu-afiliados-whatsapp', '2026-09-02'), indexable: true },
+  // Frente 2 da análise SEO+GEO de 02/10/2026: lojas das redes Awin e Rakuten
+  // (afiliado netshoes 5.000/mês, afiliado kabum 500, rakuten afiliados 500) e
+  // o Link Inteligente (limite de membros grupo whatsapp 500/mês).
+  { path: '/netshoes-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/netshoes-afiliados-whatsapp', '2026-10-03'), indexable: true },
+  { path: '/kabum-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/kabum-afiliados-whatsapp', '2026-10-03'), indexable: true },
+  { path: '/rakuten-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/rakuten-afiliados-whatsapp', '2026-10-03'), indexable: true },
+  { path: '/grupo-whatsapp-lotado', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/grupo-whatsapp-lotado', '2026-10-03'), indexable: true },
   ...['shopee-afiliados', 'amazon-afiliados', 'mercado-livre-afiliados', 'magalu-afiliados', 'shein-afiliados', 'aliexpress-afiliados'].map((store) => ({
     path: `/guia/${store}`,
     template: 'store-guide',
