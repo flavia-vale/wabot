@@ -1252,6 +1252,7 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       plan: true,
       lastActivityAt: true,
       createdAt: true,
+      accessExpiresAt: true,
       waSession: {
         select: {
           status: true,
@@ -1314,10 +1315,31 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
   const offlineMetrics24h = summarizeEpisodes(offlineEpisodes, { since: since24h, now })
   const offlineMetrics7d = summarizeEpisodes(offlineEpisodes, { since: since7d, now })
 
+  // "Por que caiu" e "pode reconectar" na ficha do cliente (seção Robô): mesma
+  // regra da lista que o Início tinha (resolveSessionOwner + describeDisconnectReason).
+  const ownership = resolveSessionOwner({
+    status: user.waSession?.status ?? 'disconnected',
+    lifecycle: user.waSession?.lifecycle ?? null,
+    lastDisconnectCode: user.waSession?.lastDisconnectCode ?? null,
+    lastEventType: recentEvents[0]?.type ?? null,
+    workerRunning: await isRunningSafe(userId),
+    lastHeartbeatAt: user.waSession?.lastHeartbeatAt ?? null,
+    accessExpiresAt: user.accessExpiresAt ?? null,
+    now: now.getTime(),
+  })
+  const disconnectReason = describeDisconnectReason({
+    owner: ownership.owner,
+    hasSession: Boolean(user.waSession),
+    lastDisconnectCode: user.waSession?.lastDisconnectCode ?? null,
+  })
+
   return {
     checkedAt: now.toISOString(),
     user: sanitizeUser(user, adminRole),
     session: user.waSession,
+    sessionOwner: ownership.owner,
+    canAdminRetry: Boolean(ownership.canAdminRetry),
+    disconnectReason,
     online: isSessionOnline(user.waSession, now),
     connectionMetrics: {
       disconnects24h,
