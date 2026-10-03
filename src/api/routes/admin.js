@@ -2337,7 +2337,7 @@ export async function adminRoutes(app) {
     // horária).
     const agora = new Date()
     const [assinaturasAtivas, ultimaCobranca, ultimaSincronizacao, recusadas7d, aprovadas7d] = await Promise.all([
-      db.subscription.count({ where: { status: 'authorized' } }).catch(() => null),
+      db.subscription.count({ where: { status: 'authorized', plan: { not: 'extra_number' } } }).catch(() => null),
       db.subscriptionCharge.findFirst({ orderBy: { attemptedAt: 'desc' }, select: { attemptedAt: true } }).catch(() => null),
       db.subscriptionCharge.findFirst({ orderBy: { syncedAt: 'desc' }, select: { syncedAt: true } }).catch(() => null),
       db.subscriptionCharge.count({ where: { status: { in: ['rejected', 'cancelled', 'expired'] }, attemptedAt: { gte: addDays(agora, -7) } } }).catch(() => null),

@@ -9,6 +9,7 @@ import { QRCodeCanvas as QRCode } from 'qrcode.react'
 import { api } from '@/lib/api'
 import { ProTag } from '@/components/pro/ProGate'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { ReservePurchaseCard } from '@/components/ReservePurchaseCard'
 
 const QR_POLL_MS = 3000
 const STATE_POLL_MS = 10000
@@ -37,6 +38,7 @@ export function ReserveNumberCard({ initialState }) {
   const [error, setError] = useState('')
   const [confirmSwitch, setConfirmSwitch] = useState(false)
   const [confirmStop, setConfirmStop] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
   const alive = useRef(true)
 
   const refresh = useCallback(async () => {
@@ -82,6 +84,9 @@ export function ReserveNumberCard({ initialState }) {
       setBusy('')
     }
   }
+
+  // Cancelou (ou o plano deixou de permitir) com a tela aberta.
+  if (state?.access && !state.access.allowed) return state.access.reason === 'not_purchased' ? <ReservePurchaseCard /> : null
 
   const activeIsTwo = state?.activeWaSlot === 2
   const sameNumber = standby?.blockNotice?.reason === 'same_number'
@@ -165,6 +170,17 @@ export function ReserveNumberCard({ initialState }) {
 
       {error && <p className="pnl-hint" role="alert" style={{ color: 'var(--danger)', marginTop: 8 }}>{error}</p>}
 
+      <button type="button" className="pnl-link-btn" style={{ marginTop: 12, display: 'block', color: 'var(--ink-soft)' }} disabled={Boolean(busy)} onClick={() => setConfirmCancel(true)}>Cancelar o número reserva (R$29/mês)</button>
+
+      <ConfirmDialog
+        open={confirmCancel}
+        title="Cancelar número reserva"
+        message="A reserva é desconectada agora e a cobrança de R$29/mês para. Se o seu WhatsApp cair depois disso, os envios param até você reconectar."
+        confirmLabel="Cancelar número reserva"
+        danger
+        onCancel={() => setConfirmCancel(false)}
+        onConfirm={() => { setConfirmCancel(false); run('cancel', () => api.extraNumberCancel()) }}
+      />
       <ConfirmDialog
         open={confirmSwitch}
         title="Trocar o número que envia"
