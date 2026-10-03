@@ -551,18 +551,10 @@ Auditoria (`admin.user.block|unblock`) grava o motivo. Ficha 360
 **Não regredir:** não baixar para `support:write`; não aceitar motivo curto nem
 pular o e-mail no servidor "porque a tela já pede". Custo: zero RAM.
 
-## Consultas em lote no admin (item 11, 2026-10-03)
+## Receita → Retenção: LTV por coorte e churn com motivo (item 13, 2026-10-03)
 
-**Era:** `buildFleetScenarios` usava `distinct: ['userId']` do Prisma (deduplica
-em memória da API, a cada polling); `GET /batches` (adminEmails) fazia 4
-`count` por lote (até 120 consultas); o funil lia `user.findMany` sem `take`.
+**Era:** `ltvRetention.js` e `churnReason.js` só rodavam em script (`diag-ltv-retencao.mjs`, `diag-motivo-nao-renovou.mjs`, via SSH).
 
-**Agora:** `groupBy userId` nas duas buscas de `buildFleetScenarios` (a de
-`ops_wa_reception_blind` continua sem `distinct`, de propósito, por causa do
-`metadata`); `/batches` faz UM `groupBy (batchId, status)` e distribui em
-memória; funil limitado a `FUNNEL_COHORT_LIMIT` (5.000, os mais recentes) com
-`truncated` na resposta e aviso na tela `/admin/funil`. Números iguais.
-Guarda: `test/admin-consultas-em-lote.test.js`.
+**Agora:** `GET /api/admin/finance/ltv` (coortes por mês do 1º pagamento, retenção 1/2/3/6 meses, realizado × projetado) e `GET /api/admin/finance/churn?months=6` (voluntário × involuntário × sem como afirmar, por mês em que o acesso pago venceu). `billing:read`, auditadas, só leitura, teto de 20 000 pagamentos (`truncated` avisa), conta de teste fora, sem e-mail por cliente. Tela: `/admin/receita` → sub-aba **Retenção** (duas tabelas + frase leiga por coorte). A montagem da entrada do motivo mora em `classifyNonRenewals`/`buildChurnReport` (`churnReason.js`), que chamam `classifyChurnReason` — regra única.
 
-**Não regredir:** não voltar `distinct` nessas rotas, nem `await` dentro de
-`for` em `/batches`, nem tirar o `take` do funil. Custo: zero RAM.
+**Não regredir:** rota não reescreve regra (chama os módulos); retenção sai da cobertura PAGA; coorte nova = "—", nunca zero; realizado e projetado não se somam; "ambíguo" nunca é chamado de desistência. Se mudar a conta em `scripts/diag-motivo-nao-renovou.mjs`, mude `classifyNonRenewals` junto (`test/admin-receita-retencao.test.js` compara). Custo: 4 consultas em lote ao abrir a aba, zero RAM nova. Guarda: `test/admin-receita-retencao.test.js`.
