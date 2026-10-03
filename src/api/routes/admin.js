@@ -330,8 +330,8 @@ function parseLpPlanInput(body = {}, existing = null) {
     return { ok: false, error: 'Título, descrição e valor do plano são obrigatórios.' }
   }
 
-  if (!['trial', 'basic', 'pro'].includes(existing?.id ?? body.id)) {
-    return { ok: false, error: 'Plano inválido. Use trial, basic ou pro.' }
+  if (!['trial', 'basic', 'pro', 'premium'].includes(existing?.id ?? body.id)) {
+    return { ok: false, error: 'Plano inválido. Use trial, basic, pro ou premium.' }
   }
 
   return { ok: true, data: { title, description, price, features: JSON.stringify(features), position } }

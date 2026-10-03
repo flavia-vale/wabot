@@ -162,8 +162,13 @@ function AccountRow({ account, onChanged, onRemoved }) {
   })
 
   const sync = () => run('sync', async () => {
-    const { result, account: fresh } = await api.rakutenAccountSync(account.id)
+    const { result, account: fresh, started } = await api.rakutenAccountSync(account.id)
     if (fresh) onChanged(fresh)
+    if (started && !result) {
+      setFeedback({ type: 'info', message: RAKUTEN_COPY.syncBackground })
+      setHistoryKey((k) => k + 1)
+      return
+    }
     const failed = result?.errors?.[0]?.message
     setFeedback(result?.status === 'success' || result?.status === 'partial'
       ? { type: 'success', message: RAKUTEN_COPY.syncDone(result) }

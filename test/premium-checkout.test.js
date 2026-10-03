@@ -5,6 +5,7 @@ import { createPaymentsService, DEFAULT_PLANS, resolvePlanForPayment } from '../
 import { hasPaidActiveAccess, decideCheckoutOffer } from '../src/domain/payments/checkoutOffer.js'
 import { buildFeatureGateError, FEATURE_CODES, PLAN_IDS } from '../src/billing/plans.js'
 import { buildCheckoutItem } from '../src/domain/payments/checkoutPayer.js'
+import { computeCanonicalMrr } from '../src/domain/admin/mrr.js'
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 
@@ -69,9 +70,14 @@ test('gate do multicanal aponta para a compra do Premium em /painel/plano', () =
 test('financeiro do admin conta Premium no MRR e na lista de pagantes', () => {
   const admin = read('src/api/routes/admin.js')
   assert.match(admin, /premium: 99/)
-  assert.match(admin, /activePremium \* currentPrices\.premium/)
-  assert.match(admin, /activePremium \* prices\.premium/)
-  assert.match(admin, /paidActiveUsers: activeBasic \+ activePro \+ activePremium/)
+  // A conta saiu de admin.js para o MRR canônico (src/domain/admin/mrr.js,
+  // 04cb88a): visão geral e ROI chamam loadCanonicalMrr com o preço do Premium.
+  assert.match(admin, /loadCanonicalMrr\(db, \{ now, prices: currentPrices,/)
+  assert.match(admin, /loadCanonicalMrr\(db, \{ now, prices,/)
+  const mrr = computeCanonicalMrr({ basic: 1, pro: 1, premium: 2 }, { basic: 39, pro: 69, premium: 99 })
+  assert.equal(mrr.activePremium, 2)
+  assert.equal(mrr.paidActiveUsers, 4)
+  assert.equal(mrr.activeMrr, 39 + 69 + 2 * 99)
 })
 
 test('tela de plano do painel mostra o Premium, R$ 99 e o que ele libera, sem jargão', () => {

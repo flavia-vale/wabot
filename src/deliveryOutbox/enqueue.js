@@ -11,7 +11,7 @@
 
 import defaultDb from '../db.js'
 import logger from '../logger.js'
-import { resolveDeliveryNetwork, DELIVERY_NETWORK } from '../core/delivery/networks.js'
+import { resolveDeliveryNetwork, DELIVERY_NETWORK, canonicalDestinationId } from '../core/delivery/networks.js'
 
 /**
  * Insere uma linha `pending` na caixa de saída. NUNCA lança para o chamador
@@ -49,7 +49,7 @@ export async function enqueueDeliveryOutbox(params = {}, opts = {}) {
       data: {
         userId: params.userId,
         deliveryNetwork,
-        destinationId: params.destinationId,
+        destinationId: canonicalDestinationId(params.destinationId),
         sourceId: params.sourceId ?? null,
         messageLogId: params.messageLogId ?? null,
         offerJson: JSON.stringify(params.offer ?? {}),

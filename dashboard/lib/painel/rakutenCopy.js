@@ -54,6 +54,7 @@ export const RAKUTEN_COPY = Object.freeze({
   autoSync: 'Atualiza sozinha a cada hora.',
   savedOk: 'Conta conectada. As promoções chegam em alguns minutos.',
   savedWarn: 'Conta salva, mas não conseguimos falar com a Rakuten agora. Tentamos de novo sozinhos.',
+  syncBackground: 'A atualização está demorando e continua sozinha. Veja o resultado no histórico em alguns minutos.',
   syncDone: (r) => `Pronto: ${r.inserted} novas, ${r.updated} conferidas${r.expired ? `, ${r.expired} vencidas` : ''}.`,
   loadError: 'Não conseguimos carregar suas contas da Rakuten.',
 })
@@ -80,6 +81,7 @@ export const RAKUTEN_RUN_STATUS = Object.freeze({
   failed: 'Não deu certo',
   invalid_credential: 'Dados recusados pela Rakuten',
   rate_limited: 'A Rakuten pediu uma pausa',
+  access_denied: 'A Rakuten não liberou agora',
 })
 
 export function rakutenStatusOf(account) {

@@ -42,7 +42,7 @@ test('MN-16: mensagens em linguagem leiga', () => {
 })
 
 test('MN-16: comando de cópia puxa da origem para o destino, pasta com barra final', () => {
-  assert.equal(buildRsyncCommand({ authDir: '/srv/auth_info/u1/', sourceHost: 'root@10.0.0.1' }), 'rsync -a --checksum root@10.0.0.1:/srv/auth_info/u1/ /srv/auth_info/u1/')
+  assert.equal(buildRsyncCommand({ authDir: '/srv/auth_info/u1/', sourceHost: 'root@10.0.0.1' }), 'rsync -a --checksum --delete root@10.0.0.1:/srv/auth_info/u1/ /srv/auth_info/u1/')
   assert.match(buildRsyncCommand({ authDir: '/x/u1' }), /<usuario@servidor-de-origem>:\/x\/u1\//)
   assert.throws(() => buildRsyncCommand({}), /authDir/)
 })
@@ -52,5 +52,5 @@ test('MN-16: o script é simulação por padrão, exige --auth-copiado e recusa 
   assert.match(src, /if \(!aplicar\) \{ console\.log\('\\n\(simulação\)/)
   assert.match(src, /if \(!flag\('auth-copiado'\)\)/)
   assert.match(src, /isNodeRoutingEnabled\(process\.env\)/)
-  assert.match(src, /VOLTANDO para a origem/)
+  assert.match(src, /Desfazendo: parando no destino, voltando e religando na origem/)
 })

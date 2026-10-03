@@ -21,6 +21,16 @@ export class RakutenAuthError extends RakutenError {
   }
 }
 
+// 401/403 num pedido de DADOS mesmo com token recém-emitido. Pode ser soluço
+// da Rakuten ou falta de acesso àquele recurso: passageiro. A sync só marca a
+// conta como recusada depois de 3 seguidos (revisão 2026-10-03, R2).
+export class RakutenAccessDeniedError extends RakutenError {
+  constructor(status) {
+    super('A Rakuten recusou o acesso a esses dados agora', { code: 'rakuten_access_denied', status })
+    this.name = 'RakutenAccessDeniedError'
+  }
+}
+
 // 429: limite de chamadas estourado (100/min por conta, cabeçalho
 // x-ratelimit-limit-minute medido em 2026-09-30). Reagenda, não invalida.
 export class RakutenRateLimitError extends RakutenError {

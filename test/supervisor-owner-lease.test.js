@@ -24,10 +24,10 @@ test('nomes de chave: por usuário e por nó', () => {
   assert.throws(() => capacityKey('N:2'), /nodeId inválido/)
 })
 
-test('flag: só existe com roteamento ligado E SUPERVISOR_OWNER_LEASE, default off', () => {
+test('flag: só existe com roteamento ligado; com ele, ligado por padrão (C2)', () => {
   assert.equal(isOwnerLeaseEnabled({}), false)
   assert.equal(isOwnerLeaseEnabled({ SUPERVISOR_OWNER_LEASE: '1' }), false)
-  assert.equal(isOwnerLeaseEnabled({ SUPERVISOR_NODE_ROUTING: '1' }), false)
+  assert.equal(isOwnerLeaseEnabled({ SUPERVISOR_NODE_ROUTING: '1' }), true) // revisão C2: ligado por padrão com roteamento
   assert.equal(isOwnerLeaseEnabled({ SUPERVISOR_NODE_ROUTING: '1', SUPERVISOR_OWNER_LEASE: '1' }), true)
 })
 
