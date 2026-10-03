@@ -96,3 +96,31 @@ export const VIDEO_ESPELHAMENTO_URL = `https://www.youtube.com/watch?v=${VIDEO_E
 // (dashboard/next.config.mjs) e não grava cookie antes do play.
 export const VIDEO_ESPELHAMENTO_EMBED_URL = `https://www.youtube-nocookie.com/embed/${VIDEO_ESPELHAMENTO.id}?rel=0`
 export const VIDEO_ESPELHAMENTO_THUMB_URL = `https://i.ytimg.com/vi/${VIDEO_ESPELHAMENTO.id}/hqdefault.jpg`
+
+// Vídeo da Frente 5 da análise SEO+GEO de 02/10/2026 (G8): a Visão geral de IA
+// do Google cita YouTube em 3 das 5 respostas medidas e não temos vídeo nesse
+// tema. Roteiro, título e descrição em
+// docs/marketing/ROTEIRO_VIDEO_AFILIADO_SHOPEE_AUTOMATICO_2026-10-03.md.
+// `id: null` = vídeo ainda não publicado: o site NÃO mostra nada nem emite
+// VideoObject. Quando o vídeo subir, preencher `id` e `publicadoEm` (data do
+// feed público do canal) AQUI — a página e o schema aparecem sozinhos em
+// /bot-afiliados-whatsapp e /quem-somos.
+export const VIDEO_AFILIADO_SHOPEE_AUTOMATICO = Object.freeze({
+  id: null,
+  titulo: 'AFILIADO SHOPEE: como postar ofertas no automático nos grupos de WhatsApp (7 dias grátis)',
+  descricao: 'Na tela do painel: conectar o WhatsApp, cadastrar a chave de afiliada da Shopee, escolher os grupos e ver a oferta sair no automático com o seu link.',
+  publicadoEm: null,
+})
+
+/** Endereços do vídeo, ou `null` enquanto ele não foi publicado. */
+export function videoPublicado(video) {
+  if (!video?.id || !video?.publicadoEm) return null
+  return {
+    title: video.titulo,
+    description: video.descricao,
+    uploadDate: video.publicadoEm,
+    url: `https://www.youtube.com/watch?v=${video.id}`,
+    embedUrl: `https://www.youtube-nocookie.com/embed/${video.id}?rel=0`,
+    thumbnailUrl: `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`,
+  }
+}

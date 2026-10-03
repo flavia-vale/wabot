@@ -4,6 +4,8 @@ import { BRAND_LINKEDIN_URL, BRAND_YOUTUBE_URL, DEFAULT_LANDING_PLANS, SISTER_SI
 import { FICHA_DEFINICAO } from '@/lib/ficha-tecnica'
 import { EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
 import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
+import { CanalVideo } from '@/components/marketing/CanalVideo'
+import { VIDEO_AFILIADO_SHOPEE_AUTOMATICO, videoPublicado } from '../../../src/tutorialVideo.js'
 
 // Página-resposta de marca (Frente 1, item 2 da análise SEO+GEO de
 // 02/10/2026, G2): em janela anônima o ChatGPT não reconhecia o nome ("pode
@@ -58,6 +60,8 @@ export default function AboutPage() {
             </div>
           ))}
         </dl>
+        {/* Frente 5 da análise SEO+GEO (03/10): aparece quando o vídeo for publicado. */}
+        <CanalVideo video={videoPublicado(VIDEO_AFILIADO_SHOPEE_AUTOMATICO)} title="O Espelha Grupos em vídeo" />
         <p>
           Na prática são três modos na mesma conta. No espelhamento, o robô acompanha os grupos e canais que você escolhe
           e republica cada oferta com o seu código de afiliada, em {STORES_FACT_PT}.
