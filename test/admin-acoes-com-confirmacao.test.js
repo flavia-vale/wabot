@@ -20,9 +20,9 @@ const CASOS = [
   ['dashboard/app/admin/clientes/[id]/page.js', 'async function reconnect(id)', 'adminOnlineReconnect'],
   ['dashboard/app/admin/hoje/page.js', 'async function reconectar(item)', 'adminOnlineReconnect'],
   ['dashboard/app/admin/clientes/[id]/page.js', 'async function submit(e)', 'adminUpdateAccess'],
-  ['dashboard/app/admin/observabilidade/page.js', 'async function runReprocess()', 'adminPaymentDlqReprocess'],
+  ['dashboard/components/SaudeSection.js', 'async function runReprocess()', 'adminPaymentDlqReprocess'],
   ['dashboard/app/admin/afiliados/page.js', 'async function handleMarkAllPaid()', 'adminAffiliateCycleMarkAllPaid'],
-  ['dashboard/app/admin/emails/page.js', 'async function enviarIndividual()', 'adminWhatsappSend('],
+  ['dashboard/components/AdminContato.js', 'async function enviarIndividual()', 'adminWhatsappSend('],
 ]
 
 for (const [arquivo, assinatura, chamada] of CASOS) {
@@ -44,7 +44,7 @@ test('pagar elegíveis do mês diz QUANTAS e QUANTO antes de sair dinheiro', () 
 })
 
 test('WhatsApp individual diz PARA QUEM vai a mensagem', () => {
-  const corpo = corpoDaFuncao(read('dashboard/app/admin/emails/page.js'), 'async function enviarIndividual()')
+  const corpo = corpoDaFuncao(read('dashboard/components/AdminContato.js'), 'async function enviarIndividual()')
   assert.match(corpo, /\$\{quem\}/)
 })
 

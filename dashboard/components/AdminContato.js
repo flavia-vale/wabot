@@ -1,7 +1,11 @@
 'use client'
 
-// Aba E-mails do admin: ver/editar os textos, mandar teste, montar o público,
-// disparar em massa e acompanhar o que saiu.
+// Contato com cliente no admin (menu de 5 entradas, auditoria 5.1/5.2). UM só
+// componente, duas rotas finas:
+//   modo="massa"   -> Clientes > Contato em massa (/admin/clientes/contato):
+//                     enviar e-mail, histórico e WhatsApp;
+//   modo="modelos" -> Operação > Modelos (/admin/operacao/modelos):
+//                     ver/editar os textos dos e-mails e mandar teste.
 //
 // Nenhum envio acontece aqui — a tela só chama a API, que passa tudo pelo
 // motor de e-mails (catálogo + travas + fila lenta).
@@ -11,14 +15,16 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
-import { VIDEO_CADASTRO_ETIQUETAS_URL, VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
+import { VIDEO_CADASTRO_ETIQUETAS_URL, VIDEO_ATIVACAO_ROBO_URL } from '../../src/tutorialVideo.js'
 
-const ABAS = [
-  ['modelos', 'Modelos (e-mail)'],
-  ['enviar', 'Enviar agora (e-mail)'],
-  ['historico', 'Histórico (e-mail)'],
-  ['whatsapp', 'WhatsApp'],
-]
+const ABAS_POR_MODO = {
+  modelos: [['modelos', 'Modelos (e-mail)']],
+  massa: [
+    ['enviar', 'Enviar agora (e-mail)'],
+    ['historico', 'Histórico (e-mail)'],
+    ['whatsapp', 'WhatsApp'],
+  ],
+}
 
 const CATEGORIA_LABEL = {
   transactional: 'Aviso da conta',
@@ -804,8 +810,9 @@ function WhatsAppTab() {
   )
 }
 
-export default function AdminEmailsPage() {
-  const [aba, setAba] = useState('modelos')
+export default function AdminContato({ modo = 'massa' }) {
+  const abas = ABAS_POR_MODO[modo] ?? ABAS_POR_MODO.massa
+  const [aba, setAba] = useState(abas[0][0])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
   const [summary, setSummary] = useState(null)
@@ -869,10 +876,12 @@ export default function AdminEmailsPage() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-black text-gray-900">Contato com cliente</h1>
-            <p className="text-sm text-gray-600">E-mails: edite os textos, mande teste e dispare campanhas. WhatsApp: veja o histórico e mande mensagem direto pelo painel.</p>
+            <h1 className="text-2xl font-black text-gray-900">{modo === 'modelos' ? 'Modelos de e-mail' : 'Contato em massa'}</h1>
+            <p className="text-sm text-gray-600">{modo === 'modelos'
+              ? 'Edite os textos dos e-mails automáticos e mande um teste para você.'
+              : 'Dispare e-mail para um grupo de clientes, veja o histórico e mande WhatsApp direto pelo painel.'}</p>
           </div>
-          <Link href="/admin" className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm ring-1 ring-gray-200">Voltar ao admin</Link>
+          <Link href={modo === 'modelos' ? '/admin/operacao' : '/admin/clientes'} className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm ring-1 ring-gray-200">{modo === 'modelos' ? 'Voltar à Operação' : 'Voltar aos Clientes'}</Link>
         </div>
 
         {erro && <Alert type="error" message={erro} />}
@@ -887,7 +896,7 @@ export default function AdminEmailsPage() {
         <Resumo summary={summary} />
 
         <div className="mb-4 flex gap-2">
-          {ABAS.map(([valor, label]) => (
+          {abas.length > 1 && abas.map(([valor, label]) => (
             <button
               key={valor}
               onClick={() => setAba(valor)}

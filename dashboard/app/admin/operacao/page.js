@@ -10,6 +10,7 @@ import { HelpDot } from '@/components/HelpDot'
 import { CARD_HELP } from '@/lib/admin/cardHelp'
 import FilasSection from '@/components/FilasSection'
 import AuditoriaSection from '@/components/AuditoriaSection'
+import SaudeSection from '@/components/SaudeSection'
 
 // Página "Operação" (G2 da auditoria do painel, 2026-10-02). Junta o que era a
 // aba oculta "Observabilidade (técnico)", o card de staging e a aba
@@ -823,9 +824,12 @@ export default function OperacaoPage() {
               <span className="text-xs font-semibold text-gray-400">saúde técnica, staging, conteúdo do site</span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <a href="#saude" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">Saúde</a>
+              <a href="#filas" className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100">Filas</a>
               <Link href="/admin/capacidade" className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800 hover:bg-cyan-100">Capacidade</Link>
               <Link href="/admin/erros" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">Erros</Link>
-              <Link href="/admin/observabilidade" className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100">Filas e DLQ</Link>
+              {admin?.shardPocMode === 'enabled' && <Link href="/admin/teste-shard" className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800 hover:bg-violet-100">Experimentos</Link>}
+              <Link href="/admin/operacao/modelos" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Modelos de e-mail</Link>
               <button onClick={applyFilters} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Atualizar</button>
               <Link href="/admin" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Início</Link>
             </div>
@@ -833,6 +837,10 @@ export default function OperacaoPage() {
         </div>
 
         {error && <Alert type="error" title="Operação" message={error} />}
+
+        <SectionErrorBoundary label="Saúde (GO/NO-GO e pagamentos parados)">
+          <SaudeSection />
+        </SectionErrorBoundary>
 
         <SectionErrorBoundary label="Filas (envios presos)">
           <FilasSection admin={admin} />
