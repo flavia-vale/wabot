@@ -11,8 +11,8 @@
 // digam a mesma coisa.
 
 const TAG_STYLE = {
-  pagante: 'bg-emerald-600 text-white ring-emerald-700',
-  ex_pagante: 'bg-slate-200 text-slate-700 ring-slate-300',
+  pagante: 'bg-ds-accent-strong text-ds-surface ring-ds-accent-strong',
+  ex_pagante: 'bg-ds-bg-soft text-ds-ink ring-ds-line-strong',
 }
 
 const TAG_TITLE = {
@@ -27,7 +27,7 @@ export function PayingTag({ status, compact = false, className = '' }) {
   return (
     <span
       title={TAG_TITLE[key]}
-      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 font-black ring-1 ${compact ? 'text-[10px]' : 'text-[11px]'} ${TAG_STYLE[key]} ${className}`}
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 font-black ring-1 ${compact ? 'text-[10.5px]' : 'text-[10.5px]'} ${TAG_STYLE[key]} ${className}`}
     >
       <span aria-hidden="true">R$</span>{label}
     </span>

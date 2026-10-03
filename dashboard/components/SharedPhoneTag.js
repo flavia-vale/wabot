@@ -18,7 +18,7 @@ export function SharedPhoneTag({ status, contas = 0, compact = false, className 
   return (
     <span
       title="Este número de WhatsApp já foi ligado por mais de uma conta. Pode ser troca de chip ou conta antiga da mesma pessoa — vale conferir o histórico antes de concluir qualquer coisa."
-      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 font-black text-amber-800 ring-1 ring-amber-300 ${compact ? 'text-[10px]' : 'text-[11px]'} ${className}`}
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-ds-warn/20 px-2 py-0.5 font-black text-ds-warn-ink ring-1 ring-ds-warn/60 ${compact ? 'text-[10.5px]' : 'text-[10.5px]'} ${className}`}
     >
       <span aria-hidden="true">📵</span>{label}
     </span>

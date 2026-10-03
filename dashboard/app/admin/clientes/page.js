@@ -46,21 +46,21 @@ const SITUACAO_FILTERS = [
 // serve para achar o cliente e entrar no histórico dele.
 function SituacaoBadge({ customer }) {
   const map = {
-    trial: ['Em teste', 'bg-amber-100 text-amber-800'],
-    active: ['Assinante', 'bg-emerald-100 text-emerald-800'],
-    expired: ['Vencido', 'bg-red-100 text-red-700'],
-    banned: ['Banido', 'bg-red-100 text-red-700'],
-    suspended: ['Suspenso', 'bg-orange-100 text-orange-700'],
+    trial: ['Em teste', 'bg-ds-warn/20 text-ds-warn-ink'],
+    active: ['Assinante', 'bg-ds-accent/20 text-ds-accent-strong'],
+    expired: ['Vencido', 'bg-ds-danger/20 text-ds-danger'],
+    banned: ['Banido', 'bg-ds-danger/20 text-ds-danger'],
+    suspended: ['Suspenso', 'bg-ds-warn/20 text-ds-warn-ink'],
   }
-  const [label, tone] = map[customer.accessStatus] ?? ['—', 'bg-slate-100 text-slate-600']
-  return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${tone}`}>{label}</span>
+  const [label, tone] = map[customer.accessStatus] ?? ['—', 'bg-ds-bg-soft text-ds-ink-soft']
+  return <span className={`inline-block rounded-full px-2 py-0.5 text-[10.5px] font-bold ${tone}`}>{label}</span>
 }
 
 function WaDot({ status }) {
   const connected = status === 'connected'
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">
-      <span className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+    <span className="inline-flex items-center gap-1.5 text-xs text-ds-ink-soft">
+      <span className={`h-2 w-2 rounded-full ${connected ? 'bg-ds-accent-strong' : 'bg-ds-bg-soft'}`} />
       {connected ? 'Conectado' : 'Fora do ar'}
     </span>
   )
@@ -74,21 +74,21 @@ function CobrancaBadge({ customer }) {
   const sub = customer.subscription
   const subStatus = String(sub?.status ?? '').toLowerCase()
   if (sub && ['authorized', 'active'].includes(subStatus)) {
-    return <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800">Recorrente</span>
+    return <span className="inline-block rounded-full bg-ds-accent/20 px-2 py-0.5 text-[10.5px] font-bold text-ds-accent-strong">Recorrente</span>
   }
   if (sub) {
     // "Aguardando" era dito também para quem JÁ pagou e só falta a confirmação
     // do Mercado Pago chegar — o backend separa os dois casos.
     if (sub.awaitingConfirmation) {
-      return <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">Recorrente (confirmando)</span>
+      return <span className="inline-block rounded-full bg-ds-warn/20 px-2 py-0.5 text-[10.5px] font-bold text-ds-warn-ink">Recorrente (confirmando)</span>
     }
     const label = subStatus === 'pending' ? 'Recorrente (não concluída)' : subStatus === 'paused' ? 'Recorrente (pausada)' : 'Recorrente (cancelada)'
-    return <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{label}</span>
+    return <span className="inline-block rounded-full bg-ds-bg-soft px-2 py-0.5 text-[10.5px] font-bold text-ds-ink-soft">{label}</span>
   }
   if ((customer.paidCount ?? 0) > 0) {
-    return <span className="inline-block rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-bold text-sky-800">Avulso</span>
+    return <span className="inline-block rounded-full bg-ds-bg-soft px-2 py-0.5 text-[10.5px] font-bold text-ds-ink-soft">Avulso</span>
   }
-  return <span className="text-xs text-slate-400">—</span>
+  return <span className="text-xs text-ds-ink-faint">—</span>
 }
 
 const COLUMNS = [
@@ -113,12 +113,12 @@ const COLUMNS = [
  * contagem, para a coluna não empurrar a tabela para fora da tela. */
 function WaPhones({ phones }) {
   const lista = Array.isArray(phones) ? phones : []
-  if (!lista.length) return <span className="text-slate-400">—</span>
+  if (!lista.length) return <span className="text-ds-ink-faint">—</span>
   const [primeiro, ...resto] = lista
   return (
-    <span className="whitespace-nowrap text-xs text-slate-600" title={lista.join(', ')}>
+    <span className="whitespace-nowrap text-xs text-ds-ink-soft" title={lista.join(', ')}>
       {primeiro}
-      {resto.length > 0 && <span className="ml-1 font-semibold text-amber-700">+{resto.length}</span>}
+      {resto.length > 0 && <span className="ml-1 font-semibold text-ds-warn-ink">+{resto.length}</span>}
     </span>
   )
 }
@@ -164,18 +164,18 @@ export default function AdminClientesPage() {
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.limit ?? 50)))
 
   return (
-    <main className="min-h-screen bg-slate-50 px-5 py-8">
+    <main className="min-h-screen bg-ds-bg px-5 py-8">
       <div className="mx-auto max-w-7xl space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Admin</p>
-            <h1 className="text-2xl font-black text-slate-900">Clientes</h1>
-            <p className="text-sm text-slate-500">{formatNumber(data?.total ?? 0)} no total. Clique num cliente para ver o histórico completo.</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-ds-accent-strong">Admin</p>
+            <h1 className="text-[19px] font-black text-ds-ink">Clientes</h1>
+            <p className="text-sm text-ds-ink-soft">{formatNumber(data?.total ?? 0)} no total. Clique num cliente para ver o histórico completo.</p>
           </div>
-          <Link href="/admin" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Voltar ao admin</Link>
+          <Link href="/admin" className="rounded-xl border border-ds-line bg-ds-surface px-3 py-2 text-sm font-semibold text-ds-ink hover:bg-ds-bg">Voltar ao admin</Link>
         </div>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="rounded-2xl border border-ds-line bg-ds-surface p-4 shadow-sm">
           <form
             onSubmit={(event) => { event.preventDefault(); setQuery(current => ({ ...current, page: 1, search: searchInput.trim() })) }}
             className="flex flex-wrap items-center gap-2"
@@ -184,16 +184,16 @@ export default function AdminClientesPage() {
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
               placeholder="Buscar por nome, e-mail ou celular"
-              className="w-full max-w-sm rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+              className="w-full max-w-sm rounded-xl border border-ds-line px-3 py-2 text-sm outline-none focus:border-ds-accent-strong"
             />
-            <button type="submit" className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700">Buscar</button>
+            <button type="submit" className="rounded-xl bg-ds-accent-strong px-4 py-2 text-sm font-bold text-ds-surface hover:bg-ds-accent-strong/85">Buscar</button>
             <div className="ml-auto flex flex-wrap gap-1">
               {SITUACAO_FILTERS.map(([key, label]) => (
                 <button
                   key={key || 'todos'}
                   type="button"
                   onClick={() => setQuery(current => ({ ...current, page: 1, situacao: key }))}
-                  className={`rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${situacao === key ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-600 ring-slate-200'}`}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${situacao === key ? 'bg-ds-ink text-ds-surface ring-ds-ink' : 'bg-ds-surface text-ds-ink-soft ring-ds-line'}`}
                 >
                   {label}
                 </button>
@@ -206,14 +206,14 @@ export default function AdminClientesPage() {
         {loading && !data && <LoadingState />}
 
         {data && (
-          <section className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <section className="overflow-x-auto rounded-2xl border border-ds-line bg-ds-surface shadow-sm">
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-ds-bg text-left text-xs uppercase tracking-wide text-ds-ink-soft">
                 <tr>
                   {COLUMNS.map(column => (
                     <th key={column.key} className="px-4 py-3 font-bold">
                       {column.sortable ? (
-                        <button type="button" onClick={() => toggleSort(column.key)} className="flex items-center gap-1 hover:text-slate-900">
+                        <button type="button" onClick={() => toggleSort(column.key)} className="flex items-center gap-1 hover:text-ds-ink">
                           {column.label}
                           {sort === column.key && <span>{dir === 'desc' ? '↓' : '↑'}</span>}
                         </button>
@@ -222,33 +222,33 @@ export default function AdminClientesPage() {
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-ds-line">
                 {customers.map(customer => (
-                  <tr key={customer.id} className="hover:bg-emerald-50/40">
+                  <tr key={customer.id} className="hover:bg-ds-accent/10">
                     <td className="px-4 py-3">
                       <Link href={`/admin/clientes/${customer.id}`} className="block">
                         <span className="flex flex-wrap items-center gap-2">
-                          <span className="font-bold text-slate-900 hover:text-emerald-700">{customer.name || '—'}</span>
+                          <span className="font-bold text-ds-ink hover:text-ds-accent-strong">{customer.name || '—'}</span>
                           <PayingTag status={customer.payingStatus} compact />
                           <SharedPhoneTag status={customer.sharedPhoneStatus} contas={customer.sharedPhoneAccounts} compact />
                         </span>
-                        <span className="block text-xs text-slate-500">{customer.email}</span>
+                        <span className="block text-xs text-ds-ink-soft">{customer.email}</span>
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{formatDate(customer.createdAt)}</td>
+                    <td className="px-4 py-3 text-ds-ink-soft">{formatDate(customer.createdAt)}</td>
                     <td className="px-4 py-3"><SituacaoBadge customer={customer} /></td>
-                    <td className="px-4 py-3 text-slate-600">{customer.planLabel}</td>
+                    <td className="px-4 py-3 text-ds-ink-soft">{customer.planLabel}</td>
                     <td className="px-4 py-3"><CobrancaBadge customer={customer} /></td>
-                    <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">{formatDaysUntil(customer.accessExpiresAt)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-700">{formatCurrency(customer.ltv)}</td>
-                    <td className="px-4 py-3 text-slate-600">{customer.groupCounts?.monitor ?? 0}/{customer.groupCounts?.post ?? 0}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatNumber(customer.sends30d)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-semibold text-ds-ink">{formatDaysUntil(customer.accessExpiresAt)}</td>
+                    <td className="px-4 py-3 font-semibold text-ds-ink">{formatCurrency(customer.ltv)}</td>
+                    <td className="px-4 py-3 text-ds-ink-soft">{customer.groupCounts?.monitor ?? 0}/{customer.groupCounts?.post ?? 0}</td>
+                    <td className="px-4 py-3 text-ds-ink-soft">{formatNumber(customer.sends30d)}</td>
                     <td className="px-4 py-3"><WaDot status={customer.waSession?.status} /></td>
                     <td className="px-4 py-3"><WaPhones phones={customer.waPhones} /></td>
                   </tr>
                 ))}
                 {!customers.length && !loading && (
-                  <tr><td colSpan={COLUMNS.length} className="px-4 py-10 text-center text-slate-400">Nenhum cliente encontrado.</td></tr>
+                  <tr><td colSpan={COLUMNS.length} className="px-4 py-10 text-center text-ds-ink-faint">Nenhum cliente encontrado.</td></tr>
                 )}
               </tbody>
             </table>
@@ -257,9 +257,9 @@ export default function AdminClientesPage() {
 
         {data && totalPages > 1 && (
           <div className="flex items-center justify-center gap-2">
-            <button onClick={() => setQuery(current => ({ ...current, page: Math.max(1, current.page - 1) }))} disabled={page <= 1} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">Anterior</button>
-            <span className="text-sm text-slate-500">Página {page} de {totalPages}</span>
-            <button onClick={() => setQuery(current => ({ ...current, page: Math.min(totalPages, current.page + 1) }))} disabled={page >= totalPages} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">Próxima</button>
+            <button onClick={() => setQuery(current => ({ ...current, page: Math.max(1, current.page - 1) }))} disabled={page <= 1} className="rounded-xl border border-ds-line bg-ds-surface px-3 py-2 text-sm font-semibold text-ds-ink disabled:opacity-40">Anterior</button>
+            <span className="text-sm text-ds-ink-soft">Página {page} de {totalPages}</span>
+            <button onClick={() => setQuery(current => ({ ...current, page: Math.min(totalPages, current.page + 1) }))} disabled={page >= totalPages} className="rounded-xl border border-ds-line bg-ds-surface px-3 py-2 text-sm font-semibold text-ds-ink disabled:opacity-40">Próxima</button>
           </div>
         )}
       </div>

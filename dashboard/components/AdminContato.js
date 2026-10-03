@@ -68,13 +68,13 @@ function formatDate(value) {
 
 function Chip({ children, tone = 'gray' }) {
   const tones = {
-    gray: 'bg-gray-100 text-gray-700',
-    green: 'bg-emerald-100 text-emerald-800',
-    amber: 'bg-amber-100 text-amber-800',
-    red: 'bg-red-100 text-red-800',
-    blue: 'bg-blue-100 text-blue-800',
+    gray: 'bg-ds-bg-soft text-ds-ink',
+    green: 'bg-ds-accent/20 text-ds-accent-strong',
+    amber: 'bg-ds-warn/20 text-ds-warn-ink',
+    red: 'bg-ds-danger/20 text-ds-danger',
+    blue: 'bg-ds-bg-soft text-ds-ink-soft',
   }
-  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${tones[tone] ?? tones.gray}`}>{children}</span>
+  return <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold ${tones[tone] ?? tones.gray}`}>{children}</span>
 }
 
 function Resumo({ summary }) {
@@ -93,13 +93,13 @@ function Resumo({ summary }) {
     <div className="mb-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {cards.map(([label, valor]) => (
-          <div key={label} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
-            <div className="text-xs font-bold text-gray-500">{label}</div>
-            <div className="mt-1 text-2xl font-black text-gray-900">{valor}</div>
+          <div key={label} className="rounded-2xl bg-ds-surface p-4 shadow-sm ring-1 ring-ds-line">
+            <div className="text-xs font-bold text-ds-ink-soft">{label}</div>
+            <div className="mt-1 text-[28px] font-black text-ds-ink">{valor}</div>
           </div>
         ))}
       </div>
-      <p className="mt-2 text-xs text-gray-500">
+      <p className="mt-2 text-xs text-ds-ink-soft">
         O dia de envio começa às 8h da manhã.{' '}
         {tetoBatido
           ? `O teto de hoje já foi atingido — o resto da fila sai a partir das ${summary.proximaViradaLabel ?? '8h'}.`
@@ -197,16 +197,16 @@ function Editor({ slug, onClose, onSaved }) {
     }
   }
 
-  if (!detalhe) return <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100"><LoadingState /></div>
+  if (!detalhe) return <div className="rounded-2xl bg-ds-surface p-6 shadow-sm ring-1 ring-ds-line"><LoadingState /></div>
 
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+    <div className="rounded-2xl bg-ds-surface p-5 shadow-sm ring-1 ring-ds-line">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-lg font-black text-gray-900">{detalhe.name}</h3>
-          <p className="text-sm text-gray-600">{detalhe.description}</p>
+          <h3 className="text-lg font-black text-ds-ink">{detalhe.name}</h3>
+          <p className="text-sm text-ds-ink-soft">{detalhe.description}</p>
         </div>
-        <button onClick={onClose} className="rounded-xl bg-gray-100 px-3 py-2 text-sm font-bold text-gray-700">Fechar</button>
+        <button onClick={onClose} className="rounded-xl bg-ds-bg-soft px-3 py-2 text-sm font-bold text-ds-ink">Fechar</button>
       </div>
 
       {erro && <Alert type="error" message={erro} />}
@@ -214,40 +214,40 @@ function Editor({ slug, onClose, onSaved }) {
 
       <div className="grid gap-5 lg:grid-cols-2">
         <div>
-          <label className="mb-1 block text-xs font-bold text-gray-600">Assunto</label>
+          <label className="mb-1 block text-xs font-bold text-ds-ink-soft">Assunto</label>
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+            className="mb-3 w-full rounded-xl border border-ds-line px-3 py-2 text-sm"
           />
 
-          <label className="mb-1 block text-xs font-bold text-gray-600">Título dentro do e-mail</label>
+          <label className="mb-1 block text-xs font-bold text-ds-ink-soft">Título dentro do e-mail</label>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="deixe em branco para não mostrar título"
-            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+            className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm"
           />
-          <p className="mb-3 mt-1 text-xs text-gray-500">
+          <p className="mb-3 mt-1 text-xs text-ds-ink-soft">
             Aparece em letra grande acima do texto. Apague tudo para o e-mail começar direto no texto.
           </p>
 
-          <label className="mb-1 block text-xs font-bold text-gray-600">Texto do e-mail</label>
+          <label className="mb-1 block text-xs font-bold text-ds-ink-soft">Texto do e-mail</label>
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={16}
-            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs"
+            className="w-full rounded-xl border border-ds-line px-3 py-2 text-xs"
           />
 
-          <div className="mt-2 rounded-xl bg-gray-50 p-3 text-xs text-gray-600">
-            <p className="font-bold text-gray-700">Como escrever</p>
+          <div className="mt-2 rounded-xl bg-ds-bg p-3 text-xs text-ds-ink-soft">
+            <p className="font-bold text-ds-ink">Como escrever</p>
             <p>Linha em branco separa parágrafos. Comece a linha com <code>- </code> para lista, ou <code>1. </code> para lista numerada.</p>
             <p>Botão verde: <code>[[botao:Texto do botão|{'{{link_painel}}'}]]</code>. Negrito: <code>**assim**</code>. Link no meio da frase: <code>[texto](https://...)</code>.</p>
           </div>
 
           <div className="mt-3">
-            <p className="mb-1 text-xs font-bold text-gray-600">Variáveis que você pode usar</p>
+            <p className="mb-1 text-xs font-bold text-ds-ink-soft">Variáveis que você pode usar</p>
             <div className="flex flex-wrap gap-1">
               {detalhe.variables.map((variable) => (
                 <button
@@ -255,7 +255,7 @@ function Editor({ slug, onClose, onSaved }) {
                   type="button"
                   title={`${variable.description} (ex.: ${variable.example})`}
                   onClick={() => setBody((atual) => `${atual}{{${variable.name}}}`)}
-                  className="rounded-lg bg-gray-100 px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-200"
+                  className="rounded-lg bg-ds-bg-soft px-2 py-1 text-[10.5px] text-ds-ink hover:bg-ds-line-strong"
                 >
                   {`{{${variable.name}}}`}
                 </button>
@@ -263,34 +263,34 @@ function Editor({ slug, onClose, onSaved }) {
             </div>
           </div>
 
-          <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
+          <label className="mt-3 flex items-center gap-2 text-sm text-ds-ink">
             <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
             Este e-mail está ligado
           </label>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <button onClick={salvar} disabled={salvando} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Salvar</button>
-            <button onClick={mandarTeste} className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-gray-700 ring-1 ring-gray-200">Mandar teste para mim</button>
+            <button onClick={salvar} disabled={salvando} className="rounded-xl bg-ds-accent-strong px-4 py-2 text-sm font-bold text-ds-surface disabled:opacity-50">Salvar</button>
+            <button onClick={mandarTeste} className="rounded-xl bg-ds-surface px-4 py-2 text-sm font-bold text-ds-ink ring-1 ring-ds-line">Mandar teste para mim</button>
             {detalhe.customized && (
-              <button onClick={voltarAoPadrao} className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-gray-500 ring-1 ring-gray-200">Voltar ao texto padrão</button>
+              <button onClick={voltarAoPadrao} className="rounded-xl bg-ds-surface px-4 py-2 text-sm font-bold text-ds-ink-soft ring-1 ring-ds-line">Voltar ao texto padrão</button>
             )}
           </div>
         </div>
 
         <div>
-          <p className="mb-1 text-xs font-bold text-gray-600">Prévia (com dados de exemplo)</p>
-          <div className="rounded-xl border border-gray-200">
-            <div className="border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs">
-              <span className="font-bold text-gray-700">Assunto:</span> {preview?.subject}
+          <p className="mb-1 text-xs font-bold text-ds-ink-soft">Prévia (com dados de exemplo)</p>
+          <div className="rounded-xl border border-ds-line">
+            <div className="border-b border-ds-line bg-ds-bg px-3 py-2 text-xs">
+              <span className="font-bold text-ds-ink">Assunto:</span> {preview?.subject}
             </div>
             <iframe
               title="Prévia do e-mail"
               srcDoc={preview?.html ?? ''}
-              className="h-[520px] w-full rounded-b-xl bg-white"
+              className="h-[520px] w-full rounded-b-xl bg-ds-surface"
             />
           </div>
           {preview?.missing?.length > 0 && (
-            <p className="mt-2 text-xs text-amber-700">Sem valor de exemplo para: {preview.missing.join(', ')}</p>
+            <p className="mt-2 text-xs text-ds-warn-ink">Sem valor de exemplo para: {preview.missing.join(', ')}</p>
           )}
         </div>
       </div>
@@ -351,23 +351,23 @@ function Enviar({ templates, onEnviado }) {
   }
 
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+    <div className="rounded-2xl bg-ds-surface p-5 shadow-sm ring-1 ring-ds-line">
       {erro && <Alert type="error" message={erro} />}
       {aviso && <Alert type="success" message={aviso} />}
 
-      <label className="mb-1 block text-xs font-bold text-gray-600">Qual e-mail enviar</label>
-      <select value={slug} onChange={(e) => { setSlug(e.target.value); setPrevia(null) }} className="mb-4 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm">
+      <label className="mb-1 block text-xs font-bold text-ds-ink-soft">Qual e-mail enviar</label>
+      <select value={slug} onChange={(e) => { setSlug(e.target.value); setPrevia(null) }} className="mb-4 w-full rounded-xl border border-ds-line px-3 py-2 text-sm">
         <option value="">Escolha um e-mail…</option>
         {templates.map((template) => (
           <option key={template.slug} value={template.slug}>{template.groupLabel} — {template.name}</option>
         ))}
       </select>
 
-      <p className="mb-2 text-xs font-bold text-gray-600">Para quem</p>
+      <p className="mb-2 text-xs font-bold text-ds-ink-soft">Para quem</p>
       <div className="grid gap-3 md:grid-cols-3">
         <div>
-          <label className="mb-1 block text-[11px] font-bold text-gray-500">Plano</label>
-          <select value={filtros.plano ?? ''} onChange={(e) => setFiltros({ ...filtros, plano: e.target.value })} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm">
+          <label className="mb-1 block text-[10.5px] font-bold text-ds-ink-soft">Plano</label>
+          <select value={filtros.plano ?? ''} onChange={(e) => setFiltros({ ...filtros, plano: e.target.value })} className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm">
             <option value="">Tanto faz</option>
             <option value="trial">Teste grátis</option>
             <option value="basic">Básico</option>
@@ -376,49 +376,49 @@ function Enviar({ templates, onEnviado }) {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-[11px] font-bold text-gray-500">Situação do acesso</label>
-          <select value={filtros.acesso ?? ''} onChange={(e) => setFiltros({ ...filtros, acesso: e.target.value })} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm">
+          <label className="mb-1 block text-[10.5px] font-bold text-ds-ink-soft">Situação do acesso</label>
+          <select value={filtros.acesso ?? ''} onChange={(e) => setFiltros({ ...filtros, acesso: e.target.value })} className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm">
             {ACESSO_OPCOES.map(([valor, label]) => <option key={valor} value={valor}>{label}</option>)}
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-[11px] font-bold text-gray-500">Quantos dias</label>
-          <input type="number" min="1" value={filtros.dias ?? 7} onChange={(e) => setFiltros({ ...filtros, dias: Number(e.target.value) })} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" />
+          <label className="mb-1 block text-[10.5px] font-bold text-ds-ink-soft">Quantos dias</label>
+          <input type="number" min="1" value={filtros.dias ?? 7} onChange={(e) => setFiltros({ ...filtros, dias: Number(e.target.value) })} className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-[11px] font-bold text-gray-500">WhatsApp</label>
-          <select value={filtros.whatsapp ?? ''} onChange={(e) => setFiltros({ ...filtros, whatsapp: e.target.value })} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm">
+          <label className="mb-1 block text-[10.5px] font-bold text-ds-ink-soft">WhatsApp</label>
+          <select value={filtros.whatsapp ?? ''} onChange={(e) => setFiltros({ ...filtros, whatsapp: e.target.value })} className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm">
             <option value="">Tanto faz</option>
             <option value="conectado">Conectado</option>
             <option value="desconectado">Desconectado</option>
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-[11px] font-bold text-gray-500">É afiliada</label>
-          <select value={filtros.afiliado ?? ''} onChange={(e) => setFiltros({ ...filtros, afiliado: e.target.value })} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm">
+          <label className="mb-1 block text-[10.5px] font-bold text-ds-ink-soft">É afiliada</label>
+          <select value={filtros.afiliado ?? ''} onChange={(e) => setFiltros({ ...filtros, afiliado: e.target.value })} className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm">
             <option value="">Tanto faz</option>
             <option value="sim">Sim</option>
             <option value="nao">Não</option>
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-[11px] font-bold text-gray-500">Sem enviar oferta há (dias)</label>
-          <input type="number" min="0" value={filtros.semEnvioHaDias ?? ''} onChange={(e) => setFiltros({ ...filtros, semEnvioHaDias: e.target.value })} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" />
+          <label className="mb-1 block text-[10.5px] font-bold text-ds-ink-soft">Sem enviar oferta há (dias)</label>
+          <input type="number" min="0" value={filtros.semEnvioHaDias ?? ''} onChange={(e) => setFiltros({ ...filtros, semEnvioHaDias: e.target.value })} className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-[11px] font-bold text-gray-500">Não repetir para quem recebeu nos últimos (dias)</label>
-          <input type="number" min="0" value={filtros.excluirRecebidosDias ?? 7} onChange={(e) => setFiltros({ ...filtros, excluirRecebidosDias: Number(e.target.value) })} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" />
+          <label className="mb-1 block text-[10.5px] font-bold text-ds-ink-soft">Não repetir para quem recebeu nos últimos (dias)</label>
+          <input type="number" min="0" value={filtros.excluirRecebidosDias ?? 7} onChange={(e) => setFiltros({ ...filtros, excluirRecebidosDias: Number(e.target.value) })} className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm" />
         </div>
       </div>
 
-      <div className="mt-4 rounded-xl bg-gray-50 p-3">
-        <p className="mb-2 text-[11px] font-bold text-gray-600">Ou escolha na mão (quando há alguém marcado, só eles recebem)</p>
+      <div className="mt-4 rounded-xl bg-ds-bg p-3">
+        <p className="mb-2 text-[10.5px] font-bold text-ds-ink-soft">Ou escolha na mão (quando há alguém marcado, só eles recebem)</p>
         <div className="flex gap-2">
-          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome ou e-mail" className="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm" />
-          <button onClick={procurar} className="rounded-xl bg-white px-3 py-2 text-sm font-bold text-gray-700 ring-1 ring-gray-200">Buscar</button>
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome ou e-mail" className="flex-1 rounded-xl border border-ds-line px-3 py-2 text-sm" />
+          <button onClick={procurar} className="rounded-xl bg-ds-surface px-3 py-2 text-sm font-bold text-ds-ink ring-1 ring-ds-line">Buscar</button>
         </div>
         {encontrados.length > 0 && (
-          <div className="mt-2 max-h-40 overflow-auto rounded-xl bg-white p-2 ring-1 ring-gray-100">
+          <div className="mt-2 max-h-40 overflow-auto rounded-xl bg-ds-surface p-2 ring-1 ring-ds-line">
             {encontrados.map((user) => {
               const marcado = selecionados.some((s) => s.id === user.id)
               return (
@@ -428,35 +428,35 @@ function Enviar({ templates, onEnviado }) {
                     checked={marcado}
                     onChange={() => setSelecionados((atual) => (marcado ? atual.filter((s) => s.id !== user.id) : [...atual, user]))}
                   />
-                  <span className="font-medium text-gray-800">{user.name}</span>
-                  <span className="text-xs text-gray-500">{user.email}</span>
+                  <span className="font-medium text-ds-ink">{user.name}</span>
+                  <span className="text-xs text-ds-ink-soft">{user.email}</span>
                 </label>
               )
             })}
           </div>
         )}
         {selecionados.length > 0 && (
-          <p className="mt-2 text-xs text-gray-700">
+          <p className="mt-2 text-xs text-ds-ink">
             {selecionados.length} escolhido(s).{' '}
-            <button onClick={() => setSelecionados([])} className="font-bold text-emerald-700 underline">limpar</button>
+            <button onClick={() => setSelecionados([])} className="font-bold text-ds-accent-strong underline">limpar</button>
           </p>
         )}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button onClick={conferir} disabled={!slug} className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-gray-700 ring-1 ring-gray-200 disabled:opacity-50">Conferir para quem vai</button>
-        <button onClick={disparar} disabled={!previa || ocupado || !previa.total} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+        <button onClick={conferir} disabled={!slug} className="rounded-xl bg-ds-surface px-4 py-2 text-sm font-bold text-ds-ink ring-1 ring-ds-line disabled:opacity-50">Conferir para quem vai</button>
+        <button onClick={disparar} disabled={!previa || ocupado || !previa.total} className="rounded-xl bg-ds-accent-strong px-4 py-2 text-sm font-bold text-ds-surface disabled:opacity-50">
           {previa ? `Enviar para ${previa.total}` : 'Enviar'}
         </button>
       </div>
 
       {previa && (
-        <div className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm">
-          <p className="font-bold text-emerald-900">{previa.total} cliente(s) — {previa.description}</p>
-          <ul className="mt-2 space-y-1 text-xs text-emerald-900">
+        <div className="mt-4 rounded-xl bg-ds-accent/10 p-3 text-sm">
+          <p className="font-bold text-ds-ink">{previa.total} cliente(s) — {previa.description}</p>
+          <ul className="mt-2 space-y-1 text-xs text-ds-ink">
             {previa.sample.map((user) => <li key={user.id}>{user.name} · {user.email}</li>)}
           </ul>
-          {previa.truncated && <p className="mt-1 text-xs text-emerald-800">…e mais {previa.total - previa.sample.length}.</p>}
+          {previa.truncated && <p className="mt-1 text-xs text-ds-accent-strong">…e mais {previa.total - previa.sample.length}.</p>}
         </div>
       )}
     </div>
@@ -466,15 +466,15 @@ function Enviar({ templates, onEnviado }) {
 function Historico({ batches, sends, onCancelar }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-        <h3 className="mb-3 text-sm font-black text-gray-900">Campanhas</h3>
-        {batches.length === 0 && <p className="text-sm text-gray-500">Nenhuma campanha enviada ainda.</p>}
+      <div className="rounded-2xl bg-ds-surface p-5 shadow-sm ring-1 ring-ds-line">
+        <h3 className="mb-3 text-sm font-black text-ds-ink">Campanhas</h3>
+        {batches.length === 0 && <p className="text-sm text-ds-ink-soft">Nenhuma campanha enviada ainda.</p>}
         <div className="space-y-2">
           {batches.map((batch) => (
-            <div key={batch.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-gray-50 p-3">
+            <div key={batch.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-ds-bg p-3">
               <div>
-                <p className="text-sm font-bold text-gray-800">{batch.name}</p>
-                <p className="text-xs text-gray-600">{batch.descricao || '—'} · criada em {formatDate(batch.createdAt)}</p>
+                <p className="text-sm font-bold text-ds-ink">{batch.name}</p>
+                <p className="text-xs text-ds-ink-soft">{batch.descricao || '—'} · criada em {formatDate(batch.createdAt)}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Chip tone="green">{batch.enviados} enviados</Chip>
@@ -482,7 +482,7 @@ function Historico({ batches, sends, onCancelar }) {
                 {batch.descartados > 0 && <Chip tone="amber">{batch.descartados} fora</Chip>}
                 {batch.erros > 0 && <Chip tone="red">{batch.erros} com erro</Chip>}
                 {batch.status === 'running' && (
-                  <button onClick={() => onCancelar(batch.id)} className="rounded-lg bg-white px-2 py-1 text-xs font-bold text-gray-700 ring-1 ring-gray-200">Cancelar</button>
+                  <button onClick={() => onCancelar(batch.id)} className="rounded-lg bg-ds-surface px-2 py-1 text-xs font-bold text-ds-ink ring-1 ring-ds-line">Cancelar</button>
                 )}
               </div>
             </div>
@@ -490,11 +490,11 @@ function Historico({ batches, sends, onCancelar }) {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-        <h3 className="mb-3 text-sm font-black text-gray-900">Últimos e-mails</h3>
+      <div className="rounded-2xl bg-ds-surface p-5 shadow-sm ring-1 ring-ds-line">
+        <h3 className="mb-3 text-sm font-black text-ds-ink">Últimos e-mails</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="text-gray-500">
+            <thead className="text-ds-ink-soft">
               <tr>
                 <th className="py-1 pr-3">Quando</th>
                 <th className="py-1 pr-3">E-mail</th>
@@ -504,21 +504,21 @@ function Historico({ batches, sends, onCancelar }) {
             </thead>
             <tbody>
               {sends.map((send) => (
-                <tr key={send.id} className="border-t border-gray-100">
-                  <td className="py-1 pr-3 text-gray-600">{formatDate(send.sentAt || send.createdAt)}</td>
-                  <td className="py-1 pr-3 font-medium text-gray-800">{send.name}</td>
-                  <td className="py-1 pr-3 text-gray-600">{send.email}</td>
+                <tr key={send.id} className="border-t border-ds-line">
+                  <td className="py-1 pr-3 text-ds-ink-soft">{formatDate(send.sentAt || send.createdAt)}</td>
+                  <td className="py-1 pr-3 font-medium text-ds-ink">{send.name}</td>
+                  <td className="py-1 pr-3 text-ds-ink-soft">{send.email}</td>
                   <td className="py-1 pr-3">
                     <Chip tone={send.status === 'sent' ? 'green' : send.status === 'error' ? 'red' : send.status === 'queued' ? 'blue' : 'amber'}>
                       {STATUS_LABEL[send.status] ?? send.status}
                     </Chip>
-                    {send.skipReason && <span className="ml-1 text-[11px] text-gray-500">{MOTIVO_LABEL[send.skipReason] ?? send.skipReason}</span>}
+                    {send.skipReason && <span className="ml-1 text-[10.5px] text-ds-ink-soft">{MOTIVO_LABEL[send.skipReason] ?? send.skipReason}</span>}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {sends.length === 0 && <p className="py-3 text-sm text-gray-500">Nada enviado ainda.</p>}
+          {sends.length === 0 && <p className="py-3 text-sm text-ds-ink-soft">Nada enviado ainda.</p>}
         </div>
       </div>
     </div>
@@ -668,25 +668,25 @@ function WhatsAppTab() {
     <div className="space-y-4">
       {erro && <Alert type="error" message={erro} />}
 
-      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+      <div className="rounded-2xl bg-ds-surface p-5 shadow-sm ring-1 ring-ds-line">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-black text-gray-900">Mandar mensagem</h3>
-          <div className="flex gap-1 rounded-xl bg-gray-100 p-1">
+          <h3 className="text-sm font-black text-ds-ink">Mandar mensagem</h3>
+          <div className="flex gap-1 rounded-xl bg-ds-bg-soft p-1">
             <button
               onClick={() => trocarModo('individual')}
-              className={`rounded-lg px-3 py-1 text-xs font-bold ${modo === 'individual' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
+              className={`rounded-lg px-3 py-1 text-xs font-bold ${modo === 'individual' ? 'bg-ds-surface shadow-sm' : 'text-ds-ink-soft'}`}
             >
               1 cliente
             </button>
             <button
               onClick={() => trocarModo('massa')}
-              className={`rounded-lg px-3 py-1 text-xs font-bold ${modo === 'massa' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
+              className={`rounded-lg px-3 py-1 text-xs font-bold ${modo === 'massa' ? 'bg-ds-surface shadow-sm' : 'text-ds-ink-soft'}`}
             >
               Todos do filtro
             </button>
           </div>
         </div>
-        <p className="mb-3 text-xs text-gray-500">
+        <p className="mb-3 text-xs text-ds-ink-soft">
           A mensagem chega no próprio celular da cliente, na conversa &quot;Mensagens para você mesmo&quot;. Só quem
           está com o WhatsApp conectado agora pode receber.
         </p>
@@ -698,11 +698,11 @@ function WhatsAppTab() {
             ['hasCredential', 'Tem credencial cadastrada'],
           ].map(([campo, rotulo]) => (
             <label key={campo} className="text-xs">
-              <span className="mb-1 block font-semibold text-gray-600">{rotulo}</span>
+              <span className="mb-1 block font-semibold text-ds-ink-soft">{rotulo}</span>
               <select
                 value={filtros[campo]}
                 onChange={(e) => setFiltros((f) => ({ ...f, [campo]: e.target.value }))}
-                className="w-full rounded-xl border border-gray-200 px-2 py-1.5 text-xs"
+                className="w-full rounded-xl border border-ds-line px-2 py-1.5 text-xs"
               >
                 {FILTRO_OPCOES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
@@ -711,9 +711,9 @@ function WhatsAppTab() {
         </div>
 
         {carregando ? (
-          <p className="text-sm text-gray-500">Carregando…</p>
+          <p className="text-sm text-ds-ink-soft">Carregando…</p>
         ) : filtrados.length === 0 ? (
-          <p className="text-sm text-gray-500">Nenhum cliente bate com esse filtro.</p>
+          <p className="text-sm text-ds-ink-soft">Nenhum cliente bate com esse filtro.</p>
         ) : (
           <div className="space-y-2">
             <input
@@ -721,14 +721,14 @@ function WhatsAppTab() {
               placeholder="Buscar por nome ou e-mail dentro do filtro…"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+              className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm"
             />
 
             {modo === 'individual' ? (
               <select
                 value={destinatarioId}
                 onChange={(e) => setDestinatarioId(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm"
               >
                 <option value="">Escolha o cliente… ({filtrados.length} no filtro)</option>
                 {filtrados.map((c) => (
@@ -738,7 +738,7 @@ function WhatsAppTab() {
                 ))}
               </select>
             ) : (
-              <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+              <p className="rounded-xl bg-ds-warn/10 px-3 py-2 text-xs font-semibold text-ds-warn-ink">
                 Vai mandar pra <strong>{elegiveisMassa.length}</strong> cliente(s) conectado(s) agora, dos{' '}
                 {filtrados.length} que batem no filtro{filtrados.length !== elegiveisMassa.length ? ' (o resto está desconectado)' : ''}.
               </p>
@@ -749,16 +749,16 @@ function WhatsAppTab() {
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
               placeholder="Escreva a mensagem…"
-              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+              className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm"
               maxLength={1000}
             />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-400">{texto.length}/1000</span>
+              <span className="text-xs text-ds-ink-faint">{texto.length}/1000</span>
               {modo === 'individual' ? (
                 <button
                   onClick={enviarIndividual}
                   disabled={enviando || !destinatarioId || texto.trim().length < 3}
-                  className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                  className="rounded-xl bg-ds-ink px-4 py-2 text-sm font-bold text-ds-surface disabled:opacity-40"
                 >
                   {enviando ? 'Enviando…' : 'Enviar'}
                 </button>
@@ -766,7 +766,7 @@ function WhatsAppTab() {
                 <button
                   onClick={enviarEmMassa}
                   disabled={enviando || elegiveisMassa.length === 0 || texto.trim().length < 3}
-                  className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                  className="rounded-xl bg-ds-ink px-4 py-2 text-sm font-bold text-ds-surface disabled:opacity-40"
                 >
                   {enviando ? 'Enviando…' : `Enviar para ${elegiveisMassa.length}`}
                 </button>
@@ -777,12 +777,12 @@ function WhatsAppTab() {
         )}
       </div>
 
-      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-        <h3 className="mb-3 text-sm font-black text-gray-900">Histórico de contato por WhatsApp</h3>
-        <p className="mb-3 text-xs text-gray-500">Mensagens automáticas (piloto de ativação) e manuais, mais recentes primeiro.</p>
+      <div className="rounded-2xl bg-ds-surface p-5 shadow-sm ring-1 ring-ds-line">
+        <h3 className="mb-3 text-sm font-black text-ds-ink">Histórico de contato por WhatsApp</h3>
+        <p className="mb-3 text-xs text-ds-ink-soft">Mensagens automáticas (piloto de ativação) e manuais, mais recentes primeiro.</p>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="text-gray-500">
+            <thead className="text-ds-ink-soft">
               <tr>
                 <th className="py-1 pr-3">Quando</th>
                 <th className="py-1 pr-3">Cliente</th>
@@ -792,18 +792,18 @@ function WhatsAppTab() {
             </thead>
             <tbody>
               {historico.map((h) => (
-                <tr key={h.id} className="border-t border-gray-100 align-top">
-                  <td className="py-1 pr-3 whitespace-nowrap text-gray-600">{formatDate(h.when)}</td>
-                  <td className="py-1 pr-3 font-medium text-gray-800">{h.clienteNome ? `${h.clienteNome} — ${h.clienteEmail}` : h.clienteEmail}</td>
+                <tr key={h.id} className="border-t border-ds-line align-top">
+                  <td className="py-1 pr-3 whitespace-nowrap text-ds-ink-soft">{formatDate(h.when)}</td>
+                  <td className="py-1 pr-3 font-medium text-ds-ink">{h.clienteNome ? `${h.clienteNome} — ${h.clienteEmail}` : h.clienteEmail}</td>
                   <td className="py-1 pr-3">
                     <Chip tone={h.manual ? 'blue' : 'gray'}>{h.motivo}</Chip>
                   </td>
-                  <td className="py-1 pr-3 max-w-xs truncate text-gray-600" title={h.texto ?? ''}>{h.texto ?? '—'}</td>
+                  <td className="py-1 pr-3 max-w-xs truncate text-ds-ink-soft" title={h.texto ?? ''}>{h.texto ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {historico.length === 0 && <p className="py-3 text-sm text-gray-500">Nenhum contato por WhatsApp ainda.</p>}
+          {historico.length === 0 && <p className="py-3 text-sm text-ds-ink-soft">Nenhum contato por WhatsApp ainda.</p>}
         </div>
       </div>
     </div>
@@ -869,19 +869,19 @@ export default function AdminContato({ modo = 'massa' }) {
     recarregar()
   }
 
-  if (carregando) return <main className="min-h-screen bg-gray-50 p-6"><LoadingState /></main>
+  if (carregando) return <main className="min-h-screen bg-ds-bg p-6"><LoadingState /></main>
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 md:p-6">
+    <main className="min-h-screen bg-ds-bg p-4 md:p-6">
       <div className="mx-auto max-w-6xl">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-black text-gray-900">{modo === 'modelos' ? 'Modelos de e-mail' : 'Contato em massa'}</h1>
-            <p className="text-sm text-gray-600">{modo === 'modelos'
+            <h1 className="text-[19px] font-black text-ds-ink">{modo === 'modelos' ? 'Modelos de e-mail' : 'Contato em massa'}</h1>
+            <p className="text-sm text-ds-ink-soft">{modo === 'modelos'
               ? 'Edite os textos dos e-mails automáticos e mande um teste para você.'
               : 'Dispare e-mail para um grupo de clientes, veja o histórico e mande WhatsApp direto pelo painel.'}</p>
           </div>
-          <Link href={modo === 'modelos' ? '/admin/operacao' : '/admin/clientes'} className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm ring-1 ring-gray-200">{modo === 'modelos' ? 'Voltar à Operação' : 'Voltar aos Clientes'}</Link>
+          <Link href={modo === 'modelos' ? '/admin/operacao' : '/admin/clientes'} className="rounded-xl bg-ds-surface px-4 py-2 text-sm font-bold text-ds-ink shadow-sm ring-1 ring-ds-line">{modo === 'modelos' ? 'Voltar à Operação' : 'Voltar aos Clientes'}</Link>
         </div>
 
         {erro && <Alert type="error" message={erro} />}
@@ -900,7 +900,7 @@ export default function AdminContato({ modo = 'massa' }) {
             <button
               key={valor}
               onClick={() => setAba(valor)}
-              className={`rounded-xl px-4 py-2 text-sm font-bold ${aba === valor ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 ring-1 ring-gray-200'}`}
+              className={`rounded-xl px-4 py-2 text-sm font-bold ${aba === valor ? 'bg-ds-ink text-ds-surface' : 'bg-ds-surface text-ds-ink ring-1 ring-ds-line'}`}
             >
               {label}
             </button>
@@ -913,18 +913,18 @@ export default function AdminContato({ modo = 'massa' }) {
             : (
               <div className="space-y-4">
                 {porGrupo.map(([grupo, lista]) => (
-                  <div key={grupo} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
-                    <h2 className="mb-2 text-sm font-black text-gray-900">{grupo}</h2>
+                  <div key={grupo} className="rounded-2xl bg-ds-surface p-4 shadow-sm ring-1 ring-ds-line">
+                    <h2 className="mb-2 text-sm font-black text-ds-ink">{grupo}</h2>
                     <div className="space-y-1">
                       {lista.map((template) => (
                         <button
                           key={template.slug}
                           onClick={() => setSlugAberto(template.slug)}
-                          className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-left hover:bg-gray-50"
+                          className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-left hover:bg-ds-bg"
                         >
                           <div>
-                            <p className="text-sm font-bold text-gray-800">{template.name}</p>
-                            <p className="text-xs text-gray-500">{template.description}</p>
+                            <p className="text-sm font-bold text-ds-ink">{template.name}</p>
+                            <p className="text-xs text-ds-ink-soft">{template.description}</p>
                           </div>
                           <div className="flex items-center gap-1">
                             <Chip tone={template.category === 'marketing' ? 'amber' : 'gray'}>{CATEGORIA_LABEL[template.category]}</Chip>
