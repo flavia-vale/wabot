@@ -65,7 +65,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
    */
   'shopee-afiliados-whatsapp': {
     path: '/shopee-afiliados-whatsapp',
-    title: 'Shopee Afiliados: divulgar no WhatsApp sem copiar',
+    // 03/10/2026 (Frente 3, item 11 da análise SEO+GEO): "7 dias grátis" no
+    // título, como nas páginas de rede e na de Amazon (que já tinha).
+    title: 'Shopee Afiliados no WhatsApp: 7 dias grátis',
     description: 'Já é afiliada Shopee? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu link, sem copiar e colar oferta por oferta. 7 dias grátis.',
     eyebrow: 'Shopee Afiliados',
     h1: 'Shopee Afiliados: como divulgar suas ofertas no WhatsApp sem copiar e colar',
@@ -152,7 +154,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
    * a afiliada, não argumento de venda. */
   'mercado-livre-afiliados-whatsapp': {
     path: '/mercado-livre-afiliados-whatsapp',
-    title: 'Afiliado Mercado Livre: divulgar no WhatsApp',
+    // 03/10/2026 (Frente 3, item 11 da análise SEO+GEO): "7 dias grátis" no
+    // título, como nas páginas de rede e na de Amazon (que já tinha).
+    title: 'Afiliado Mercado Livre no WhatsApp: 7 dias grátis',
     description: 'Já é afiliada do Mercado Livre? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu link, sem copiar e colar oferta por oferta.',
     eyebrow: 'Mercado Livre Afiliados',
     h1: 'Afiliado do Mercado Livre: como divulgar suas ofertas no WhatsApp sem copiar e colar',
@@ -314,7 +318,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
    * lojas essa parte NÃO é garantida. */
   'magalu-afiliados-whatsapp': {
     path: '/magalu-afiliados-whatsapp',
-    title: 'Divulgador Magalu: publicar ofertas no WhatsApp',
+    // 03/10/2026 (Frente 3, item 11 da análise SEO+GEO): "7 dias grátis" no
+    // título, como nas páginas de rede e na de Amazon (que já tinha).
+    title: 'Divulgador Magalu no WhatsApp: 7 dias grátis',
     description: 'Já é divulgadora do Magalu? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu código, sem copiar e colar oferta por oferta.',
     eyebrow: 'Divulgador Magalu',
     h1: 'Divulgador Magalu: como publicar suas ofertas no WhatsApp sem copiar e colar',
@@ -384,7 +390,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
    * código (src/converters/shein.js) — não é promessa de marketing. */
   'shein-afiliados-whatsapp': {
     path: '/shein-afiliados-whatsapp',
-    title: 'SHEIN Afiliados: divulgar no WhatsApp',
+    // 03/10/2026 (Frente 3, item 11 da análise SEO+GEO): "7 dias grátis" no
+    // título, como nas páginas de rede e na de Amazon (que já tinha).
+    title: 'SHEIN Afiliados no WhatsApp: 7 dias grátis',
     description: 'Já é afiliada SHEIN? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu link curto, sem copiar e colar oferta por oferta.',
     eyebrow: 'SHEIN Afiliados',
     h1: 'SHEIN Afiliados: como divulgar suas ofertas no WhatsApp sem copiar e colar',

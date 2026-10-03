@@ -26,15 +26,22 @@ import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 const HOME_META_DESCRIPTION =
   'O Espelha Grupos converte o link de afiliado de 6 lojas e das lojas da Awin e da Rakuten (KaBuM, Netshoes) e publica as ofertas nos grupos do WhatsApp.'
 
+const HOME_TITLE = 'Bot de afiliados para WhatsApp: 7 dias grátis | Espelha Grupos'
+
 export const metadata = {
   // `absolute` porque o título da home já termina na marca — sem isso o template
   // do layout raiz (`%s | Espelha Grupos`) somaria a marca de novo e o título
   // sairia duplicado, que é exatamente o defeito apontado no P3 do estudo.
-  title: { absolute: 'Espelha Grupos | Bot para afiliados espelhar ofertas no WhatsApp' },
+  // 03/10/2026 (Frente 3, item 9 da análise SEO+GEO de 02/10): a home só
+  // clicava por marca. O cliente e 6 dos 8 concorrentes escrevem "bot de
+  // afiliados"; "espelhar" no Google é tela/Canva. A palavra de entrada vai
+  // para o começo, "7 dias grátis" (Autocomplete: "grátis") vem logo depois e
+  // "espelhar" fica no corpo. 62 chars: cabe no teto de 70 do Bing.
+  title: { absolute: HOME_TITLE },
   description: HOME_META_DESCRIPTION,
   alternates: { canonical: '/' },
   openGraph: {
-    title: 'Espelha Grupos | Bot para afiliados espelhar ofertas no WhatsApp',
+    title: HOME_TITLE,
     description: HOME_META_DESCRIPTION,
     url: '/',
     // A home não declarava imagem nenhuma (RCA 2026-09-18) — o card de prévia
