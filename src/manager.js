@@ -155,13 +155,22 @@ export async function listRunningBotsByNode() {
  * por nó está ligado (modo `remote`); senão `null` e quem chama usa o caminho
  * legado. Nunca lança; campos não medidos vêm `null`.
  */
-export async function getNodeRoutingInfo(userId) {
+export async function getNodeRoutingInfo(userId, { includeReservations = false } = {}) {
   if (MODE !== 'remote' || !remoteClient?.nodeRouting) return null
   try {
     const nodeId = await remoteClient.resolveNodeId(userId)
     const [alive, counts, caps] = await Promise.all([remoteClient.isSupervisorAlive(nodeId), remoteClient.listRunningBotsByNode(), remoteClient.getNodeCapacities()])
-    return { nodeId, alive: Boolean(alive), running: counts?.[nodeId] ?? null, max: caps?.[nodeId] ?? null }
+    let running = counts?.[nodeId] ?? null
+    // Revisão V3: para DECIDIR ligar mais um robô, soma as vagas já prometidas.
+    if (includeReservations && running !== null) running += await remoteClient.getPlacementReservation(nodeId)
+    return { nodeId, alive: Boolean(alive), running, max: caps?.[nodeId] ?? null }
   } catch {
     return { nodeId: null, alive: null, running: null, max: null }
   }
+}
+
+/** Revisão V3: segura 1 vaga no nó por 2 min (a contagem tem cache). No-op fora do roteamento. */
+export async function reserveNodeSlot(nodeId) {
+  if (MODE !== 'remote' || !remoteClient?.nodeRouting || !nodeId) return
+  try { await remoteClient.reservePlacement(nodeId) } catch {}
 }

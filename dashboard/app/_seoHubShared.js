@@ -8,9 +8,10 @@ import { getHubSeoRoute, getSeoRoutesByCluster, buildSeoRobots } from '@/lib/seo
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
 import { getEditorialDates } from '@/lib/editorial-content'
-import { SUPPORTED_STORES } from '@/lib/marketing-content'
+import { STORES_FACT_PT, SUPPORTED_STORES } from '@/lib/marketing-content'
 import { AUTOMATION_MODELS, BASIC_PRICE_LABEL, PRO_PRICE_LABEL, OUR_MODEL_COVERAGE, buildCompetitorModelRows } from '@/lib/automation-models'
 import { fraseNumerosProprios } from '@/lib/resposta-citavel'
+import { ModelToolsTable } from '@/components/marketing/ModelToolsTable'
 
 const HUB_CONTENT = {
   /* ESPELHAMENTO — a categoria principal do produto, reescrita em 2026-09-02.
@@ -123,7 +124,7 @@ const HUB_CONTENT = {
     eyebrow: 'Automação para afiliadas',
     title: 'Automação de afiliados no WhatsApp: 3 modelos, 8 bots',
     description: 'Espelhador de grupos, garimpo automático e formatador: o que cada modelo faz, para quem serve e 8 ferramentas comparadas com preço datado. A partir de R$ 39.',
-    intro: `Automação para afiliados no WhatsApp é um software que publica ofertas com o seu código de afiliada nos seus grupos e canais, sem copiar e colar. O mercado se divide em três modelos: espelhador de grupos, garimpo automático e formatador de oferta. O Espelha Grupos tem os três numa conta só, em ${SUPPORTED_STORES.length} lojas, a partir de ${BASIC_PRICE_LABEL} (Basic) ou ${PRO_PRICE_LABEL} (Pro), com 7 dias grátis sem cartão.`,
+    intro: `Automação para afiliados no WhatsApp é um software que publica ofertas com o seu código de afiliada nos seus grupos e canais, sem copiar e colar. O mercado se divide em três modelos: espelhador de grupos, garimpo automático e formatador de oferta. O Espelha Grupos tem os três numa conta só, em ${SUPPORTED_STORES.length} lojas e nas lojas em que você é aprovada na Awin e na Rakuten, a partir de ${BASIC_PRICE_LABEL} (Basic) ou ${PRO_PRICE_LABEL} (Pro), com 7 dias grátis sem cartão.`,
     // Topo citável (29/09/2026): o card de abertura vira pergunta e soma os 2
     // números próprios com fonte. O `intro` (o que é, para quem, quanto custa)
     // já vinha de 27/09 e não mudou.
@@ -143,7 +144,7 @@ const HUB_CONTENT = {
       title: 'Veja também',
       links: [
         { href: '/melhores-bots-para-afiliados-whatsapp', label: 'Como comparar bots para afiliados no WhatsApp', note: 'Os critérios de avaliação, sem ranking falso.' },
-        { href: '/bot-afiliados-whatsapp', label: 'Bot para afiliados no WhatsApp', note: 'O espelhador com conversão em 6 lojas, preço e teste grátis.' },
+        { href: '/bot-afiliados-whatsapp', label: 'Bot para afiliados no WhatsApp', note: 'O espelhador com conversão em 6 lojas + Awin e Rakuten, preço e teste grátis.' },
         { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'Bot que busca ofertas da Shopee sozinho', note: 'O garimpo por tema e desconto mínimo, plano Pro.' },
         { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar grupos vale a pena?', note: 'Quando compensa e quando não.' },
         { href: '/precos', label: 'Preços e planos', note: 'Basic, Pro e o que entra em cada um.' },
@@ -152,7 +153,7 @@ const HUB_CONTENT = {
     plainAnswers: [
       {
         q: 'O que é automação para afiliados no WhatsApp?',
-        a: `É um software que publica ofertas com o seu código de afiliada nos seus grupos e canais do WhatsApp sem você copiar e colar. Existem três modelos: o espelhador republica o que aparece nos grupos que você já segue; o garimpo procura a oferta sozinho na loja por tema e desconto; o formatador monta a oferta a partir de um link que você cola. O Espelha Grupos faz os três, em ${SUPPORTED_STORES.length} lojas.`,
+        a: `É um software que publica ofertas com o seu código de afiliada nos seus grupos e canais do WhatsApp sem você copiar e colar. Existem três modelos: o espelhador republica o que aparece nos grupos que você já segue; o garimpo procura a oferta sozinho na loja por tema e desconto; o formatador monta a oferta a partir de um link que você cola. O Espelha Grupos faz os três, em ${STORES_FACT_PT}.`,
       },
       {
         q: 'Qual dos três modelos eu preciso?',
@@ -160,7 +161,7 @@ const HUB_CONTENT = {
       },
       {
         q: 'O Espelha Grupos é espelhador, garimpo ou formatador?',
-        a: `Os três, na mesma conta. O espelhamento está no Basic e no Pro, em ${SUPPORTED_STORES.join(', ')}, sem teto de grupos. O garimpo automático está no Pro e hoje é só na Shopee, por palavra-chave e desconto mínimo. O "Criar oferta" a partir de um link está no Basic e no Pro.`,
+        a: `Os três, na mesma conta. O espelhamento está no Basic e no Pro, em ${SUPPORTED_STORES.join(', ')} e nas lojas aprovadas na Awin e na Rakuten, sem teto de grupos. O garimpo automático está no Pro e hoje é só na Shopee, por palavra-chave e desconto mínimo. O "Criar oferta" a partir de um link está no Basic e no Pro.`,
       },
       {
         q: 'Quanto custa?',
@@ -172,7 +173,7 @@ const HUB_CONTENT = {
       },
       {
         q: 'Qual ferramenta cobre mais lojas?',
-        a: `Pela ficha de cada uma: o Gigi Bot lista 9 lojas no plano gratuito (mas só envia sozinho para o WhatsApp no plano mais caro); a Afilira soma Awin, Terabyte e SHEIN a partir do Professional; o Espelha Grupos converte ${SUPPORTED_STORES.length} lojas desde o plano de entrada, sem cobrar por grupo. A tabela acima mostra loja por loja.`,
+        a: `Pela ficha de cada uma: o Gigi Bot lista 9 lojas no plano gratuito (mas só envia sozinho para o WhatsApp no plano mais caro); a Afilira soma Awin, Terabyte e SHEIN a partir do Professional; o Espelha Grupos converte ${STORES_FACT_PT} desde o plano de entrada, sem cobrar por grupo. A tabela acima mostra loja por loja.`,
       },
       {
         q: 'Automação para afiliados é o mesmo que disparo em massa?',
@@ -193,12 +194,6 @@ function jsonLd(data) {
 
 // Tabela dos 3 modelos × ferramentas (hub de automação). Mesmos tokens da
 // tabela de preço de _preservationCommercialPages.js.
-const hubTable = {
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: 14.5, minWidth: 880 },
-  th: { textAlign: 'left', padding: '12px 10px', borderBottom: '2px solid var(--line)', fontSize: 12.5, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--ink-soft)' },
-  td: { padding: '12px 10px', borderTop: '1px solid var(--line)', verticalAlign: 'top', lineHeight: 1.55, color: 'var(--ink)' },
-}
-
 export function getSeoHubMetadata(hubSlug) {
   const route = getHubSeoRoute(`/${hubSlug}`)
   if (!route) return {}
@@ -409,43 +404,7 @@ export function SeoHubPage({ hubSlug }) {
               <span className="pill"><span className="dot" />Ferramentas com ficha</span>
               <h2 id="hub-tools-title" style={{ fontSize: 'clamp(28px, 3vw, 40px)', lineHeight: 1.1, marginTop: 14 }}>{content.toolsTable.title}</h2>
               <p style={{ marginTop: 12, fontSize: 15.5, lineHeight: 1.7, color: 'var(--ink-soft)', maxWidth: 760 }}>{content.toolsTable.body}</p>
-              <div style={{ overflowX: 'auto', marginTop: 20 }}>
-                <table style={hubTable.table}>
-                  <thead>
-                    <tr>
-                      <th style={hubTable.th}>Ferramenta</th>
-                      <th style={hubTable.th}>Espelhador</th>
-                      <th style={hubTable.th}>Garimpo automático</th>
-                      <th style={hubTable.th}>Formatador (oferta do link)</th>
-                      <th style={hubTable.th}>Lojas</th>
-                      <th style={hubTable.th}>Preço de entrada (data da ficha)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={hubTable.td}><strong>{OUR_MODEL_COVERAGE.name}</strong></td>
-                      <td style={hubTable.td}>{OUR_MODEL_COVERAGE.espelhador}</td>
-                      <td style={hubTable.td}>{OUR_MODEL_COVERAGE.garimpo}</td>
-                      <td style={hubTable.td}>{OUR_MODEL_COVERAGE.formatador}</td>
-                      <td style={hubTable.td}>{OUR_MODEL_COVERAGE.stores}</td>
-                      <td style={hubTable.td}>{OUR_MODEL_COVERAGE.entryPrice}</td>
-                    </tr>
-                    {toolRows.map((row) => (
-                      <tr key={row.slug}>
-                        <td style={hubTable.td}><Link href={row.href} data-seo-cta="hub-tool-comparison" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>{row.name}</Link></td>
-                        <td style={hubTable.td}>{row.espelhador}</td>
-                        <td style={hubTable.td}>{row.garimpo}</td>
-                        <td style={hubTable.td}>{row.formatador}</td>
-                        <td style={hubTable.td}>{row.stores}</td>
-                        <td style={hubTable.td}>{row.entryPrice}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p style={{ marginTop: 14, fontSize: 13, lineHeight: 1.6, color: 'var(--ink-soft)' }}>
-                &quot;—&quot; = a ficha da ferramenta não informa. Preço de entrada é o primeiro plano com preço publicado, no valor recorrente, conferido na data entre parênteses; o Shozap não tem preço citado aqui. O Espelha Grupos cobra {BASIC_PRICE_LABEL} no Basic e {PRO_PRICE_LABEL} no Pro, sem cobrar por grupo.
-              </p>
+              <ModelToolsTable rows={toolRows} />
             </div>
           </div>
         </section>

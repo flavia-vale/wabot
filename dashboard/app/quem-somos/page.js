@@ -1,21 +1,43 @@
 import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
-import { BRAND_LINKEDIN_URL, BRAND_YOUTUBE_URL, SISTER_SITES, SUPPORTED_STORES } from '@/lib/marketing-content'
+import { BRAND_LINKEDIN_URL, BRAND_YOUTUBE_URL, DEFAULT_LANDING_PLANS, SISTER_SITES, STORES_FACT_PT } from '@/lib/marketing-content'
 import { FICHA_DEFINICAO } from '@/lib/ficha-tecnica'
 import { EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
 import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
+// Página-resposta de marca (Frente 1, item 2 da análise SEO+GEO de
+// 02/10/2026, G2): em janela anônima o ChatGPT não reconhecia o nome ("pode
+// ser uma ferramenta ou a descrição de uma função"). Em vez de criar
+// /o-que-e-espelha-grupos (página nova nasce sem força e precisa de 3 links),
+// /quem-somos — já indexada — passa a responder "o que é" no título e no H1,
+// com o quadro "o que é / o que faz / o que não faz / preço / garantia".
 export const metadata = {
-  title: 'Quem Somos',
-  description: 'Conheça o Espelha Grupos: quem faz, o que o produto faz e o que ele não promete. Bot para afiliadas espelhar ofertas no WhatsApp com o próprio código de afiliada.',
+  title: { absolute: 'O que é o Espelha Grupos: bot de afiliados no WhatsApp' },
+  description: 'O que é o Espelha Grupos, para quem é, o que faz e o que não faz (Telegram, API oficial), preço, garantia de 7 dias e quem está por trás.',
   alternates: { canonical: '/quem-somos' },
 }
+
+const planoPorId = (id) => DEFAULT_LANDING_PLANS.find((plan) => plan.id === id)
+const basic = planoPorId('basic')
+const pro = planoPorId('pro')
+
+// "O que é" em fatos curtos, cada um verificável no código (ficha técnica,
+// src/billing/plans.js, src/core/mirrorLinkGuard.js). Sem "não bane", sem
+// Telegram prometido, sem preço de concorrente.
+const RESPOSTA_DE_MARCA = [
+  { rotulo: 'O que é', valor: 'Um bot de afiliados para WhatsApp: um robô na nuvem que publica ofertas com o seu código de afiliada nos seus grupos e canais, sem copiar e colar.' },
+  { rotulo: 'Para quem', valor: 'Afiliadas e afiliados que divulgam ofertas (achadinhos) em grupos e canais próprios do WhatsApp.' },
+  { rotulo: 'O que faz', valor: `Espelha as ofertas dos grupos que você já segue, troca o link pelo seu código em ${STORES_FACT_PT}, monta a oferta a partir de um link e, no Pro, busca ofertas da Shopee sozinho.` },
+  { rotulo: 'Trava de link', valor: 'Se a troca do link falhar, a oferta não é publicada: o link de outra pessoa nunca sai no seu grupo.' },
+  { rotulo: 'O que não faz', valor: 'Não envia para Telegram nem para Instagram. Não usa a API oficial do WhatsApp Business: conecta como o WhatsApp Web, pelo QR Code. Não promete ganho nem que o número não será bloqueado.' },
+  { rotulo: 'Preço e garantia', valor: `7 dias grátis com o Pro completo, sem cartão. Depois, Basic ${basic.price} ou Pro ${pro.price} a cada ${basic.period}. Reembolso integral em até 7 dias corridos depois do pagamento.` },
+]
 
 export default function AboutPage() {
   return (
     <PublicPage
       eyebrow="Quem somos"
-      title="Espelha Grupos ajuda afiliados a operar com mais consistência no WhatsApp"
+      title="O que é o Espelha Grupos"
       description={FICHA_DEFINICAO}
     >
       {/*
@@ -28,9 +50,17 @@ export default function AboutPage() {
         Guarda: test/ficha-tecnica-canonica.test.js.
       */}
       <div className="space-y-5 text-sm leading-7 text-gray-600">
+        <dl className="grid gap-3 rounded-2xl border border-gray-200 bg-white p-5 md:grid-cols-2">
+          {RESPOSTA_DE_MARCA.map((item) => (
+            <div key={item.rotulo}>
+              <dt className="font-bold text-gray-950">{item.rotulo}</dt>
+              <dd className="mt-1">{item.valor}</dd>
+            </div>
+          ))}
+        </dl>
         <p>
           Na prática são três modos na mesma conta. No espelhamento, o robô acompanha os grupos e canais que você escolhe
-          e republica cada oferta com o seu código de afiliada, em {SUPPORTED_STORES.length} lojas ({SUPPORTED_STORES.join(', ')}).
+          e republica cada oferta com o seu código de afiliada, em {STORES_FACT_PT}.
           Em &ldquo;Criar oferta&rdquo;, você cola o seu link e o robô busca nome, preço e foto e monta a oferta para os seus grupos.
           Nas{' '}
           <Link href="/bot-que-busca-ofertas-shopee-whatsapp" className="font-bold text-green-700 underline underline-offset-4">

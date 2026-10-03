@@ -11,6 +11,7 @@ import {
   BRAND_ORG_NAME,
   BRAND_PRODUCT_NAME,
   PRICING_PRODUCT_DESCRIPTION,
+  STORES_FACT_PT,
   SUPPORTED_STORES,
   SUPPORT_HOURS,
   SUPPORT_RESPONSE_SLA,
@@ -78,7 +79,7 @@ const BILLING_FAQ = [
     q: 'Qual a diferença entre o Basic e o Pro?',
     // Lojas vêm da constante (eram 4 escritas à mão aqui enquanto o produto já
     // cobria 6 — o mesmo defeito do RCA 2026-09-18, em outro arquivo).
-    a: `O Basic cobre a operação automática em grupos: espelhamento dos grupos de origem para os de destino, conversão dos links de ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}), criação de oferta e agendamento. O Pro acrescenta canais do WhatsApp, ofertas automáticas da Shopee por tema e desconto mínimo, filas com limite por hora e por dia, variação do texto, marca d'água e o painel de vendas da Shopee. A ficha técnica completa está logo acima.`,
+    a: `O Basic cobre a operação automática em grupos: espelhamento dos grupos de origem para os de destino, conversão dos links de ${STORES_FACT_PT}, criação de oferta e agendamento. O Pro acrescenta canais do WhatsApp, ofertas automáticas da Shopee por tema e desconto mínimo, filas com limite por hora e por dia, variação do texto, marca d'água e o painel de vendas da Shopee. A ficha técnica completa está logo acima.`,
   },
   {
     q: 'Dá para trocar de plano depois?',
@@ -200,7 +201,7 @@ export default async function PrecosPage() {
           >
             Teste 7 dias com tudo liberado, sem cartão. Depois, {precoPorPlano},
             sem fidelidade e com cancelamento pelo próprio painel. O {BRAND_ORG_NAME} é um robô para afiliadas que
-            publicam ofertas em grupos e canais do WhatsApp com o próprio código de afiliada, em {SUPPORTED_STORES.length} lojas.
+            publicam ofertas em grupos e canais do WhatsApp com o próprio código de afiliada, em {SUPPORTED_STORES.length} lojas e nas lojas da Awin e da Rakuten em que são aprovadas.
           </p>
           {/* Topo citável (29/09/2026): 2 números próprios com a fonte na mesma frase. */}
           <p style={{ fontSize: 14.5, color: 'var(--ink-soft)', maxWidth: 640, margin: '12px auto 0', lineHeight: 1.6 }}>
