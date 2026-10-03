@@ -99,15 +99,12 @@ test('Hoje: faixa usa só token e o rótulo escrito vai junto da cor', () => {
 })
 
 test('voz leiga no admin migrado: sem jargão que o DS Admin proíbe na tela', () => {
-  const proibidos = ['GO / NO-GO', 'GO/NO-GO', 'Volumetria operacional', 'ADMIN_MFA_TOKEN', 'tech:write', 'webhook(s) parados']
+  const proibidos = ['GO / NO-GO', 'GO/NO-GO', 'Volumetria operacional', 'ADMIN_MFA_TOKEN', 'webhook(s)', 'mensagem técnica', 'Somente leitura', 'Token MFA', 'Payment DLQ', 'tech:write']
   for (const rel of TELAS_MIGRADAS) {
-    const src = read(rel)
-    // só texto que a dona lê: JSX e strings; comentários podem citar o termo
-    const visivel = semComentarios(src)
+    // comentários podem citar o termo; a checagem de permissão (includes('tech:write')) é código, não texto de tela
+    const visivel = semComentarios(read(rel)).replace(/includes\((['"])tech:write\1\)/g, 'includes(PERM)')
     for (const termo of proibidos) {
-      // permissão e variável de ambiente aparecem em código (checagem de permissão); só barra dentro de texto de tela
-      const naTela = new RegExp(`>[^<>{}]*${termo.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}[^<>{}]*<`).test(visivel)
-      assert.ok(!naTela, `jargão "${termo}" na tela em ${rel}`)
+      assert.ok(!visivel.includes(termo), `jargão "${termo}" na tela em ${rel}`)
     }
   }
 })

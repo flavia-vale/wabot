@@ -7,10 +7,10 @@ import { api } from '@/lib/api'
 // fila de webhooks de pagamento (DLQ) com reprocessar + confirmação.
 
 const TONS = {
-  ok: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  warn: 'border-amber-200 bg-amber-50 text-amber-800',
-  critical: 'border-red-200 bg-red-50 text-red-700',
-  info: 'border-gray-200 bg-gray-50 text-gray-700',
+  ok: 'border-ds-accent/40 bg-ds-accent/10 text-ds-accent-strong',
+  warn: 'border-ds-warn/40 bg-ds-warn/10 text-ds-warn-ink',
+  critical: 'border-ds-danger/40 bg-ds-danger/10 text-ds-danger',
+  info: 'border-ds-line bg-ds-bg text-ds-ink',
 }
 
 function numberFmt(value) {
@@ -39,7 +39,7 @@ function toneOf(severity) {
 function Chip({ label, value, tone }) {
   return (
     <div className={`rounded-xl border px-3 py-2 ${TONS[tone] || TONS.info}`}>
-      <p className="text-[11px] font-black uppercase tracking-wide opacity-70">{label}</p>
+      <p className="text-[10.5px] font-black uppercase tracking-wide opacity-70">{label}</p>
       <p className="text-lg font-black">{value}</p>
     </div>
   )
@@ -87,7 +87,7 @@ function PaymentDlqRunbook({ dlqOpen, lastPrune, onReprocessed }) {
   async function runReprocess() {
     const abertos = Number(health?.dlqOpen ?? dlqOpen ?? 0)
     // Mexe em pagamento e pode liberar acesso: nunca sem confirmar (Q4 da auditoria).
-    if (!window.confirm(`Reprocessar ${numberFmt(abertos)} webhook(s) de pagamento agora? Isso reconcilia com o Mercado Pago e pode liberar acesso de clientes. Continuar?`)) return
+    if (!window.confirm(`Conferir de novo ${numberFmt(abertos)} pagamento(s) parado(s) agora? Isso confere com o Mercado Pago e pode liberar acesso de clientes. Continuar?`)) return
     setBusy(true)
     setResult(null)
     setFeedbackError('')
@@ -107,7 +107,7 @@ function PaymentDlqRunbook({ dlqOpen, lastPrune, onReprocessed }) {
       await refreshStatus()
       await onReprocessed?.()
     } catch (err) {
-      setFeedbackError(err?.message || 'Falha ao reprocessar webhooks pendentes.')
+      setFeedbackError(err?.message || 'Falha ao conferir os pagamentos de novo.')
     } finally {
       setBusy(false)
     }
@@ -121,16 +121,16 @@ function PaymentDlqRunbook({ dlqOpen, lastPrune, onReprocessed }) {
     <div className={`mt-4 rounded-2xl border p-4 ${TONS[tone]}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] opacity-70">Pagamentos pendentes de conferência</p>
-          <p className="mt-1 text-sm font-black">{numberFmt(open)} webhook(s) parados · {numberFmt(health?.pendingLast24h ?? 0)} pagamento(s) pendentes (24h)</p>
+          <p className="text-[10.5px] font-black uppercase tracking-[0.08em] opacity-70">Pagamentos pendentes de conferência</p>
+          <p className="mt-1 text-sm font-black">{numberFmt(open)} pagamento(s) esperando conferência · {numberFmt(health?.pendingLast24h ?? 0)} pagamento(s) pendentes (24h)</p>
           <p className="mt-1 text-xs opacity-80">Última limpeza da fila de envio: {lastPrune ? safeDate(lastPrune) : 'sem registro'}</p>
         </div>
         <button
           onClick={runReprocess}
           disabled={busy || open === 0}
-          className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-xl bg-ds-ink px-4 py-2 text-sm font-black text-ds-surface disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {busy ? 'Reprocessando…' : 'Reprocessar webhooks pendentes'}
+          {busy ? 'Conferindo…' : 'Conferir pagamentos de novo'}
         </button>
       </div>
 
@@ -139,33 +139,33 @@ function PaymentDlqRunbook({ dlqOpen, lastPrune, onReprocessed }) {
       </div>
 
       <p className="mt-3 text-xs leading-relaxed opacity-80">
-        Antes de reprocessar, confirme que o Mercado Pago está respondendo acima (token válido). A fila enche quando a
-        reconciliação contra o MP falha — quase sempre por <code>MP_ACCESS_TOKEN</code> expirado/revogado ou instabilidade
-        do provedor. Reprocessar com a conexão ainda quebrada só devolve os itens à fila.
+        Antes de conferir de novo, veja acima se o Mercado Pago está respondendo (chave válida). A lista enche quando a
+        conferência com o Mercado Pago falha — quase sempre por chave vencida ou revogada, ou por instabilidade
+        do Mercado Pago. Conferir com a conexão ainda quebrada só devolve os itens para a lista.
       </p>
 
       <label className="mt-4 block text-xs font-bold opacity-80">
-        Token MFA (x-admin-mfa-token) — necessário para reconciliar contra o Mercado Pago
+        Código de confirmação — necessário para conferir com o Mercado Pago
         <input
           type="password"
           value={mfaToken}
           onChange={(e) => setMfaToken(e.target.value)}
-          placeholder="ADMIN_MFA_TOKEN"
+          placeholder="Código de confirmação"
           autoComplete="off"
-          className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          className="mt-1 w-full rounded-xl border border-ds-line bg-ds-surface px-3 py-2 text-xs text-ds-ink focus:outline-none focus:ring-2 focus:ring-ds-accent-strong"
         />
       </label>
 
-      {feedbackError && <p className="mt-3 rounded-xl bg-red-100 p-3 text-xs font-bold text-red-700">{feedbackError}</p>}
+      {feedbackError && <p className="mt-3 rounded-xl bg-ds-danger/20 p-3 text-xs font-bold text-ds-danger">{feedbackError}</p>}
 
       {result && (
-        <div className="mt-3 space-y-1 rounded-xl bg-white/70 p-3 text-xs leading-relaxed">
-          <p>Re-enfileirados: <strong>{numberFmt(result.requeue?.resolved)}</strong> de {numberFmt(result.requeue?.picked)} selecionados.</p>
+        <div className="mt-3 space-y-1 rounded-xl bg-ds-surface/70 p-3 text-xs leading-relaxed">
+          <p>Voltaram para a lista: <strong>{numberFmt(result.requeue?.resolved)}</strong> de {numberFmt(result.requeue?.picked)} selecionados.</p>
           {result.processed
-            ? <p>Reconciliados contra o Mercado Pago: <strong>{numberFmt(result.processed?.processed)}</strong> processados · {numberFmt(result.processed?.failed)} falhas (lote de {numberFmt(result.processed?.total)}).</p>
+            ? <p>Conferidos com o Mercado Pago: <strong>{numberFmt(result.processed?.processed)}</strong> processados · {numberFmt(result.processed?.failed)} falhas (lote de {numberFmt(result.processed?.total)}).</p>
             : result.mfaRequired
-              ? <p className="text-amber-800">Itens re-enfileirados, mas a reconciliação exige token MFA válido. Informe o <code>ADMIN_MFA_TOKEN</code> acima e reprocesse, ou aguarde o processador periódico.</p>
-              : <p className="text-amber-800">Reconciliação não executada.</p>}
+              ? <p className="text-ds-warn-ink">Os itens voltaram para a lista, mas a conferência exige o código de confirmação. Preencha o campo acima e confira de novo, ou aguarde a conferência automática.</p>
+              : <p className="text-ds-warn-ink">A conferência não foi feita.</p>}
         </div>
       )}
     </div>
@@ -193,18 +193,18 @@ export default function SaudeSection() {
   const alertas = obs?.alerts ?? []
 
   return (
-    <section id="saude" className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+    <section id="saude" className="rounded-2xl bg-ds-surface p-5 shadow-sm ring-1 ring-ds-line">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400">Saúde</p>
-          <h2 className="text-lg font-black text-gray-900">Pode subir para produção? (GO / NO-GO)</h2>
+          <p className="text-[10.5px] font-black uppercase tracking-[0.08em] text-ds-ink-faint">Saúde</p>
+          <h2 className="text-lg font-black text-ds-ink">Pode subir para produção?</h2>
         </div>
-        <span className={`rounded-full border px-4 py-1 text-xs font-black uppercase tracking-wide ${go ? TONS.ok : TONS.critical}`}>{gate ? (go ? 'go' : 'no-go') : '—'}</span>
+        <span className={`rounded-full border px-4 py-1 text-xs font-black tracking-wide ${go ? TONS.ok : TONS.critical}`}>{gate ? (go ? 'Pode subir' : 'Não suba agora') : '—'}</span>
       </div>
-      {erro && <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{erro}</p>}
+      {erro && <p className="mt-3 rounded-xl bg-ds-danger/10 p-3 text-xs font-bold text-ds-danger">{erro}</p>}
       <div className="mt-4 grid gap-3 sm:grid-cols-4">
         <Chip label="Banco" value={gate?.dbOk ? 'OK' : 'Falha'} tone={gate?.dbOk ? 'ok' : 'critical'} />
-        <Chip label="Erros 5xx" value={numberFmt(obs?.api?.total5xx)} tone={(obs?.api?.total5xx ?? 0) > 0 ? 'warn' : 'ok'} />
+        <Chip label="Erros do servidor" value={numberFmt(obs?.api?.total5xx)} tone={(obs?.api?.total5xx ?? 0) > 0 ? 'warn' : 'ok'} />
         <Chip label="Pagamentos parados" value={numberFmt(gate?.paymentDlqOpen)} tone={(gate?.paymentDlqOpen ?? 0) > 0 ? 'warn' : 'ok'} />
         <Chip label="No ar há" value={minutes(gate?.uptimeSeconds)} tone={(gate?.uptimeSeconds ?? 0) < 300 ? 'warn' : 'ok'} />
       </div>

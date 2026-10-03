@@ -27,9 +27,9 @@ export class SectionErrorBoundary extends Component {
     if (this.state.hasError) {
       if (this.props.silent) return null
       return (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <section className="rounded-2xl border border-ds-warn/40 bg-ds-warn/10 p-4 text-sm text-ds-warn-ink">
           <p className="font-bold">Esta seção não pôde ser carregada</p>
-          <p className="mt-1 text-amber-700">
+          <p className="mt-1 text-ds-warn-ink">
             {this.props.label ? `“${this.props.label}” ` : ''}falhou ao renderizar. O restante do painel segue funcionando.
           </p>
         </section>
