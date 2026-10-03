@@ -58,6 +58,7 @@ import { createUnsupportedStoreSignal } from './observability/unsupportedStoreSi
 import { linkRemovedSkipReason } from './core/unsupportedStore.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet, shouldIgnoreDesyncedChannel } from './core/ignoredJidPolicy.js'
 import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, countsTowardChatScopePanic, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
+import { createInboundCensus, describeBlindness, DEFAULT_INBOUND_CENSUS_INTERVAL_MS, DEFAULT_INBOUND_CENSUS_SAMPLE } from './core/inboundNodeCensus.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { sanitizeMessageForLog, sanitizeResendText, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
@@ -605,6 +606,58 @@ const placeholderResendCache = new NodeCache({ stdTTL: 60 * 60, useClones: false
 const WA_IGNORE_OWN_DEVICE_DMS = String(process.env.WA_IGNORE_OWN_DEVICE_DMS ?? '1').trim() !== '0'
 const WA_CHAT_DROP_QUARANTINE = String(process.env.WA_CHAT_DROP_QUARANTINE ?? '1').trim() !== '0'
 const recentInboundChats = createRecentInboundIndex({ max: 5000 })
+// Censo de entrada do socket (RCA 2026-10-03, conta conectada e cega — ver
+// src/core/inboundNodeCensus.js). Conta, por tipo de chat, cada nó de mensagem
+// que o servidor entregou a este aparelho (gancho do patch, ANTES de qualquer
+// decisão), o que foi descartado por regra nossa, o que falhou ao abrir, o que
+// chegou ao upsert e o que foi aceito. Escopo de módulo: sobrevive a
+// reconexões; o "desde a última aceitação" só zera quando uma mensagem é aceita.
+// Só contagem + amostra limitada por janela; `WA_INBOUND_CENSUS_INTERVAL_MS=0`
+// desliga o resumo periódico (a contagem segue para o sinal de cegueira).
+const INBOUND_CENSUS_INTERVAL_MS = Math.max(0, Number(process.env.WA_INBOUND_CENSUS_INTERVAL_MS ?? DEFAULT_INBOUND_CENSUS_INTERVAL_MS) || 0)
+const INBOUND_CENSUS_SAMPLE = Math.max(0, Number(process.env.WA_INBOUND_CENSUS_SAMPLE ?? DEFAULT_INBOUND_CENSUS_SAMPLE) || 0)
+const inboundCensus = createInboundCensus({ sampleLimit: INBOUND_CENSUS_SAMPLE })
+let lastInboundCensusAt = Date.now()
+
+function noteInboundNode({ id, chatJid, offline, encType }) {
+  recentInboundChats.record(id, chatJid)
+  try {
+    const { kind, sample } = inboundCensus.noteArrival({ chatJid, offline, encType, selfJids: selfChatJids })
+    // Amostra: as primeiras N chegadas de cada tipo na janela. É a prova de que
+    // "chegou ao socket" independente do que aconteceu depois.
+    if (sample) logger.info({ id, chatJid, kind, offline: Boolean(offline), encType }, 'Censo de entrada: nó de mensagem chegou ao socket (amostra)')
+  } catch {}
+}
+
+function noteInboundIgnored(chatJid, rule) {
+  try { inboundCensus.noteIgnored(chatJid, rule, { selfJids: selfChatJids }) } catch {}
+}
+
+// Linha de falha de decrypt do Baileys (já casou SESSION_HEALTH_SIGNAL_RE):
+// conta por tipo de chat. `sent retry receipt` não traz remoteJid e cai fora.
+function noteInboundDecryptFailure(args) {
+  try {
+    const jid = extractRemoteJidFromLogArgs(args)
+    if (jid) inboundCensus.noteDecryptFailure(jid, { selfJids: selfChatJids })
+  } catch {}
+}
+
+// Resumo periódico da janela — roda no heartbeat. O zero também é dado: numa
+// conta cega e conectada, `arrivals.grupo` ausente por horas é a prova de que
+// o servidor não entrega grupo a este aparelho (hipótese "nada chega").
+function reviewInboundCensus() {
+  if (INBOUND_CENSUS_INTERVAL_MS <= 0) return
+  const now = Date.now()
+  if (now - lastInboundCensusAt < INBOUND_CENSUS_INTERVAL_MS) return
+  lastInboundCensusAt = now
+  const resumo = inboundCensus.drain(now)
+  logger.info({
+    ...resumo,
+    conectado: Boolean(activeSock) && lifecycleState === WA_LIFECYCLE.READY,
+    conectadoHaMs: connectionOpenedAt ? now - connectionOpenedAt : null,
+    cegueira: describeBlindness({ sinceLastAccepted: resumo.sinceLastAccepted }),
+  }, 'Censo de entrada do socket na janela')
+}
 const chatDropQuarantine = createChatDropQuarantine({
   file: `${getAuthInfoDir(AUTH_KEY)}/chat-drop-quarantine.json`,
   logger,
@@ -813,6 +866,7 @@ function startHeartbeatIpc() {
     try { reportReceptionHealth(getReceptionHealth()) } catch {}
     try { trySelfHealReception() } catch (err) { logger.warn({ err: err?.message }, 'Falha na checagem de auto-cura de recepção') }
     try { reviewChatScope() } catch {}
+    try { reviewInboundCensus() } catch {}
     maybeSendActivationNudge().catch(() => {})
     maybeSendTrialDecisionMessage().catch(() => {})
     void persistWorkerHeartbeat(state, { reconnectScheduled })
@@ -1960,6 +2014,7 @@ logger.info({
   ignoreUnmonitoredGroups: IGNORE_UNMONITORED_GROUPS,
   chatScopeMode: CHAT_SCOPE_MODE,
   blindAcrossReconnectsMs: BLIND_ACROSS_RECONNECTS_MS,
+  inboundCensusIntervalMs: INBOUND_CENSUS_INTERVAL_MS,
 }, 'Filtros de recepção deste robô')
 const RECEPTION_SIGNAL_THROTTLE_MS = Math.max(5 * 60_000, Number(process.env.WA_RECEPTION_SIGNAL_THROTTLE_MS || 60 * 60_000))
 let lastUpsertAtMs = null
@@ -1975,6 +2030,10 @@ let lastReceptionSignalAt = 0
 // core/receptionHealth.js). Mesmo idioma de `chatScopeIgnoredSinceLastAccepted`.
 let failuresSinceLastAccepted = 0
 let stableDropsSinceLastAccepted = 0
+// Quedas 500 com mensagem travada (`stuckMsg`) desde a última aceitação (RCA
+// 2026-10-03): é o rastro do ciclo que antecede a cegueira. Vai no sinal de
+// cegueira para o aviso à dona dizer "depois de um ciclo de quedas".
+let stuckDropsSinceLastAccepted = 0
 
 // Fila offline do WhatsApp por conexão (core/offlineDrainTelemetry.js): zera
 // no `open`; só log, sem ação.
@@ -2052,6 +2111,7 @@ function markMessageAccepted() {
   // e o único evento que zera a cegueira acumulada.
   failuresSinceLastAccepted = 0
   stableDropsSinceLastAccepted = 0
+  stuckDropsSinceLastAccepted = 0
   stuckCycleDrops = []
   connectionIntake = noteAccepted(connectionIntake)
 }
@@ -2087,12 +2147,21 @@ function reportReceptionHealth(reception) {
   const now = Date.now()
   if (now - lastReceptionSignalAt < RECEPTION_SIGNAL_THROTTLE_MS) return
   lastReceptionSignalAt = now
+  // Censo de entrada (RCA 2026-10-03): EM QUE PONTO a mensagem de grupo some
+  // desde a última aceitação — é o que separa "o servidor não entrega" (caso de
+  // parear de novo) de "chega e uma regra/chave nossa barra".
+  const censo = inboundCensus.snapshot(now)
+  const cegueira = describeBlindness(censo)
   logger.error({
     silentForMs: reception.silentForMs,
     failuresInWindow: reception.failuresInWindow,
     windowMs: reception.windowMs,
     motivo: reception.reason,
     entreReconexoes: Boolean(reception.blindAcrossReconnects),
+    cegueira,
+    quedasComMensagemTravada: stuckDropsSinceLastAccepted,
+    ultimaChegadaDeGrupoHaMs: censo.lastGroupArrivalAgeMs,
+    censoDesdeAceite: censo.sinceLastAccepted,
   }, 'Sessão conectada e SEM receber mensagens')
   try {
     recordOperationalSignal('wa_reception_blind', {
@@ -2102,6 +2171,15 @@ function reportReceptionHealth(reception) {
       // Separa "parou agora" de "está cega há horas, atravessando reconexões" —
       // a segunda é a que ninguém enxergava e a que pede ação humana.
       acrossReconnects: Boolean(reception.blindAcrossReconnects),
+      // Onde a mensagem de grupo some (src/core/inboundNodeCensus.js) e quantas
+      // quedas 500 com mensagem travada houve desde a última aceitação.
+      blindKind: cegueira.kind,
+      groupArrivals: cegueira.grupoChegou,
+      groupDropped: cegueira.grupoDescartado,
+      groupDecryptFailures: cegueira.grupoFalhou,
+      groupUpserts: cegueira.grupoUpsert,
+      stuckDrops: stuckDropsSinceLastAccepted,
+      lastGroupArrivalAgeMs: censo.lastGroupArrivalAgeMs,
     })
   } catch {}
 }
@@ -2237,7 +2315,7 @@ function instrumentBaileysLoggerForHealth(baileysLogger) {
       value: (...args) => {
         try {
           for (const arg of args) {
-            if (typeof arg === 'string' && SESSION_HEALTH_SIGNAL_RE.test(arg)) { recordCryptoError(); handleGroupDecryptSignal(args); noteDecryptFailureForCycle(args); break }
+            if (typeof arg === 'string' && SESSION_HEALTH_SIGNAL_RE.test(arg)) { recordCryptoError(); handleGroupDecryptSignal(args); noteDecryptFailureForCycle(args); noteInboundDecryptFailure(args); break }
           }
           if (level === 'error' && typeof target.debug === 'function') {
             for (const arg of args) {
@@ -3918,10 +3996,10 @@ async function startBotInner() {
       // Camada 3-B: canal específico que provou estar com a sessão
       // dessincronizada (ver handleGroupDecryptSignal). Checada primeiro —
       // reage rápido, independe do modo de chat-scope.
-      if (isChannelDesyncQuarantined(jid)) return true
+      if (isChannelDesyncQuarantined(jid)) { noteInboundIgnored(jid, 'canal_quarentena'); return true }
       // Blindagem B: conversa individual fora da lista que já derrubou a sessão
       // (nunca grupo nem canal — ver outOfScopeChatGuard.js).
-      if (WA_CHAT_DROP_QUARANTINE && chatDropQuarantine.isQuarantined(jid) && isChatQuarantinable(jid, { ready: allowedChatJidsReady, allowedJids: allowedChatJids, selfJids: selfChatJids })) return true
+      if (WA_CHAT_DROP_QUARANTINE && chatDropQuarantine.isQuarantined(jid) && isChatQuarantinable(jid, { ready: allowedChatJidsReady, allowedJids: allowedChatJids, selfJids: selfChatJids })) { noteInboundIgnored(jid, 'chat_quarentena'); return true }
       // Regra nova (Fase 2): olhar só o que foi escolhido. Com o modo `off`
       // ela não decide nada e a regra antiga (lista de exceções) segue valendo
       // para quem já ligou WA_IGNORE_UNMONITORED_GROUPS.
@@ -3934,27 +4012,35 @@ async function startBotInner() {
       })
       if (scope.ignore) {
         recordChatScopeIgnored(scope.type, normalizeChatScopeJid(jid))
+        noteInboundIgnored(jid, 'escopo')
         return true
       }
-      return shouldIgnoreChatJid(jid, {
+      // Regra antiga (lista de exceções de grupo). Não tinha contador nenhum:
+      // grupo descartado por ela era invisível no bot.log (RCA 2026-10-03).
+      const ignoreUnmonitored = shouldIgnoreChatJid(jid, {
         allowedJids: allowedChatJids,
         enabled: IGNORE_UNMONITORED_GROUPS,
         ready: allowedChatJidsReady,
       })
+      if (ignoreUnmonitored) noteInboundIgnored(jid, 'grupo_nao_monitorado')
+      return ignoreUnmonitored
     },
     // Blindagem A (gancho do patch do Baileys): DM de outro aparelho da conta
     // para um contato. O patch já garante que é DM de contato, nunca a própria
     // conta. Contato em quarentena (B) também é descartado aqui.
     shouldIgnoreOwnDeviceDm: (recipient) => {
-      if (WA_CHAT_DROP_QUARANTINE && chatDropQuarantine.isQuarantined(recipient) && isChatQuarantinable(recipient, { ready: allowedChatJidsReady, allowedJids: allowedChatJids, selfJids: selfChatJids })) return true
-      return shouldIgnoreOwnDeviceDm(recipient, {
+      if (WA_CHAT_DROP_QUARANTINE && chatDropQuarantine.isQuarantined(recipient) && isChatQuarantinable(recipient, { ready: allowedChatJidsReady, allowedJids: allowedChatJids, selfJids: selfChatJids })) { noteInboundIgnored(recipient, 'chat_quarentena'); return true }
+      const ignore = shouldIgnoreOwnDeviceDm(recipient, {
         enabled: WA_IGNORE_OWN_DEVICE_DMS,
         ready: allowedChatJidsReady,
         allowedJids: allowedChatJids,
       })
+      if (ignore) noteInboundIgnored(recipient, 'dm_outro_aparelho')
+      return ignore
     },
-    // Gancho do patch: de qual chat veio cada mensagem (para atribuir a queda).
-    onIncomingMessageNode: ({ id, chatJid }) => recentInboundChats.record(id, chatJid),
+    // Gancho do patch: de qual chat veio cada mensagem (para atribuir a queda)
+    // e censo de entrada (o que o servidor entregou, antes de qualquer decisão).
+    onIncomingMessageNode: ({ id, chatJid, offline, encType }) => noteInboundNode({ id, chatJid, offline, encType }),
   })
 
   pendingSock = sock
@@ -4152,6 +4238,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // distingue isso de qualquer outro close genérico.
       const stuckMsgId = extractAckMessageIdFromStreamErrorNode(lastDisconnect?.error?.data)
       if (stuckMsgId) {
+        stuckDropsSinceLastAccepted += 1
         const stuckResult = registerStuckMessageAndDecide(stuckMessageTimestamps, stuckMsgId, now, {
           windowMs: STUCK_MSG_WINDOW_MS,
           threshold: STUCK_MSG_THRESHOLD,
@@ -6058,6 +6145,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
     for (const msg of messages) {
       rememberChannelJid(msg?.key?.remoteJid)
+      // Censo de entrada: a mensagem ABRIU e chegou até aqui (antes dos filtros).
+      try { inboundCensus.noteUpsert(msg?.key?.remoteJid, { selfJids: selfChatJids }) } catch {}
       // DEBUG temporário (gated por DEBUG_INCOMING_UPSERT) — investigação do
       // sumiço de mensagens com botão "Ver canal" (forwardedNewsletterMessageInfo)
       // que não viram linha no painel. Loga, ANTES de qualquer continue, qual
@@ -6211,6 +6300,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         hasValidTimestamp,
         ageMs: msgTs ? now - msgTs : null,
       }, 'Mensagem aceita para processamento')
+      try { inboundCensus.noteAccepted(msg.key.remoteJid, { selfJids: selfChatJids }) } catch {}
       markMessageAccepted()
 
       const msgId = msg.key.id || dedupKey || `${msg.key.remoteJid || 'unknown'}:${msgTsRaw || now}`
@@ -6494,7 +6584,7 @@ const handleMessage = async msg => {
   }
 
   if (msg?.type === 'metrics') {
-    sendIpc({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), reception: getReceptionHealth(), chatScope: getChatScopeSnapshot(), disconnectedForMs: disconnectedSinceMs == null ? null : Date.now() - disconnectedSinceMs, worker: workerMetadata, runtime: getRuntimeMemoryMetrics() } })
+    sendIpc({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), reception: getReceptionHealth(), chatScope: getChatScopeSnapshot(), inboundCensus: inboundCensus.snapshot(), disconnectedForMs: disconnectedSinceMs == null ? null : Date.now() - disconnectedSinceMs, worker: workerMetadata, runtime: getRuntimeMemoryMetrics() } })
   }
 
   if (msg?.type === 'broadcast') {
