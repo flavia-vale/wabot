@@ -63,6 +63,9 @@ const BARE_STORE_LINK_RES = [
   // é de alguém (o dono do grupo de origem) e o WhatsApp o torna clicável.
   // Vale para TODA cliente, com ou sem conta Awin (revisão 2026-09-30).
   /(?<![\w./@:%-])(?:[a-z0-9-]+\.)*(?:tidd\.ly|awin1\.com)\/[^\s]*/gi,
+  // Idem Rakuten (`click.linksynergy.com/...` sem `https://`): também é link
+  // de alguém e ficava de fora (revisão 2026-10-03, R5).
+  /(?<![\w./@:%-])(?:[a-z0-9-]+\.)*linksynergy\.com\/[^\s]*/gi,
 ]
 
 // Domínio solto sem caminho ("compre na shopee.com.br") não carrega afiliado de

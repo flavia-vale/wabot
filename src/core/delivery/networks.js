@@ -205,3 +205,15 @@ export function deliveryNetworkOfDestinationId(destinationId) {
   }
   return DELIVERY_NETWORK.WHATSAPP
 }
+
+// Identificador canônico de um destino de outro aplicativo. Rotas antigas
+// passavam todo destino pelo normalizador do WhatsApp, que acrescentava
+// "@g.us" ("tg:-100" virava "tg:-100@g.us"). Para não perder nada já salvo
+// em filas e ofertas automáticas, qualquer sufixo "@..." é removido aqui.
+// Endereço do WhatsApp volta exatamente como veio.
+export function canonicalDestinationId(destinationId) {
+  const value = String(destinationId ?? '').trim()
+  if (deliveryNetworkOfDestinationId(value) === DELIVERY_NETWORK.WHATSAPP) return destinationId
+  const at = value.indexOf('@')
+  return at === -1 ? value : value.slice(0, at)
+}

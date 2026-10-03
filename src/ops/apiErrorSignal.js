@@ -62,6 +62,10 @@ export function classifyApiError(error, { statusCode } = {}) {
 
   const texto = textOf(error)
   const code = String(error?.code ?? '').toUpperCase()
+  // Revisão C10 (só existe com SUPERVISOR_NODE_ROUTING): "servidor dos robôs
+  // não responde" é indisponibilidade conhecida e já sinalizada pelo vigia e
+  // pelo guarda do roteamento — não é "FALHA DA API".
+  if (code === 'WA_NODE_UNAVAILABLE') return { signal: false, kind: null, alert: false }
 
   if (SCHEMA_MISMATCH_CODES.has(code) || SCHEMA_MISMATCH_MARKERS.some(m => texto.includes(m))) {
     return { signal: true, kind: API_ERROR_KINDS.SCHEMA_MISMATCH, alert: true }

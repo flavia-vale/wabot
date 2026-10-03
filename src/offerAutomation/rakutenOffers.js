@@ -20,7 +20,11 @@ export const RAKUTEN_MIN_REMAINING_MS = AWIN_MIN_REMAINING_MS
 // Acima disto a validade não aparece na mensagem (a data sem ano confundiria:
 // "Válida até 21/06" de 2029).
 export const RAKUTEN_VALIDITY_SHOWN_MS = 60 * 24 * 60 * 60_000
-const CANDIDATE_ROWS_LIMIT = 1000
+// Candidatas por LOJA (revisão 2026-10-03, R15 = F6 da Awin): com teto global,
+// a loja de promoções "indeterminadas" (fim em 2029) nunca entrava na leitura.
+const CANDIDATE_ROWS_PER_STORE = 300
+// Memória de enviados (F7 da Awin): podada pelo que ainda está ativo; teto.
+export const RAKUTEN_SENT_IDS_CAP = 3000
 
 function normalizeText(value) {
   return String(value ?? '')
@@ -102,6 +106,28 @@ export function rakutenPromotionToOffer(promotion, { now = new Date() } = {}) {
   }
 }
 
+// Em que posição do histórico cada loja saiu por último (maior = mais recente).
+// Os ids carregam a loja (`rakuten:c:<loja>:...`) e o histórico está em ordem
+// de envio. PURA.
+export function rakutenStoreLastSentOrder(sentItemIds = []) {
+  const order = new Map()
+  sentItemIds.forEach((id, index) => {
+    const match = /^rakuten:c:(\d{1,12}):/.exec(String(id))
+    if (match) order.set(match[1], index)
+  })
+  return order
+}
+
+/**
+ * Histórico de enviados só com o que ainda pode voltar a ser candidato. Ids de
+ * outras origens ficam intactos. PURA (F7 da Awin, revisão 2026-10-03 R15).
+ */
+export function pruneRakutenSentIds(sentItemIds = [], activePromotions = []) {
+  const alive = new Set(activePromotions.map(rakutenItemId))
+  const kept = sentItemIds.map(String).filter((id) => !id.startsWith('rakuten:') || alive.has(id))
+  return kept.length > RAKUTEN_SENT_IDS_CAP ? kept.slice(kept.length - RAKUTEN_SENT_IDS_CAP) : kept
+}
+
 // PURA: escolhe e ordena as promoções candidatas.
 export function selectRakutenCandidates(promotions, { sentItemIds = [], advertiserIds = [], keyword = '', now = new Date(), limit = 5 } = {}) {
   const nowMs = now.getTime()
@@ -135,7 +161,11 @@ export function selectRakutenCandidates(promotions, { sentItemIds = [], advertis
     byStore.get(key).push(promotion)
   }
   const queues = [...byStore.values()]
-  queues.sort((a, b) => endOrInfinity(a[0]) - endOrInfinity(b[0]) || String(a[0].advertiserName).localeCompare(String(b[0].advertiserName)))
+  // Revezamento DE VERDADE entre execuções (F5 da Awin): abre a loja que saiu
+  // há mais tempo (nunca saiu = primeiro); o fim mais próximo só desempata.
+  const lastSent = rakutenStoreLastSentOrder(sentItemIds)
+  const recency = (queue) => lastSent.get(String(queue[0].advertiserId)) ?? -1
+  queues.sort((a, b) => recency(a) - recency(b) || endOrInfinity(a[0]) - endOrInfinity(b[0]) || String(a[0].advertiserName).localeCompare(String(b[0].advertiserName)))
 
   const picked = []
   for (let round = 0; picked.length < limit; round++) {
@@ -160,17 +190,20 @@ export async function loadRakutenOffers({ db, automation, sentItemIds = [], now 
     select: { id: true },
   })
   if (!account) return { skipped: 'no_rakuten_account' }
-  const rows = await db.rakutenPromotion.findMany({
-    where: {
-      userId: automation.userId,
-      accountId: account.id,
-      status: 'active',
-      OR: [{ endDate: null }, { endDate: { gt: new Date(now.getTime() + RAKUTEN_MIN_REMAINING_MS) } }],
-    },
+  const where = {
+    userId: automation.userId,
+    accountId: account.id,
+    status: 'active',
+    OR: [{ endDate: null }, { endDate: { gt: new Date(now.getTime() + RAKUTEN_MIN_REMAINING_MS) } }],
+  }
+  const stores = await db.rakutenPromotion.findMany({ where, distinct: ['advertiserId'], select: { advertiserId: true } })
+  const perStore = await Promise.all(stores.map(({ advertiserId }) => db.rakutenPromotion.findMany({
+    where: { ...where, advertiserId },
     orderBy: { endDate: 'asc' },
-    take: CANDIDATE_ROWS_LIMIT,
-  })
-  if (!rows.length) return { skipped: 'no_rakuten_promotions' }
+    take: CANDIDATE_ROWS_PER_STORE,
+  })))
+  const rows = perStore.flat()
+  if (!rows.length) return { skipped: 'no_rakuten_promotions', sentItemIds: pruneRakutenSentIds(sentItemIds, []) }
   const picked = selectRakutenCandidates(rows, {
     sentItemIds,
     advertiserIds: automation.rakutenAdvertiserIds,
@@ -178,7 +211,11 @@ export async function loadRakutenOffers({ db, automation, sentItemIds = [], now 
     now,
     limit: Math.max(1, Number(limit) || 1),
   })
-  return { offers: picked.map((row) => rakutenPromotionToOffer(row, { now })), rawCount: rows.length }
+  const active = await db.rakutenPromotion.findMany({
+    where: { userId: automation.userId, accountId: account.id, status: 'active' },
+    select: { advertiserId: true, title: true, couponCode: true },
+  })
+  return { offers: picked.map((row) => rakutenPromotionToOffer(row, { now })), rawCount: rows.length, sentItemIds: pruneRakutenSentIds(sentItemIds, active) }
 }
 
 // Na entrega da fila de revisão: a promoção ainda vale?

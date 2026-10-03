@@ -16,7 +16,7 @@ const ERROR_BACKOFF_MS = 15_000
 
 export const ALLOWED_UPDATES = Object.freeze(['message', 'channel_post', 'my_chat_member'])
 
-export function startTelegramUpdatesLoop({ api, handlers = [], timeoutSec = 25, sleep = (ms) => new Promise((r) => setTimeout(r, ms).unref?.()) } = {}) {
+export function startTelegramUpdatesLoop({ api, handlers = [], timeoutSec = 25, onError = () => {}, sleep = (ms) => new Promise((r) => setTimeout(r, ms).unref?.()) } = {}) {
   let stopped = false
   let offset
   let running = null
@@ -41,6 +41,7 @@ export function startTelegramUpdatesLoop({ api, handlers = [], timeoutSec = 25, 
         await processBatch()
       } catch (err) {
         const conflict = Number(err?.errorCode) === 409
+        try { onError(err) } catch { /* acessório: nunca derruba o laço */ }
         logger.warn({ err: err?.message, conflict }, conflict
           ? 'telegram: outro processo está lendo o mesmo robô (409); aguardando'
           : 'telegram: falha ao ler atualizações; tentando de novo')

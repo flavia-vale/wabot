@@ -72,3 +72,28 @@ export function findDualOwners(listsByNode = {}) {
     .filter(([, nodes]) => nodes.length > 1)
     .map(([userId, nodes]) => ({ userId, nodes: nodes.sort() }))
 }
+
+/**
+ * Revisão C9: conta NUNCA pareada (sem número) e parada pode trocar de nó se o
+ * dela está fora do ar ou lotado — não há login a perder. Conta pareada NUNCA
+ * troca sozinha (o login dela mora no disco do nó).
+ */
+export function shouldReplaceUnpaired({ row, node } = {}) {
+  if (!row || !isValidNodeId(row.nodeId)) return false
+  if (row.phone) return false
+  if (row.status !== 'disconnected') return false
+  if (!node) return false
+  if (node.alive === false) return true
+  const running = Number(node.running)
+  const max = Number(node.max)
+  return node.running !== null && node.running !== undefined && Number.isFinite(running) && Number.isFinite(max) && max >= 1 && running >= max
+}
+
+/** Vagas reservadas (escolhas dos últimos 2 min ainda não ligadas) somadas ao medido. */
+export function withReservations(nodes = [], reserved = {}) {
+  return nodes.map(n => {
+    const r = Number(reserved?.[n.nodeId])
+    if (n.running === null || n.running === undefined || !Number.isFinite(r) || r <= 0) return n
+    return { ...n, running: Number(n.running) + r }
+  })
+}

@@ -31,6 +31,12 @@ export const OFFER_QUEUE_MAX_ATTEMPTS = Math.max(1, Number(process.env.OFFER_QUE
 const RETRY_BASE_MS = 60_000
 const RETRY_MAX_MS = 3_600_000
 
+function queueTargetsOnlyOtherNetworks(queue) {
+  let targets
+  try { targets = JSON.parse(queue?.targetJids ?? '[]') } catch { return false }
+  return Array.isArray(targets) && targets.length > 0 && !needsWhatsappSession(targets)
+}
+
 export function getOfferQueueRetryDelayMs(attemptCount) {
   return Math.min(RETRY_BASE_MS * 2 ** Math.max(0, attemptCount - 1), RETRY_MAX_MS)
 }
@@ -86,7 +92,11 @@ export async function evaluateQueueGate(queue, deps = {}) {
   // ar passava do gate, falhava no sendBroadcast, queimava tentativa e o item
   // virava `failed` terminal — regressão: antes ele só ficava `pending` com o
   // motivo `bot_offline` na tela. Fila Instagram-only tem whatsappEnabled=false.
-  const usaWhatsapp = queue.whatsappEnabled !== false
+  // Revisão crítica do Telegram (item 10): fila cujos destinos são TODOS de
+  // outro aplicativo (Telegram) não depende do WhatsApp — antes ela parava com
+  // "bot_offline" sempre que o celular da cliente caía. Fila com qualquer
+  // destino do WhatsApp segue exatamente a regra de antes.
+  const usaWhatsapp = queue.whatsappEnabled !== false && !queueTargetsOnlyOtherNetworks(queue)
   if (usaWhatsapp && !await isRunning(queue.userId)) return 'bot_offline'
   // Plano B / Fase 3: o horário próprio da fila é o único pré-check de janela
   // aqui. Sem horário próprio, NÃO pré-bloqueamos pela antiga janela silenciosa

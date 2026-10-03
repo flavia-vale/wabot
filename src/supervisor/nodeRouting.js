@@ -67,9 +67,27 @@ export function createNodeOwnershipCache({ loadNodeId, ttlMs = 10_000, now = () 
   }
 }
 
-/** Cadeado de posse no Redis: só existe com roteamento por nó ligado. Default off. */
+/**
+ * Cadeado de posse no Redis: só existe com roteamento por nó ligado. Com o
+ * roteamento ligado nasce LIGADO (revisão C2: é a 2ª barreira contra o mesmo
+ * WhatsApp em dois nós); `SUPERVISOR_OWNER_LEASE=0` desliga. Flag de
+ * roteamento desligada = sempre off (nada muda no legado).
+ */
 export function isOwnerLeaseEnabled(env = process.env) {
-  return isNodeRoutingEnabled(env) && ['1', 'true', 'on'].includes(String(env.SUPERVISOR_OWNER_LEASE ?? '').trim().toLowerCase())
+  if (!isNodeRoutingEnabled(env)) return false
+  return !['0', 'false', 'off'].includes(String(env.SUPERVISOR_OWNER_LEASE ?? '').trim().toLowerCase())
+}
+
+/**
+ * Revisão C1 — "parar" e "está rodando?" respondem pelo PROCESSO LOCAL quando o
+ * roteamento está ligado. Parar um robô que roda aqui nunca é perigoso; recusar
+ * (por "não sou o dono no banco") deixava o MESMO WhatsApp ligado em dois nós
+ * sem nenhum jeito automático de derrubar o errado. Flag off: decide pela posse,
+ * exatamente como antes (com SHARD_COUNT=1 a posse é sempre "minha").
+ */
+export function shouldActLocally({ routing, owns, runningHere }) {
+  if (owns) return true
+  return Boolean(routing && runningHere)
 }
 
 /**
