@@ -335,3 +335,13 @@ de IA citando Awin/Rakuten na pergunta de marca.
 3. Depois do deploy da Frente 1 em `main`: repetir as 5 perguntas no ChatGPT
    anônimo. Decide: se o reconhecimento de marca melhorou ou se o problema é
    só histórico de conta.
+
+## 8. Registro de execução (uma frente por PR, contra `develop`)
+
+| Frente | Branch | Estado | O que entrou |
+|---|---|---|---|
+| 1 — GEO: fatos e marca | `feat/seo-geo-f1-fatos-lojas-awin-rakuten` | PR aberta (03/10) | `STORES_FACT_PT` (6 lojas + Awin/Rakuten) em definição da marca, ficha técnica, `llms.txt`, `pricing.md`, home, `/quem-somos`, `/precos`, hub de automação, FAQ público e plano Basic (migration DML guardada); `/quem-somos` vira página-resposta "O que é o Espelha Grupos"; `/melhores-bots-para-afiliados-whatsapp` ganha os 6 critérios respondidos (Sub-ID por grupo = não) e a tabela dos 8 bots; leva 🔝 de reindexação em `ACOES_FLAVIA`. Guarda: `test/fato-lojas-awin-rakuten.test.js` |
+| 2 — SEO: rede, Link Inteligente, títulos | — | pendente | — |
+| 3 — Vocabulário de entrada | — | pendente | — |
+| 4 — `/alternativas/*` (títulos dos 3 maiores) | — | pendente | — |
+| 5 — Vídeo | — | pendente | — |
