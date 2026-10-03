@@ -129,6 +129,7 @@ import { buildRedisOptions } from './core/redisFactory.js'
 import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { loadWorkerIdentity } from './core/workerIdentity.js'
+import { multiNumberEnabled } from './domain/session/multiNumberFlag.js'
 import { STANDBY_PROCESS_SLOT } from './domain/session/workerIdentity.js'
 import { recordWaConnectionEventSafe as recordWaConnectionEventSafeBase } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
@@ -185,6 +186,8 @@ export async function createBotSessionRuntime({
 const SESSION_IDENTITY = await loadWorkerIdentity(userId, { db })
 userId = SESSION_IDENTITY.userId
 const IS_STANDBY = SESSION_IDENTITY.role === 'standby'
+// Fase 2: rastreio por número só com a flag ligada (desligada = mesmas escritas de antes).
+const MULTI_NUMBER_ON = multiNumberEnabled()
 // Eventos de conexão contam a história do número QUE ENVIA (admin, funil,
 // alertas). A prontidão não entra neles.
 const recordWaConnectionEventSafe = payload => { if (!IS_STANDBY) recordWaConnectionEventSafeBase(payload) }
@@ -729,6 +732,12 @@ async function persistWorkerHeartbeat(state, { reconnectScheduled = false } = {}
     lastHeartbeatAt: new Date(),
     ownerInstance: OWNER_INSTANCE,
     ...buildHeartbeatSessionPatch({ state, reconnectScheduled }),
+  }
+  // Vários números por conta, Fase 2: o estado de recepção vai junto no
+  // heartbeat (sem escrita nova) para a troca por "conectado mas cego".
+  if (MULTI_NUMBER_ON && !IS_STANDBY) {
+    const reception = getReceptionHealth()
+    if (reception?.state) Object.assign(patch, { receptionState: reception.state, receptionStateAt: new Date() })
   }
 
   await persistSessionPatch(patch).catch(err => {
@@ -3338,6 +3347,8 @@ async function processSendJob(job) {
             sentAt: new Date(),
             // Já saiu: o texto completo do reenvio não serve mais.
             resendText: null,
+            // Vários números por conta: qual número (login) mandou.
+            ...(MULTI_NUMBER_ON ? { senderSlot: SESSION_IDENTITY.authSlot } : {}),
             ...(entrega.kind ? { deliveryKind: entrega.kind } : {}),
             ...(Number.isFinite(entrega.originImageBytes) ? { originImageBytes: entrega.originImageBytes } : {}),
             // Feature 017 (arquitetura multicanal de entrega), T023: este é o

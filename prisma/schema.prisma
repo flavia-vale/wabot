@@ -121,6 +121,11 @@ model WaSession {
   // e-mail da conta anterior, para a tela oferecer recuperar a senha em vez de
   // virar parede. Nulo = nenhuma recusa pendente.
   blockNotice        String?
+  // Vários números por conta, Fase 2 (docs/rca/multi-numero.md): estado de
+  // recepção do robô (`computeReceptionState`), gravado no heartbeat que já
+  // existe. Alimenta a troca por "conectado mas cego". Só com a flag ligada.
+  receptionState     String?
+  receptionStateAt   DateTime?
   updatedAt          DateTime  @updatedAt
 
   @@index([status, lastHeartbeatAt])
@@ -712,6 +717,9 @@ model MessageLog {
   // Valores em src/core/deliveryKind.js. Nulo = envio anterior ao registro
   // (linha antiga) ou tipo que não passa pelo pipeline de oferta espelhada.
   deliveryKind String?
+  // Vários números por conta, Fase 2: qual número (slot) enviou. Nulo =
+  // envio antes do rastreio ou com a flag desligada.
+  senderSlot   Int?
   // Tamanho, em bytes, da imagem que veio na MENSAGEM DE ORIGEM. 0 = a origem
   // não trouxe imagem nenhuma. É o que separa "saiu sem foto porque não havia
   // foto" de "saiu sem foto mesmo tendo foto na origem" — o caso que a cliente
