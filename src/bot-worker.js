@@ -23,7 +23,7 @@ import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { resolveCustomDomainLinks, findCandidateLinks, allCandidatesFailedBecauseOfferEnded } from './core/customDomainLinkResolver.js'
 import { convertLink } from './converters/index.js'
-import { AWIN_NOT_JOINED_ERROR } from './converters/awin.js'
+import { AWIN_MESSAGE_BUDGET_MS, AWIN_NOT_JOINED_ERROR } from './converters/awin.js'
 import { awinOfferOptions, loadAwinConversionContext, refineAwinOptionsForText } from './integrations/awin/conversionContext.js'
 import { RAKUTEN_NOT_JOINED_ERROR } from './converters/rakuten.js'
 import { loadRakutenConversionContext, rakutenOfferOptions } from './integrations/rakuten/conversionContext.js'
@@ -4965,6 +4965,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // core/conversionScheduler.js — não voltar a `Promise.all` sobre a lista
       // inteira. Ordem é preservada porque a substituição no texto casa por URL
       // original, não por índice em conversions[].
+      // Teto de tempo da Awin para a mensagem inteira (R2): vários links da
+      // Awin saem um de cada vez; passou do teto, o resto sai com link longo.
+      const awinDeadline = Date.now() + AWIN_MESSAGE_BUDGET_MS
       const linkResults = await convertPerPlatformSerially(links, async ({ platform, url }) => {
         if (!enabledPlatforms.has(platform)) {
           logger.info({ platform }, 'Plataforma desabilitada — pulando')
@@ -4992,7 +4995,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         }
 
         try {
-          const conversionResult = await convertLink(platform, url, cfg.credentials)
+          const conversionResult = await convertLink(platform, url, cfg.credentials, platform === 'awin' ? { deadline: awinDeadline } : undefined)
           if (!conversionResult) {
             await recordConversionIssue({ platform, url, jid, text, reason: `Conversor de ${credentialValidation.label} não retornou link convertido. Confira se as credenciais estão válidas.` })
             return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
