@@ -11,7 +11,7 @@ import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
 import { PayingTag } from '@/components/PayingTag'
-import { FILTROS_MOTIVO, filtrarPorMotivo, contarPorFiltro } from '@/lib/admin/inboxFiltros'
+import { FILTROS_MOTIVO, filtrarPorMotivo, contarPorFiltro, faixaDoMotivo } from '@/lib/admin/inboxFiltros'
 
 const s = {
   page: { maxWidth: 960, margin: '0 auto', padding: 16, color: 'var(--ink)' },
@@ -43,6 +43,9 @@ const s = {
   }),
   vazio: { fontSize: 13, color: 'var(--ink-soft)', padding: '8px 0' },
   tempo: { fontSize: 12, color: 'var(--danger)', fontWeight: 700 },
+  // Faixa de gravidade (DS v2.1, Admin · bloco 4): borda à esquerda + etiqueta com texto.
+  faixa: (f) => ({ borderLeft: `4px solid ${f.cor}`, paddingLeft: 12 }),
+  sev: (f) => ({ display: 'inline-block', padding: '3px 10px', borderRadius: 999, fontSize: 10.5, fontWeight: 700, color: 'var(--ink)', whiteSpace: 'nowrap', background: f.fundo, border: `1px solid ${f.cor}` }),
 }
 
 function digitosWa(telefone) {
@@ -62,11 +65,13 @@ function horas(ms) {
 function Linha({ item, onReconectar, ocupado }) {
   const wa = digitosWa(item.telefone)
   const primaria = item.acoes[0]
+  const faixa = faixaDoMotivo(item.motivo)
   return (
-    <div style={s.row}>
+    <div style={{ ...s.row, ...s.faixa(faixa) }} data-faixa={faixa.rotulo}>
       <div style={s.who}>
         <div style={s.nome}>
           <span>{item.nome || item.email || 'Cliente'}</span>
+          <span style={s.sev(faixa)}>{faixa.rotulo}</span>
           <PayingTag status={item.payingStatus} />
           {item.detalheMs ? <span style={s.tempo}>há {horas(item.detalheMs)}</span> : null}
         </div>

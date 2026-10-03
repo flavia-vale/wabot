@@ -1,4 +1,5 @@
 import { AdminGate } from '@/components/AdminGate'
+import './admin.css'
 
 export const metadata = {
   title: 'Admin Espelha Grupos',
@@ -12,5 +13,6 @@ export const metadata = {
 
 export default function AdminLayout({ children }) {
   // Só monta o admin para quem tem papel (Q6 da auditoria, 2026-10-02).
-  return <AdminGate>{children}</AdminGate>
+  // `.admin-root` declara os tokens do DS que só existiam em painel.css (D12).
+  return <div className="admin-root"><AdminGate>{children}</AdminGate></div>
 }

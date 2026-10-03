@@ -44,7 +44,7 @@ for (const [nome, source] of [['HelpDot', helpDot], ['Tooltip', tooltip]]) {
 test('o balão de ajuda do admin fecha ao tocar fora e tem fundo próprio', () => {
   // Sem o fundo, no celular a gaveta aparece "solta" por cima do conteúdo e a
   // pessoa não percebe que precisa tocar fora para fechar.
-  assert.match(helpDot, /fixed inset-0[^"]*bg-slate-950/)
+  assert.match(helpDot, /fixed inset-0[^"]*bg-ds-ink\//)
   assert.match(helpDot, /setOpen\(false\)/)
 })
 

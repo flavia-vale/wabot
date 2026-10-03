@@ -40,19 +40,19 @@ const VISIBLE_ROWS = 8
 
 function Card({ label, value, helper }) {
   return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <p className="text-xs text-slate-400">{label}</p>
-      <p className="text-lg font-black text-slate-900">{value}</p>
-      {helper && <p className="text-xs text-slate-500">{helper}</p>}
+    <div className="rounded-xl bg-ds-bg p-3">
+      <p className="text-xs text-ds-ink-faint">{label}</p>
+      <p className="text-lg font-black text-ds-ink">{value}</p>
+      {helper && <p className="text-xs text-ds-ink-soft">{helper}</p>}
     </div>
   )
 }
 
 function Field({ label, value }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-slate-100 py-2 last:border-0">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className="text-right text-sm font-semibold text-slate-800">{value ?? '—'}</span>
+    <div className="flex items-baseline justify-between gap-4 border-b border-ds-line py-2 last:border-0">
+      <span className="text-sm text-ds-ink-soft">{label}</span>
+      <span className="text-right text-sm font-semibold text-ds-ink">{value ?? '—'}</span>
     </div>
   )
 }
@@ -60,13 +60,13 @@ function Field({ label, value }) {
 function ExpandableList({ items, render, emptyLabel }) {
   const [expanded, setExpanded] = useState(false)
   const list = asArray(items)
-  if (!list.length) return <p className="py-3 text-sm text-slate-400">{emptyLabel}</p>
+  if (!list.length) return <p className="py-3 text-sm text-ds-ink-faint">{emptyLabel}</p>
   const shown = expanded ? list : list.slice(0, VISIBLE_ROWS)
   return (
     <>
       <div className="space-y-2">{shown.map(render)}</div>
       {list.length > VISIBLE_ROWS && (
-        <button type="button" onClick={() => setExpanded(!expanded)} className="mt-2 text-xs font-bold text-emerald-700 hover:underline">
+        <button type="button" onClick={() => setExpanded(!expanded)} className="mt-2 text-xs font-bold text-ds-accent-strong hover:underline">
           {expanded ? 'Mostrar menos' : `Ver tudo (${list.length})`}
         </button>
       )}
@@ -75,7 +75,7 @@ function ExpandableList({ items, render, emptyLabel }) {
 }
 
 function Row({ children }) {
-  return <div className="rounded-xl border border-slate-100 px-3 py-2 text-sm text-slate-600">{children}</div>
+  return <div className="rounded-xl border border-ds-line px-3 py-2 text-sm text-ds-ink-soft">{children}</div>
 }
 
 function CadastroTab({ cadastro }) {
@@ -124,8 +124,8 @@ function CobrancasDaCliente({ userId, email }) {
   const recusadas = rows.filter(r => r.outcome === 'recusada')
   return (
     <div>
-      <h3 className="mb-2 text-sm font-bold text-slate-800">Cobranças da assinatura (últimos 12 meses)</h3>
-      {!state && <p className="text-sm text-slate-500">Carregando…</p>}
+      <h3 className="mb-2 text-sm font-bold text-ds-ink">Cobranças da assinatura (últimos 12 meses)</h3>
+      {!state && <p className="text-sm text-ds-ink-soft">Carregando…</p>}
       {state?.error && <Alert type="error" title="Cobranças" message={state.error} />}
       {state && !state.error && (
         <>
@@ -134,14 +134,14 @@ function CobrancasDaCliente({ userId, email }) {
             <Card label="Cobrou" value={formatNumber(aprovadas.length)} helper={formatCurrency(aprovadas.reduce((t, r) => t + Number(r.amount ?? 0), 0))} />
             <Card label="Recusadas" value={formatNumber(recusadas.length)} />
           </div>
-          {rows.length === 0 ? <p className="text-sm text-slate-500">Nenhuma cobrança de assinatura registrada.</p> : (
+          {rows.length === 0 ? <p className="text-sm text-ds-ink-soft">Nenhuma cobrança de assinatura registrada.</p> : (
             <ExpandableList
               items={rows}
               emptyLabel="Nenhuma."
               render={(c) => (
                 <Row key={c.id}>
-                  <span className="font-bold text-slate-900">{c.amount == null ? '—' : formatCurrency(c.amount)}</span> · {c.statusLabel}
-                  <span className="block text-xs text-slate-500">{formatDate(c.attemptedAt)}{c.returnMessage ? ` · ${c.returnMessage}` : ''}{c.returnCode ? ` (${c.returnCode})` : ''}</span>
+                  <span className="font-bold text-ds-ink">{c.amount == null ? '—' : formatCurrency(c.amount)}</span> · {c.statusLabel}
+                  <span className="block text-xs text-ds-ink-soft">{formatDate(c.attemptedAt)}{c.returnMessage ? ` · ${c.returnMessage}` : ''}{c.returnCode ? ` (${c.returnCode})` : ''}</span>
                 </Row>
               )}
             />
@@ -186,28 +186,28 @@ function SincronizarMP({ userId, onApplied }) {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 p-4">
-      <h3 className="mb-1 text-sm font-bold text-slate-800">Sincronizar com o Mercado Pago</h3>
-      <p className="mb-3 text-xs text-slate-500">Primeiro mostra o que mudaria; só grava depois que você confirmar.</p>
-      <button type="button" disabled={busy} onClick={ver} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+    <div className="rounded-xl border border-ds-line p-4">
+      <h3 className="mb-1 text-sm font-bold text-ds-ink">Sincronizar com o Mercado Pago</h3>
+      <p className="mb-3 text-xs text-ds-ink-soft">Primeiro mostra o que mudaria; só grava depois que você confirmar.</p>
+      <button type="button" disabled={busy} onClick={ver} className="rounded-xl border border-ds-line bg-ds-surface px-3 py-2 text-sm font-semibold text-ds-ink hover:bg-ds-bg disabled:opacity-50">
         {busy && !diff ? 'Consultando…' : 'Ver diferença'}
       </button>
-      {msg && <p className="mt-3 text-sm text-slate-700">{msg}</p>}
+      {msg && <p className="mt-3 text-sm text-ds-ink">{msg}</p>}
       {diff && (
         <div className="mt-3 space-y-2">
-          {!diff.hasSubscriptions && <p className="text-sm text-slate-500">Nenhuma assinatura recorrente (só pagamento avulso).</p>}
+          {!diff.hasSubscriptions && <p className="text-sm text-ds-ink-soft">Nenhuma assinatura recorrente (só pagamento avulso).</p>}
           {asArray(diff.items).map(item => (
             <Row key={item.subscriptionId}>
-              <span className="font-bold text-slate-900">{item.plan}</span> · {ACAO_LABELS[item.action] ?? item.action}
-              <span className="block text-xs text-slate-500">Aqui: {item.storedStatus} · próxima {formatDate(item.storedNextChargeAt)}</span>
+              <span className="font-bold text-ds-ink">{item.plan}</span> · {ACAO_LABELS[item.action] ?? item.action}
+              <span className="block text-xs text-ds-ink-soft">Aqui: {item.storedStatus} · próxima {formatDate(item.storedNextChargeAt)}</span>
               {item.action === 'unreachable'
-                ? <span className="block text-xs text-slate-500">{item.reason}</span>
-                : <span className="block text-xs text-slate-500">Mercado Pago: {item.mpStatus || '?'} · próxima {formatDate(item.mpNextChargeAt)}</span>}
-              {item.action === 'update' && <span className="block text-xs font-bold text-amber-700">Depois: {item.newStatus} · próxima {formatDate(item.newNextChargeAt)}</span>}
+                ? <span className="block text-xs text-ds-ink-soft">{item.reason}</span>
+                : <span className="block text-xs text-ds-ink-soft">Mercado Pago: {item.mpStatus || '?'} · próxima {formatDate(item.mpNextChargeAt)}</span>}
+              {item.action === 'update' && <span className="block text-xs font-bold text-ds-warn-ink">Depois: {item.newStatus} · próxima {formatDate(item.newNextChargeAt)}</span>}
             </Row>
           ))}
           {diff.pending > 0 && (
-            <button type="button" disabled={busy} onClick={aplicar} className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
+            <button type="button" disabled={busy} onClick={aplicar} className="rounded-xl bg-ds-accent-strong px-3 py-2 text-sm font-bold text-ds-surface hover:bg-ds-accent-strong/85 disabled:opacity-50">
               {busy ? 'Gravando…' : `Aplicar ${diff.pending} mudança(s)`}
             </button>
           )}
@@ -230,22 +230,22 @@ function TestarRenovacao({ userId }) {
   }
   const marca = (ok) => (ok === true ? '✓' : ok === false ? '✗' : '?')
   return (
-    <div className="rounded-xl border border-slate-200 p-4">
-      <h3 className="mb-1 text-sm font-bold text-slate-800">Testar renovação</h3>
-      <p className="mb-3 text-xs text-slate-500">Confere os 6 passos da cobrança automática. Só lê, não altera nada.</p>
-      <button type="button" disabled={busy} onClick={testar} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+    <div className="rounded-xl border border-ds-line p-4">
+      <h3 className="mb-1 text-sm font-bold text-ds-ink">Testar renovação</h3>
+      <p className="mb-3 text-xs text-ds-ink-soft">Confere os 6 passos da cobrança automática. Só lê, não altera nada.</p>
+      <button type="button" disabled={busy} onClick={testar} className="rounded-xl border border-ds-line bg-ds-surface px-3 py-2 text-sm font-semibold text-ds-ink hover:bg-ds-bg disabled:opacity-50">
         {busy ? 'Testando…' : 'Testar renovação'}
       </button>
-      {erro && <p className="mt-3 text-sm text-rose-700">{erro}</p>}
+      {erro && <p className="mt-3 text-sm text-ds-danger">{erro}</p>}
       {res && (
         <div className="mt-3 space-y-2">
           {asArray(res.elos).map((elo, i) => (
             <Row key={elo.id}>
-              <span className="font-bold text-slate-900">{marca(elo.ok)} {i + 1}. {elo.title}</span>
-              {asArray(elo.lines).map(l => <span key={l} className="block text-xs text-slate-500">{l}</span>)}
+              <span className="font-bold text-ds-ink">{marca(elo.ok)} {i + 1}. {elo.title}</span>
+              {asArray(elo.lines).map(l => <span key={l} className="block text-xs text-ds-ink-soft">{l}</span>)}
             </Row>
           ))}
-          <p className={`text-sm font-bold ${res.verdict?.armed ? 'text-emerald-700' : 'text-amber-700'}`}>{res.verdict?.text}</p>
+          <p className={`text-sm font-bold ${res.verdict?.armed ? 'text-ds-accent-strong' : 'text-ds-warn-ink'}`}>{res.verdict?.text}</p>
         </div>
       )}
     </div>
@@ -265,14 +265,14 @@ function FinanceiroTab({ financeiro, userId, email, onChanged }) {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
-          <h3 className="mb-2 text-sm font-bold text-slate-800">Assinaturas</h3>
+          <h3 className="mb-2 text-sm font-bold text-ds-ink">Assinaturas</h3>
           <ExpandableList
             items={financeiro?.subscriptions}
             emptyLabel="Nunca assinou."
             render={(sub) => (
               <Row key={sub.id ?? sub.startedAt}>
-                <span className="font-bold text-slate-900">{sub.planLabel}</span> · {sub.status}
-                <span className="block text-xs text-slate-500">
+                <span className="font-bold text-ds-ink">{sub.planLabel}</span> · {sub.status}
+                <span className="block text-xs text-ds-ink-soft">
                   Assinou {formatDate(sub.startedAt)}
                   {sub.nextChargeAt ? ` · próxima cobrança ${formatDate(sub.nextChargeAt)}` : ''}
                   {sub.cancelledAt ? ` · cancelou ${formatDate(sub.cancelledAt)}` : ''}
@@ -282,14 +282,14 @@ function FinanceiroTab({ financeiro, userId, email, onChanged }) {
           />
         </div>
         <div>
-          <h3 className="mb-2 text-sm font-bold text-slate-800">Pagamentos</h3>
+          <h3 className="mb-2 text-sm font-bold text-ds-ink">Pagamentos</h3>
           <ExpandableList
             items={financeiro?.payments}
             emptyLabel="Sem pagamentos."
             render={(payment) => (
               <Row key={payment.id ?? payment.createdAt}>
-                <span className="font-bold text-slate-900">{formatCurrency(payment.amount)}</span> · {payment.planLabel} · {payment.status}
-                <span className="block text-xs text-slate-500">{formatDate(payment.createdAt)}{payment.expiresAt ? ` · acesso até ${formatDate(payment.expiresAt)}` : ''}</span>
+                <span className="font-bold text-ds-ink">{formatCurrency(payment.amount)}</span> · {payment.planLabel} · {payment.status}
+                <span className="block text-xs text-ds-ink-soft">{formatDate(payment.createdAt)}{payment.expiresAt ? ` · acesso até ${formatDate(payment.expiresAt)}` : ''}</span>
               </Row>
             )}
           />
@@ -305,14 +305,14 @@ function FinanceiroTab({ financeiro, userId, email, onChanged }) {
 
       {asArray(financeiro?.manualGrants).length > 0 && (
         <div>
-          <h3 className="mb-2 text-sm font-bold text-slate-800">Acessos liberados na mão</h3>
+          <h3 className="mb-2 text-sm font-bold text-ds-ink">Acessos liberados na mão</h3>
           <ExpandableList
             items={financeiro?.manualGrants}
             emptyLabel="Nenhum."
             render={(grant) => (
               <Row key={grant.at}>
                 {formatDateTime(grant.at)}
-                {grant.reason && <span className="block text-xs text-slate-500">{grant.reason}</span>}
+                {grant.reason && <span className="block text-xs text-ds-ink-soft">{grant.reason}</span>}
               </Row>
             )}
           />
@@ -323,10 +323,10 @@ function FinanceiroTab({ financeiro, userId, email, onChanged }) {
 }
 
 const CHAVE_STATUS_VISUAL = {
-  ok: { texto: 'Funcionando', classe: 'bg-emerald-100 text-emerald-700' },
-  vencida: { texto: 'Vencida', classe: 'bg-red-100 text-red-700' },
-  recusada: { texto: 'Recusada pela loja', classe: 'bg-red-100 text-red-700' },
-  'sem-medicao': { texto: 'Sem medição', classe: 'bg-slate-100 text-slate-600' },
+  ok: { texto: 'Funcionando', classe: 'bg-ds-accent/20 text-ds-accent-strong' },
+  vencida: { texto: 'Vencida', classe: 'bg-ds-danger/20 text-ds-danger' },
+  recusada: { texto: 'Recusada pela loja', classe: 'bg-ds-danger/20 text-ds-danger' },
+  'sem-medicao': { texto: 'Sem medição', classe: 'bg-ds-bg-soft text-ds-ink-soft' },
 }
 
 function haQuanto(ms) {
@@ -359,17 +359,17 @@ function ChavesLojas({ userId, chaves }) {
 
   return (
     <div>
-      <h3 className="mb-2 text-sm font-bold text-slate-800">Chaves das lojas</h3>
+      <h3 className="mb-2 text-sm font-bold text-ds-ink">Chaves das lojas</h3>
       <ul className="space-y-2">
         {lista.map(chave => {
           const teste = testes[chave.platform]
           const efetivo = teste && !teste.erro ? teste.status : chave.status
           const visual = CHAVE_STATUS_VISUAL[efetivo] ?? CHAVE_STATUS_VISUAL['sem-medicao']
           return (
-            <li key={chave.platform} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
-              <span className="font-bold text-slate-900">{chave.label}</span>
+            <li key={chave.platform} className="flex flex-wrap items-center gap-3 rounded-xl border border-ds-line bg-ds-surface px-3 py-2 text-sm">
+              <span className="font-bold text-ds-ink">{chave.label}</span>
               <span className={`rounded-full px-3 py-1 text-xs font-bold ${visual.classe}`}>{visual.texto}</span>
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-ds-ink-soft">
                 {teste?.erro ? teste.erro
                   : teste ? (teste.alive === null ? 'Teste sem resposta da loja (não conta como vencida).' : `testada agora (${formatDateTime(teste.checkedAt)})`)
                     : (haQuanto(chave.sinceMs) || 'a sondagem diária não achou problema registrado')}
@@ -378,7 +378,7 @@ function ChavesLojas({ userId, chaves }) {
                 type="button"
                 disabled={ocupada === chave.platform}
                 onClick={() => testar(chave.platform)}
-                className="ml-auto rounded-xl border border-slate-200 px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                className="ml-auto rounded-xl border border-ds-line px-3 py-1 text-xs font-bold text-ds-ink hover:bg-ds-bg disabled:opacity-50"
               >
                 {ocupada === chave.platform ? 'Testando...' : 'Testar chave'}
               </button>
@@ -405,42 +405,42 @@ function TecnicoTab({ tecnico, userId, chavesLojas }) {
           atual; a lista é o que permite ver troca de chip e cruzar com outras
           contas. Mais de um número não é defeito por si só. */}
       <div>
-        <h3 className="mb-2 text-sm font-bold text-slate-800">Números de WhatsApp já ligados</h3>
+        <h3 className="mb-2 text-sm font-bold text-ds-ink">Números de WhatsApp já ligados</h3>
         {asArray(tecnico?.waPhones).length > 0 ? (
           <ul className="flex flex-wrap gap-2">
             {asArray(tecnico.waPhones).map(phone => (
-              <li key={phone} className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm font-semibold text-slate-700">
+              <li key={phone} className="rounded-lg border border-ds-line bg-ds-surface px-3 py-1 text-sm font-semibold text-ds-ink">
                 {phone}
-                {phone === tecnico?.waPhone && <span className="ml-2 text-xs font-normal text-emerald-700">atual</span>}
+                {phone === tecnico?.waPhone && <span className="ml-2 text-xs font-normal text-ds-accent-strong">atual</span>}
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-slate-400">Nenhuma conexão registrada ainda.</p>
+          <p className="text-sm text-ds-ink-faint">Nenhuma conexão registrada ainda.</p>
         )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
-          <h3 className="mb-2 text-sm font-bold text-slate-800">Por que caiu (30 dias)</h3>
+          <h3 className="mb-2 text-sm font-bold text-ds-ink">Por que caiu (30 dias)</h3>
           <ExpandableList
             items={quedas.topCodes}
             emptyLabel="Nenhuma queda registrada."
             render={(item) => (
               <Row key={item.code}>
-                <span className="font-bold text-slate-900">{item.count}×</span> código {item.code}
+                <span className="font-bold text-ds-ink">{item.count}×</span> código {item.code}
               </Row>
             )}
           />
         </div>
         <div>
-          <h3 className="mb-2 text-sm font-bold text-slate-800">Erros de envio (30 dias)</h3>
+          <h3 className="mb-2 text-sm font-bold text-ds-ink">Erros de envio (30 dias)</h3>
           <ExpandableList
             items={tecnico?.errorsByCategory30d}
             emptyLabel="Nenhum erro registrado."
             render={(item) => (
               <Row key={item.category}>
-                <span className="font-bold text-slate-900">{item.count}×</span> {item.label}
+                <span className="font-bold text-ds-ink">{item.count}×</span> {item.label}
               </Row>
             )}
           />
@@ -451,12 +451,12 @@ function TecnicoTab({ tecnico, userId, chavesLojas }) {
 
       {asArray(tecnico?.credentialHealth).length > 0 && (
         <div>
-          <h3 className="mb-2 text-sm font-bold text-slate-800">Lojas cadastradas</h3>
+          <h3 className="mb-2 text-sm font-bold text-ds-ink">Lojas cadastradas</h3>
           <div className="flex flex-wrap gap-2">
             {asArray(tecnico.credentialHealth).map(health => (
               <span
                 key={health.platform}
-                className={`rounded-full px-3 py-1 text-xs font-bold ${health.configured ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}
+                className={`rounded-full px-3 py-1 text-xs font-bold ${health.configured ? 'bg-ds-accent/20 text-ds-accent-strong' : 'bg-ds-warn/20 text-ds-warn-ink'}`}
               >
                 {health.label || health.platform}{health.configured ? '' : ' · falta preencher'}
               </span>
@@ -479,7 +479,7 @@ function Sparkline({ series }) {
           <div
             key={day.date}
             title={`${formatDate(day.date)}: ${day.success} enviadas${day.error ? `, ${day.error} com erro` : ''}`}
-            className="flex-1 rounded-t bg-emerald-400"
+            className="flex-1 rounded-t bg-ds-accent"
             style={{ height: `${Math.max(2, (total / max) * 100)}%`, opacity: day.error ? 0.6 : 1 }}
           />
         )
@@ -521,16 +521,16 @@ function LimiteAutomacoes({ userId, valorAtual, ativas, onSaved }) {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+    <div className="rounded-2xl border border-ds-line bg-ds-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-bold text-slate-800">Limite de automações</h3>
-          <p className="mt-1 text-xs text-slate-500">Quantas automações de oferta esta cliente pode manter. Hoje ela tem {formatNumber(ativas)} ligada(s).</p>
+          <h3 className="text-sm font-bold text-ds-ink">Limite de automações</h3>
+          <p className="mt-1 text-xs text-ds-ink-soft">Quantas automações de oferta esta cliente pode manter. Hoje ela tem {formatNumber(ativas)} ligada(s).</p>
         </div>
         {!editando && (
           <div className="flex items-center gap-3">
-            <span className="text-2xl font-black tabular-nums text-slate-900">{valorAtual ?? '—'}</span>
-            <button type="button" onClick={() => { setValor(String(valorAtual ?? '')); setEditando(true) }} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Alterar</button>
+            <span className="text-[28px] font-black tabular-nums text-ds-ink">{valorAtual ?? '—'}</span>
+            <button type="button" onClick={() => { setValor(String(valorAtual ?? '')); setEditando(true) }} className="rounded-lg bg-ds-accent/10 px-3 py-2 text-xs font-bold text-ds-accent-strong hover:bg-ds-accent/20">Alterar</button>
           </div>
         )}
       </div>
@@ -543,14 +543,14 @@ function LimiteAutomacoes({ userId, valorAtual, ativas, onSaved }) {
             step="1"
             value={valor}
             onChange={(event) => setValor(event.target.value)}
-            className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="w-28 rounded-xl border border-ds-line px-3 py-2 text-sm"
             aria-label="Novo limite de automações"
           />
-          <button type="submit" disabled={salvando} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">{salvando ? 'Salvando…' : 'Salvar'}</button>
-          <button type="button" onClick={() => { setEditando(false); setErro('') }} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">Cancelar</button>
+          <button type="submit" disabled={salvando} className="rounded-xl bg-ds-accent-strong px-4 py-2 text-sm font-bold text-ds-surface disabled:opacity-60">{salvando ? 'Salvando…' : 'Salvar'}</button>
+          <button type="button" onClick={() => { setEditando(false); setErro('') }} className="rounded-xl border border-ds-line px-4 py-2 text-sm font-semibold text-ds-ink-soft">Cancelar</button>
         </form>
       )}
-      {erro && <p className="mt-2 text-xs font-semibold text-red-700">{erro}</p>}
+      {erro && <p className="mt-2 text-xs font-semibold text-ds-danger">{erro}</p>}
     </div>
   )
 }
@@ -567,10 +567,10 @@ function UsoTab({ uso, userId, onSaved }) {
 
       <LimiteAutomacoes userId={userId} valorAtual={uso?.maxAutomations} ativas={uso?.automations?.enabled} onSaved={onSaved} />
 
-      <div className="rounded-2xl border border-slate-100 p-4">
+      <div className="rounded-2xl border border-ds-line p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-800">Envios por dia (30 dias)</h3>
-          <span className="text-xs text-slate-500">{formatNumber(uso?.error30d)} com erro · {formatNumber(uso?.dedupBlocked30d)} repetições bloqueadas</span>
+          <h3 className="text-sm font-bold text-ds-ink">Envios por dia (30 dias)</h3>
+          <span className="text-xs text-ds-ink-soft">{formatNumber(uso?.error30d)} com erro · {formatNumber(uso?.dedupBlocked30d)} repetições bloqueadas</span>
         </div>
         <Sparkline series={uso?.byDay} />
       </div>
@@ -604,9 +604,9 @@ function formatDurationMs(value) {
 }
 
 function statusDoRobo(status, lifecycle) {
-  if (status === 'connected') return { label: 'Conectado', cls: 'bg-emerald-100 text-emerald-700' }
-  if (status === 'connecting' || lifecycle === 'reconnecting') return { label: lifecycle === 'reconnecting' ? 'Reconectando' : 'Conectando', cls: 'bg-amber-100 text-amber-800' }
-  return { label: 'Desconectado', cls: 'bg-red-100 text-red-700' }
+  if (status === 'connected') return { label: 'Conectado', cls: 'bg-ds-accent/20 text-ds-accent-strong' }
+  if (status === 'connecting' || lifecycle === 'reconnecting') return { label: lifecycle === 'reconnecting' ? 'Reconectando' : 'Conectando', cls: 'bg-ds-warn/20 text-ds-warn-ink' }
+  return { label: 'Desconectado', cls: 'bg-ds-danger/20 text-ds-danger' }
 }
 
 // Nomes leigos dos eventos de conexão (o `type` cru continua sendo o fallback).
@@ -621,12 +621,12 @@ const ROTULO_EVENTO = {
 }
 
 const TOM_MOTIVO = {
-  red: 'bg-red-100 text-red-800',
-  amber: 'bg-amber-100 text-amber-800',
-  purple: 'bg-purple-100 text-purple-800',
-  sky: 'bg-sky-100 text-sky-800',
-  emerald: 'bg-emerald-100 text-emerald-800',
-  slate: 'bg-slate-100 text-slate-700',
+  red: 'bg-ds-danger/20 text-ds-danger',
+  amber: 'bg-ds-warn/20 text-ds-warn-ink',
+  purple: 'bg-ds-pro-soft text-ds-pro-ink',
+  sky: 'bg-ds-bg-soft text-ds-ink-soft',
+  emerald: 'bg-ds-accent/20 text-ds-accent-strong',
+  slate: 'bg-ds-bg-soft text-ds-ink',
 }
 
 // Seção "Robô" (G2 fecha o corte do Início): o que era o drawer "Drill-down
@@ -722,16 +722,16 @@ function RoboTab({ userId }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-ds-line bg-ds-bg p-4">
         <span className={`rounded-full px-3 py-1 text-xs font-black ${meta.cls}`}>{meta.label}</span>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">Sinal: {formatRelative(session?.lastHeartbeatAt)}</span>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">Código: {session?.lastDisconnectCode || '—'}</span>
+        <span className="rounded-full bg-ds-surface px-3 py-1 text-xs font-bold text-ds-ink-soft ring-1 ring-ds-line">Sinal: {formatRelative(session?.lastHeartbeatAt)}</span>
+        <span className="rounded-full bg-ds-surface px-3 py-1 text-xs font-bold text-ds-ink-soft ring-1 ring-ds-line">Código: {session?.lastDisconnectCode || '—'}</span>
         {detail?.canAdminRetry && (
           <button
             type="button"
             onClick={() => reconnect(userId)}
             disabled={reconectando}
-            className="ml-auto rounded-lg bg-sky-600 px-3 py-2 text-xs font-black text-white hover:bg-sky-700 disabled:opacity-60"
+            className="ml-auto rounded-lg bg-ds-accent-strong px-3 py-2 text-xs font-black text-ds-surface hover:bg-ds-accent-strong/85 disabled:opacity-60"
           >
             {reconectando ? 'Subindo…' : 'Tentar reconectar'}
           </button>
@@ -741,44 +741,44 @@ function RoboTab({ userId }) {
             type="button"
             onClick={() => parar(userId)}
             disabled={parando}
-            className={`${detail?.canAdminRetry ? '' : 'ml-auto '}rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-60`}
+            className={`${detail?.canAdminRetry ? '' : 'ml-auto '}rounded-lg border border-ds-danger/60 bg-ds-surface px-3 py-2 text-xs font-black text-ds-danger hover:bg-ds-danger/10 disabled:opacity-60`}
           >
             {parando ? 'Parando…' : 'Parar robô'}
           </button>
         )}
       </div>
-      {aviso && <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">{aviso}</p>}
+      {aviso && <p className="rounded-xl bg-ds-bg-soft px-3 py-2 text-sm text-ds-ink">{aviso}</p>}
 
       {motivo && meta.label !== 'Conectado' && (
         <div>
-          <h3 className="mb-2 text-sm font-bold text-slate-800">Por que caiu</h3>
+          <h3 className="mb-2 text-sm font-bold text-ds-ink">Por que caiu</h3>
           <span className={`inline-block rounded-full px-3 py-1 text-xs font-black ${TOM_MOTIVO[motivo.tone] || TOM_MOTIVO.slate}`}>{motivo.label}</span>
-          <p className="mt-1 text-xs text-slate-500">{motivo.detail}</p>
+          <p className="mt-1 text-xs text-ds-ink-soft">{motivo.detail}</p>
         </div>
       )}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4">
+      <section className="rounded-2xl border border-ds-line bg-ds-surface p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Por que não envia?</h3>
+          <h3 className="text-sm font-black uppercase tracking-wide text-ds-ink">Por que não envia?</h3>
           <button
             type="button"
             onClick={() => diagnosticar(userId)}
             disabled={diagCarregando}
-            className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-black text-white hover:bg-slate-900 disabled:opacity-60"
+            className="rounded-lg bg-ds-ink px-3 py-2 text-xs font-black text-ds-surface hover:bg-ds-ink-soft disabled:opacity-60"
           >
             {diagCarregando ? 'Verificando…' : 'Verificar agora'}
           </button>
         </div>
-        <p className="mt-1 text-[11px] text-slate-500">Confere, nesta ordem: conta, robô, WhatsApp, grupos e envios das últimas 6 horas. A primeira que falhar é a causa.</p>
-        {diag?.error && <p className="mt-3 text-sm text-red-700">{diag.error}</p>}
+        <p className="mt-1 text-[10.5px] text-ds-ink-soft">Confere, nesta ordem: conta, robô, WhatsApp, grupos e envios das últimas 6 horas. A primeira que falhar é a causa.</p>
+        {diag?.error && <p className="mt-3 text-sm text-ds-danger">{diag.error}</p>}
         {diag?.data && (
           <div className="mt-3 space-y-2">
-            <p className={`rounded-xl px-3 py-2 text-sm font-bold ${diag.data.veredito.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>{diag.data.veredito.frase}</p>
-            <ul className="divide-y divide-slate-100">
+            <p className={`rounded-xl px-3 py-2 text-sm font-bold ${diag.data.veredito.ok ? 'bg-ds-accent/10 text-ds-accent-strong' : 'bg-ds-warn/10 text-ds-ink'}`}>{diag.data.veredito.frase}</p>
+            <ul className="divide-y divide-ds-line">
               {asArray(diag.data.elos).map((elo) => (
                 <li key={elo.id} className="py-2 text-sm">
-                  <p className="font-bold text-slate-900">{elo.ok ? '✔' : '✗'} {elo.titulo}</p>
-                  {asArray(elo.frases).map((frase) => <p key={frase} className="mt-0.5 text-xs text-slate-600">{frase}</p>)}
+                  <p className="font-bold text-ds-ink">{elo.ok ? '✔' : '✗'} {elo.titulo}</p>
+                  {asArray(elo.frases).map((frase) => <p key={frase} className="mt-0.5 text-xs text-ds-ink-soft">{frase}</p>)}
                 </li>
               ))}
             </ul>
@@ -786,32 +786,32 @@ function RoboTab({ userId }) {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4">
+      <section className="rounded-2xl border border-ds-line bg-ds-surface p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Por que não conecta?</h3>
+          <h3 className="text-sm font-black uppercase tracking-wide text-ds-ink">Por que não conecta?</h3>
           <button
             type="button"
             onClick={() => diagnosticarConexao(userId)}
             disabled={diagCxCarregando}
-            className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-black text-white hover:bg-slate-900 disabled:opacity-60"
+            className="rounded-lg bg-ds-ink px-3 py-2 text-xs font-black text-ds-surface hover:bg-ds-ink-soft disabled:opacity-60"
           >
             {diagCxCarregando ? 'Verificando…' : 'Verificar agora'}
           </button>
         </div>
-        <p className="mt-1 text-[11px] text-slate-500">Confere, nesta ordem: conta, vaga no servidor, o que ela fez na tela, WhatsApp e credencial dos últimos 3 dias. A primeira que falhar é a causa.</p>
-        {diagCx?.error && <p className="mt-3 text-sm text-red-700">{diagCx.error}</p>}
+        <p className="mt-1 text-[10.5px] text-ds-ink-soft">Confere, nesta ordem: conta, vaga no servidor, o que ela fez na tela, WhatsApp e credencial dos últimos 3 dias. A primeira que falhar é a causa.</p>
+        {diagCx?.error && <p className="mt-3 text-sm text-ds-danger">{diagCx.error}</p>}
         {diagCx?.data && (
           <div className="mt-3 space-y-2">
-            <p className={`rounded-xl px-3 py-2 text-sm font-bold ${diagCx.data.veredito.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>
+            <p className={`rounded-xl px-3 py-2 text-sm font-bold ${diagCx.data.veredito.ok ? 'bg-ds-accent/10 text-ds-accent-strong' : 'bg-ds-warn/10 text-ds-ink'}`}>
               {diagCx.data.veredito.frase}
               {diagCx.data.veredito.acao && <span className="mt-1 block text-xs font-medium">O que fazer: {diagCx.data.veredito.acao}</span>}
             </p>
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-ds-line">
               {asArray(diagCx.data.elos).map((elo) => (
                 <li key={elo.id} className="py-2 text-sm">
-                  <p className="font-bold text-slate-900">{elo.ok ? '✔' : '✗'} {elo.titulo}</p>
+                  <p className="font-bold text-ds-ink">{elo.ok ? '✔' : '✗'} {elo.titulo}</p>
                   {asArray(elo.frases).map((frase, i) => (
-                    <p key={frase} className="mt-0.5 text-xs text-slate-600">{frase}{asArray(elo.acoes)[i] ? ` → ${asArray(elo.acoes)[i]}` : ''}</p>
+                    <p key={frase} className="mt-0.5 text-xs text-ds-ink-soft">{frase}{asArray(elo.acoes)[i] ? ` → ${asArray(elo.acoes)[i]}` : ''}</p>
                   ))}
                 </li>
               ))}
@@ -829,62 +829,62 @@ function RoboTab({ userId }) {
         <Card label="Parado até a cliente agir 7d" value={formatDurationMs(cm.manualOfflineMs7d)} helper={`${formatNumber(cm.manualRecoveries7d)} episódio(s) que só voltaram com ação dela`} />
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4">
-        <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Linha do tempo das quedas (7 dias)</h3>
-        <p className="mt-1 text-[11px] text-slate-500">Cada linha é um episódio fora do ar: quando começou, quanto durou e se o robô voltou sozinho ou só voltou depois que o cliente agiu.</p>
-        <div className="mt-3 divide-y divide-slate-100">
+      <section className="rounded-2xl border border-ds-line bg-ds-surface p-4">
+        <h3 className="text-sm font-black uppercase tracking-wide text-ds-ink">Linha do tempo das quedas (7 dias)</h3>
+        <p className="mt-1 text-[10.5px] text-ds-ink-soft">Cada linha é um episódio fora do ar: quando começou, quanto durou e se o robô voltou sozinho ou só voltou depois que o cliente agiu.</p>
+        <div className="mt-3 divide-y divide-ds-line">
           {asArray(detail?.offlineEpisodes).map((ep) => {
-            const cls = ep.open ? 'bg-amber-50 text-amber-800' : ep.endedBy === 'sozinho' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+            const cls = ep.open ? 'bg-ds-warn/10 text-ds-warn-ink' : ep.endedBy === 'sozinho' ? 'bg-ds-accent/10 text-ds-accent-strong' : 'bg-ds-danger/10 text-ds-danger'
             const rotulo = ep.open ? 'em aberto' : ep.endedBy === 'sozinho' ? 'voltou sozinho' : ep.endedBy === 'cliente' ? 'o cliente teve que agir' : 'interrompido'
             return (
               <div key={`${ep.startedAt}-${ep.endedAt || 'aberto'}`} className="grid grid-cols-[1fr_auto] items-center gap-3 py-2 text-sm">
                 <div>
-                  <p className="font-bold text-slate-900">{formatDateTime(ep.startedAt)} → {ep.endedAt ? formatDateTime(ep.endedAt) : 'agora'}</p>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="font-bold text-ds-ink">{formatDateTime(ep.startedAt)} → {ep.endedAt ? formatDateTime(ep.endedAt) : 'agora'}</p>
+                  <p className="text-[10.5px] text-ds-ink-soft">
                     {formatDurationMs(ep.durationMs)} fora
                     {ep.code ? ` · código ${ep.code}` : ''}
                     {ep.stuckMsg ? ' · mensagem travada' : ''}
                     {ep.terminal ? ' · sessão deslogada' : ''}
                   </p>
                 </div>
-                <span className={`whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-black ${cls}`}>{rotulo}</span>
+                <span className={`whitespace-nowrap rounded-full px-3 py-1 text-[10.5px] font-black ${cls}`}>{rotulo}</span>
               </div>
             )
           })}
-          {!asArray(detail?.offlineEpisodes).length && <p className="py-3 text-sm text-slate-500">Nenhuma queda registrada nos últimos 7 dias.</p>}
+          {!asArray(detail?.offlineEpisodes).length && <p className="py-3 text-sm text-ds-ink-soft">Nenhuma queda registrada nos últimos 7 dias.</p>}
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4">
-        <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Erros agrupados por tipo (7d)</h3>
-        <div className="mt-3 divide-y divide-slate-100">
+      <section className="rounded-2xl border border-ds-line bg-ds-surface p-4">
+        <h3 className="text-sm font-black uppercase tracking-wide text-ds-ink">Erros agrupados por tipo (7d)</h3>
+        <div className="mt-3 divide-y divide-ds-line">
           {asArray(detail?.errorsByType).map((item) => (
             <div key={item.errorMsg} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-sm">
               <div>
-                <p className="break-words text-xs font-bold text-slate-900">{item.errorMsg}</p>
-                <p className="mt-1 text-xs text-slate-500">{item.category || 'UNKNOWN'} · último {formatDateTime(item.lastSeenAt)}</p>
+                <p className="break-words text-xs font-bold text-ds-ink">{item.errorMsg}</p>
+                <p className="mt-1 text-xs text-ds-ink-soft">{item.category || 'UNKNOWN'} · último {formatDateTime(item.lastSeenAt)}</p>
               </div>
-              <span className="self-start rounded-full bg-red-50 px-3 py-1 text-xs font-black text-red-700">{formatNumber(item.count)}x</span>
+              <span className="self-start rounded-full bg-ds-danger/10 px-3 py-1 text-xs font-black text-ds-danger">{formatNumber(item.count)}x</span>
             </div>
           ))}
-          {!asArray(detail?.errorsByType).length && <p className="py-4 text-sm text-slate-500">Sem erros recentes nos últimos 7 dias.</p>}
+          {!asArray(detail?.errorsByType).length && <p className="py-4 text-sm text-ds-ink-soft">Sem erros recentes nos últimos 7 dias.</p>}
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4">
-        <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Linha do tempo de conexão</h3>
+      <section className="rounded-2xl border border-ds-line bg-ds-surface p-4">
+        <h3 className="text-sm font-black uppercase tracking-wide text-ds-ink">Linha do tempo de conexão</h3>
         <div className="mt-3 space-y-2">
           <ExpandableList
             items={detail?.recentEvents}
             emptyLabel="Sem eventos de conexão nos últimos 7 dias."
             render={(event) => (
-              <div key={event.id} className="rounded-xl bg-slate-50 p-3 text-sm">
+              <div key={event.id} className="rounded-xl bg-ds-bg p-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-black text-slate-900">{ROTULO_EVENTO[event.type] || event.type}</p>
-                  <span className="text-xs font-bold text-slate-500">{formatDateTime(event.occurredAt)}</span>
+                  <p className="font-black text-ds-ink">{ROTULO_EVENTO[event.type] || event.type}</p>
+                  <span className="text-xs font-bold text-ds-ink-soft">{formatDateTime(event.occurredAt)}</span>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">Código {event.code || '—'} · lifecycle {event.lifecycle || '—'}{event.metadata?.source === 'admin' ? ' · feito pelo admin' : ''}</p>
-                {event.metadata?.reason && <p className="mt-1 text-xs text-slate-700">Motivo: {event.metadata.reason}</p>}
+                <p className="mt-1 text-xs text-ds-ink-soft">Código {event.code || '—'} · lifecycle {event.lifecycle || '—'}{event.metadata?.source === 'admin' ? ' · feito pelo admin' : ''}</p>
+                {event.metadata?.reason && <p className="mt-1 text-xs text-ds-ink">Motivo: {event.metadata.reason}</p>}
               </div>
             )}
           />
@@ -923,28 +923,28 @@ function AjusteDeAcesso({ userId, planoAtual, onApplied }) {
   }
 
   return (
-    <form onSubmit={submit} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-700">Ajuste manual de plano/acesso</p>
+    <form onSubmit={submit} className="rounded-xl border border-ds-line bg-ds-bg p-3">
+      <p className="text-xs font-bold uppercase tracking-wide text-ds-ink">Ajuste manual de plano/acesso</p>
       <div className="mt-2 grid gap-2 md:grid-cols-3">
-        <select value={form.plan} onChange={(e) => setForm((f) => ({ ...f, plan: e.target.value }))} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs">
+        <select value={form.plan} onChange={(e) => setForm((f) => ({ ...f, plan: e.target.value }))} className="rounded-lg border border-ds-line bg-ds-surface px-2 py-2 text-xs">
           <option value="">Sem alterar plano</option>
           <option value="trial">trial</option>
           <option value="basic">basic</option>
           <option value="pro">pro</option>
           <option value="premium">premium (Instagram Stories)</option>
         </select>
-        <input value={form.days} onChange={(e) => setForm((f) => ({ ...f, days: e.target.value }))} type="number" min="-365" max="365" placeholder="Dias (+/-)" className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs" />
-        <input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Motivo (obrigatório)" className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs" required minLength={5} />
+        <input value={form.days} onChange={(e) => setForm((f) => ({ ...f, days: e.target.value }))} type="number" min="-365" max="365" placeholder="Dias (+/-)" className="rounded-lg border border-ds-line bg-ds-surface px-2 py-2 text-xs" />
+        <input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Motivo (obrigatório)" className="rounded-lg border border-ds-line bg-ds-surface px-2 py-2 text-xs" required minLength={5} />
       </div>
       <div className="mt-2">
-        <input value={form.partnerCode} onChange={(e) => setForm((f) => ({ ...f, partnerCode: e.target.value }))} placeholder="Código do parceiro influenciador (opcional — só para cortesia de parceria)" className="w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs" maxLength={32} />
-        <p className="mt-1 text-[11px] text-slate-500">Preenchendo aqui, o motivo é gravado como <code>parceiro-influenciador:&lt;código&gt;</code>, o que permite auditar depois quantas cortesias de parceria estão de pé. Cada cortesia ativa é uma sessão WhatsApp a mais no servidor.</p>
+        <input value={form.partnerCode} onChange={(e) => setForm((f) => ({ ...f, partnerCode: e.target.value }))} placeholder="Código do parceiro influenciador (opcional — só para cortesia de parceria)" className="w-full rounded-lg border border-ds-line bg-ds-surface px-2 py-2 text-xs" maxLength={32} />
+        <p className="mt-1 text-[10.5px] text-ds-ink-soft">Preenchendo aqui, o motivo é gravado como <code>parceiro-influenciador:&lt;código&gt;</code>, o que permite auditar depois quantas cortesias de parceria estão de pé. Cada cortesia ativa é uma sessão WhatsApp a mais no servidor.</p>
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
-        <p className="text-[11px] text-slate-500">Altera plano e/ou expiração imediatamente.</p>
-        <button disabled={saving} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Aplicando...' : 'Aplicar acesso'}</button>
+        <p className="text-[10.5px] text-ds-ink-soft">Altera plano e/ou expiração imediatamente.</p>
+        <button disabled={saving} className="rounded-lg bg-ds-accent-strong px-3 py-2 text-xs font-bold text-ds-surface disabled:opacity-50">{saving ? 'Aplicando...' : 'Aplicar acesso'}</button>
       </div>
-      {message && <p className="mt-2 text-xs text-slate-700">{message}</p>}
+      {message && <p className="mt-2 text-xs text-ds-ink">{message}</p>}
     </form>
   )
 }
@@ -974,13 +974,13 @@ function RegistrarContato({ userId, onSaved }) {
   }
 
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+    <div className="rounded-xl border border-ds-line bg-ds-bg p-3">
       <form onSubmit={submit}>
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-700">Registrar contato</p>
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Resumo do que foi conversado" className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs" />
+        <p className="text-xs font-bold uppercase tracking-wide text-ds-ink">Registrar contato</p>
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Resumo do que foi conversado" className="mt-2 w-full rounded-lg border border-ds-line bg-ds-surface px-2 py-2 text-xs" />
         <div className="mt-2 flex items-center justify-between gap-2">
-          {message ? <p className="text-xs text-slate-700">{message}</p> : <span />}
-          <button disabled={saving || !notes.trim()} className="rounded-lg bg-sky-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Salvando…' : 'Registrar contato'}</button>
+          {message ? <p className="text-xs text-ds-ink">{message}</p> : <span />}
+          <button disabled={saving || !notes.trim()} className="rounded-lg bg-ds-accent-strong px-3 py-2 text-xs font-bold text-ds-surface disabled:opacity-50">{saving ? 'Salvando…' : 'Registrar contato'}</button>
         </div>
       </form>
     </div>
@@ -997,28 +997,28 @@ function AtendimentoTab({ history, onChanged }) {
 }
 
 const KIND_STYLES = {
-  cadastro: ['bg-slate-100 text-slate-700', 'Cadastro'],
-  financeiro: ['bg-emerald-100 text-emerald-800', 'Financeiro'],
-  tecnico: ['bg-red-100 text-red-700', 'Técnico'],
-  uso: ['bg-sky-100 text-sky-800', 'Uso'],
-  suporte: ['bg-violet-100 text-violet-800', 'Suporte'],
+  cadastro: ['bg-ds-bg-soft text-ds-ink', 'Cadastro'],
+  financeiro: ['bg-ds-accent/20 text-ds-accent-strong', 'Financeiro'],
+  tecnico: ['bg-ds-danger/20 text-ds-danger', 'Técnico'],
+  uso: ['bg-ds-bg-soft text-ds-ink-soft', 'Uso'],
+  suporte: ['bg-ds-pro-soft text-ds-pro-ink', 'Suporte'],
 }
 
 function Timeline({ events }) {
   const list = asArray(events)
-  if (!list.length) return <p className="text-sm text-slate-400">Sem histórico ainda.</p>
+  if (!list.length) return <p className="text-sm text-ds-ink-faint">Sem histórico ainda.</p>
   return (
     <ol className="space-y-3">
       {list.map((event, index) => {
-        const [tone, label] = KIND_STYLES[event.kind] ?? ['bg-slate-100 text-slate-700', event.kind]
+        const [tone, label] = KIND_STYLES[event.kind] ?? ['bg-ds-bg-soft text-ds-ink', event.kind]
         return (
-          <li key={`${event.at}-${index}`} className="border-l-2 border-slate-100 pl-3">
+          <li key={`${event.at}-${index}`} className="border-l-2 border-ds-line pl-3">
             <div className="flex items-center gap-2">
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${tone}`}>{label}</span>
-              <span className="text-xs text-slate-400">{formatDate(event.at)}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase ${tone}`}>{label}</span>
+              <span className="text-xs text-ds-ink-faint">{formatDate(event.at)}</span>
             </div>
-            <p className="text-sm font-semibold text-slate-800">{event.title}</p>
-            {event.detail && <p className="text-xs text-slate-500">{event.detail}</p>}
+            <p className="text-sm font-semibold text-ds-ink">{event.title}</p>
+            {event.detail && <p className="text-xs text-ds-ink-soft">{event.detail}</p>}
           </li>
         )
       })}
@@ -1077,27 +1077,27 @@ function BloquearConta({ userId, email, status, podeBloquear, onSaved }) {
 
   if (!aberto) {
     return (
-      <button type="button" onClick={() => setAberto(true)} className="rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">
+      <button type="button" onClick={() => setAberto(true)} className="rounded-xl border border-ds-danger/40 bg-ds-surface px-3 py-2 text-sm font-semibold text-ds-danger hover:bg-ds-danger/10">
         {bloqueada ? 'Desbloquear conta' : 'Bloquear / banir conta'}
       </button>
     )
   }
 
   return (
-    <form onSubmit={confirmar} className="w-full max-w-md space-y-2 rounded-2xl border border-red-200 bg-white p-4">
-      <h3 className="text-sm font-bold text-slate-800">{bloqueada ? 'Desbloquear conta' : 'Bloquear ou banir conta'}</h3>
+    <form onSubmit={confirmar} className="w-full max-w-md space-y-2 rounded-2xl border border-ds-danger/40 bg-ds-surface p-4">
+      <h3 className="text-sm font-bold text-ds-ink">{bloqueada ? 'Desbloquear conta' : 'Bloquear ou banir conta'}</h3>
       {!bloqueada && (
-        <select value={alvo} onChange={e => setAlvo(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <select value={alvo} onChange={e => setAlvo(e.target.value)} className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm">
           <option value="suspended">Suspender (pode ser desfeito)</option>
           <option value="banned">Banir</option>
         </select>
       )}
-      <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={3} maxLength={400} placeholder="Motivo (mínimo 10 letras)" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-      <input value={emailDigitado} onChange={e => setEmailDigitado(e.target.value)} placeholder={`Digite ${email ?? 'o e-mail da conta'} para confirmar`} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-      {erro && <p className="text-xs font-semibold text-red-700">{erro}</p>}
+      <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={3} maxLength={400} placeholder="Motivo (mínimo 10 letras)" className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm" />
+      <input value={emailDigitado} onChange={e => setEmailDigitado(e.target.value)} placeholder={`Digite ${email ?? 'o e-mail da conta'} para confirmar`} className="w-full rounded-xl border border-ds-line px-3 py-2 text-sm" />
+      {erro && <p className="text-xs font-semibold text-ds-danger">{erro}</p>}
       <div className="flex gap-2">
-        <button type="submit" disabled={salvando} className="rounded-xl bg-red-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">{salvando ? 'Salvando...' : 'Confirmar'}</button>
-        <button type="button" onClick={() => { setAberto(false); setErro('') }} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">Cancelar</button>
+        <button type="submit" disabled={salvando} className="rounded-xl bg-ds-danger px-3 py-2 text-sm font-bold text-ds-surface disabled:opacity-50">{salvando ? 'Salvando...' : 'Confirmar'}</button>
+        <button type="button" onClick={() => { setAberto(false); setErro('') }} className="rounded-xl border border-ds-line px-3 py-2 text-sm font-semibold text-ds-ink">Cancelar</button>
       </div>
     </form>
   )
@@ -1139,31 +1139,31 @@ export default function AdminClienteHistoricoPage() {
   const error = isCurrent ? result.error : ''
   const history = isCurrent ? result.history : null
 
-  if (loading) return <main className="min-h-screen bg-slate-50 px-5 py-8"><LoadingState /></main>
-  if (error) return <main className="min-h-screen bg-slate-50 px-5 py-8"><div className="mx-auto max-w-3xl"><Alert type="error" title="Histórico do cliente" message={error} /></div></main>
+  if (loading) return <main className="min-h-screen bg-ds-bg px-5 py-8"><LoadingState /></main>
+  if (error) return <main className="min-h-screen bg-ds-bg px-5 py-8"><div className="mx-auto max-w-3xl"><Alert type="error" title="Histórico do cliente" message={error} /></div></main>
   if (!history) return null
 
   const headline = history.headline ?? {}
 
   return (
-    <main className="min-h-screen bg-slate-50 px-5 py-8">
+    <main className="min-h-screen bg-ds-bg px-5 py-8">
       <div className="mx-auto max-w-7xl space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Histórico do cliente</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-ds-accent-strong">Histórico do cliente</p>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-black text-slate-900">{history.cadastro?.name || history.cadastro?.email}</h1>
+              <h1 className="text-[19px] font-black text-ds-ink">{history.cadastro?.name || history.cadastro?.email}</h1>
               <PayingTag status={history.paying?.status} />
             </div>
-            <p className="text-sm text-slate-500">{history.cadastro?.email} · {history.cadastro?.contactPhone || 'sem celular'}</p>
+            <p className="text-sm text-ds-ink-soft">{history.cadastro?.email} · {history.cadastro?.contactPhone || 'sem celular'}</p>
           </div>
           <div className="flex flex-wrap items-start gap-2">
             <BloquearConta userId={history.id} email={history.cadastro?.email} status={history.cadastro?.status} podeBloquear={history.podeBloquear === true} onSaved={reload} />
-            <Link href="/admin/clientes" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Voltar à lista</Link>
+            <Link href="/admin/clientes" className="rounded-xl border border-ds-line bg-ds-surface px-3 py-2 text-sm font-semibold text-ds-ink hover:bg-ds-bg">Voltar à lista</Link>
           </div>
         </div>
 
-        <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3 lg:grid-cols-6">
+        <section className="grid gap-3 rounded-2xl border border-ds-line bg-ds-surface p-4 shadow-sm sm:grid-cols-3 lg:grid-cols-6">
           <Card label="Situação" value={SITUACAO_LABELS[headline.situacao] ?? headline.situacao ?? '—'} />
           <Card label="Plano" value={headline.plano} />
           <Card label="Vence em" value={formatDate(headline.vencimento)} />
@@ -1173,14 +1173,14 @@ export default function AdminClienteHistoricoPage() {
         </section>
 
         <div className="grid gap-5 lg:grid-cols-3">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+          <section className="rounded-2xl border border-ds-line bg-ds-surface p-5 shadow-sm lg:col-span-2">
             <nav className="mb-4 flex flex-wrap gap-1">
               {TABS.map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => setTab(key)}
-                  className={`rounded-xl px-4 py-2 text-sm font-bold transition ${tab === key ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                  className={`rounded-xl px-4 py-2 text-sm font-bold transition ${tab === key ? 'bg-ds-accent-strong text-ds-surface' : 'text-ds-ink-soft hover:bg-ds-line-strong'}`}
                 >
                   {label}
                 </button>
@@ -1194,8 +1194,8 @@ export default function AdminClienteHistoricoPage() {
             {tab === 'atendimento' && <AtendimentoTab history={history} onChanged={reload} />}
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-3 text-sm font-bold text-slate-800">Linha do tempo</h2>
+          <section className="rounded-2xl border border-ds-line bg-ds-surface p-5 shadow-sm">
+            <h2 className="mb-3 text-sm font-bold text-ds-ink">Linha do tempo</h2>
             <div className="max-h-[70vh] overflow-y-auto pr-1">
               <Timeline events={history.timeline} />
             </div>

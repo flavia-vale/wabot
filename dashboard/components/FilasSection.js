@@ -56,7 +56,7 @@ export default function FilasSection({ admin }) {
         <div>
           <h2 style={{ color: 'var(--ink)' }} className="text-lg font-black">Filas · envios presos</h2>
           <p style={{ color: 'var(--ink-soft)' }} className="text-xs">
-            Fila: {dados?.backend === 'bullmq' ? 'BullMQ (Redis)' : 'em memória (sem DLQ neste ambiente)'}
+            Fila: {dados?.backend === 'bullmq' ? 'guardada no Redis' : 'em memória (sem fila de reserva neste ambiente)'}
             {dados ? ` · preso = em "enviando" há mais de ${dados.presosDesdeMin} min` : ''}
           </p>
         </div>
@@ -87,7 +87,7 @@ export default function FilasSection({ admin }) {
           </table>
         </div>
       )}
-      {!canManage && <p style={{ color: 'var(--ink-soft)' }} className="mt-2 text-xs">Somente leitura — sem permissão tech:write.</p>}
+      {!canManage && <p style={{ color: 'var(--ink-soft)' }} className="mt-2 text-xs">Você só pode ver esta parte.</p>}
     </section>
   )
 }
