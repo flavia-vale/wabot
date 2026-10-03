@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { compararSubida, isMirror, pior } from '../scripts/vigia-subida.mjs'
+import { compararSubida, isMirror, pior, SEM_MARCA_DE_RESTART } from '../scripts/vigia-subida.mjs'
 
 const pm2 = (restarts = 0) => ['api', 'dashboard', 'bot-supervisor'].map(name => ({ name, status: 'online', restarts }))
 const http = { ready: 200, bots: 200, painel: 200 }
@@ -69,4 +69,11 @@ test('vigia-subida.mjs é somente leitura no banco e não mexe no pm2', () => {
   assert.doesNotMatch(s, /\.(create|update|updateMany|delete|deleteMany|upsert)\(/)
   assert.doesNotMatch(s, /\$executeRaw/)
   assert.doesNotMatch(s, /'pm2', \['(restart|reload|stop|delete|kill|save)/)
+})
+
+test('filtro de marca de restart não descarta envios com errorMsg nulo (todo sucesso)', () => {
+  // Regressão 2026-10-03: `NOT: { errorMsg: { startsWith } }` sozinho vira
+  // NOT (NULL LIKE …) = NULL no SQLite e some com todos os sucessos.
+  assert.deepEqual(SEM_MARCA_DE_RESTART.OR[0], { errorMsg: null })
+  assert.deepEqual(SEM_MARCA_DE_RESTART.OR[1], { NOT: { errorMsg: { startsWith: 'error:worker_restart' } } })
 })
