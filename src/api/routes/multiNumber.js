@@ -9,6 +9,7 @@ import { normalizePairingPhone } from '../../domain/session/service.js'
 import { switchActiveNumber } from '../../core/numberSwitch.js'
 import { NUMBER_SWITCHED_EVENT } from '../../jobs/numberFailover.js'
 import { missingDestinations } from '../../domain/session/groupMembership.js'
+import { rotationEnabledByEnv } from '../../domain/session/senderRouting.js'
 import { writeAnalyticsEvent } from '../../events/store.js'
 import {
   MULTI_NUMBER_WAITLIST_EVENTS,
@@ -263,5 +264,53 @@ export async function multiNumberRoutes(app, opts = {}) {
       metadata: JSON.stringify({ from: result.from, to: result.to, reason: 'manual', mode: 'manual' }),
     }, { db }).catch(() => {})
     return { ok: true, activeWaSlot: result.to, previousSlot: otherSlot(result.to) }
+  })
+
+  // ---------------------------------------------------------------------------
+  // Rodízio de envio (Fase 2): ligar/desligar por conta e ver quem envia cada
+  // grupo. Sem MULTI_NUMBER_ROTATION_ENABLED = 404 (a tela não mostra).
+  // ---------------------------------------------------------------------------
+  app.get('/rotation', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!multiNumberEnabled(env) || !rotationEnabledByEnv(env)) return reply.code(404).send({ error: 'Recurso indisponível' })
+    const state = await loadReserveState(req.user.sub)
+    if (!state?.access?.allowed) return reply.code(403).send({ error: 'Recurso indisponível', code: 'RESERVE_NOT_ALLOWED' })
+    const userId = req.user.sub
+    const [user, groups, owners, members, sent] = await Promise.all([
+      db.user.findUnique({ where: { id: userId }, select: { rotationEnabled: true } }),
+      db.group.findMany({ where: { userId, role: 'post', kind: 'group' }, select: { waJid: true, name: true } }),
+      db.destinationSender.findMany({ where: { userId }, select: { destJid: true, slot: true } }),
+      db.waGroupMembership.findMany({ where: { userId }, select: { slot: true, waJid: true } }),
+      db.messageLog.groupBy({
+        by: ['senderSlot'],
+        where: { userId, status: 'success', sentAt: { gte: new Date(Date.now() - 86400_000) } },
+        _count: { _all: true },
+      }),
+    ])
+    const ownerBy = new Map(owners.map(o => [o.destJid, o.slot]))
+    const memberOf = slot => new Set(members.filter(m => m.slot === slot).map(m => m.waJid))
+    const in1 = memberOf(1)
+    const in2 = memberOf(2)
+    const seen = new Set()
+    const list = groups.filter(g => !seen.has(g.waJid) && seen.add(g.waJid)).map(g => ({
+      waJid: g.waJid,
+      name: g.name,
+      senderSlot: ownerBy.get(g.waJid) ?? null,
+      members: { 1: in1.has(g.waJid), 2: in2.has(g.waJid) },
+    }))
+    const sent24h = Object.fromEntries(sent.filter(r => r.senderSlot != null).map(r => [r.senderSlot, r._count._all]))
+    return { enabled: Boolean(user?.rotationEnabled), activeWaSlot: state.activeWaSlot, groups: list, sent24h }
+  })
+
+  app.post('/rotation', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!multiNumberEnabled(env) || !rotationEnabledByEnv(env)) return reply.code(404).send({ error: 'Recurso indisponível' })
+    const state = await requireReserve(req, reply)
+    if (!state) return
+    const enabled = req.body?.enabled === true
+    await db.user.update({ where: { id: req.user.sub }, data: { rotationEnabled: enabled } })
+    await writeAnalyticsEvent({
+      id: randomUUID(), userId: req.user.sub, event: 'multi_number_rotation_toggled', createdAt: new Date(),
+      metadata: JSON.stringify({ enabled }),
+    }, { db }).catch(() => {})
+    return { ok: true, enabled }
   })
 }

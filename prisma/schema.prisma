@@ -47,6 +47,9 @@ model User {
   // único UPDATE com guarda, então nunca há dois números ativos.
   waExtraSessions       WaExtraSession[]
   waGroupMemberships    WaGroupMembership[]
+  // Fase 2: a conta ligou "Dividir os envios entre os números".
+  rotationEnabled       Boolean   @default(false)
+  destinationSenders    DestinationSender[]
   extraNumbers          Int       @default(0)
   activeWaSlot          Int       @default(1)
   waSlotSwitchedAt      DateTime?
@@ -172,6 +175,20 @@ model WaGroupMembership {
 
   @@unique([userId, slot, waJid])
   @@index([userId, waJid])
+}
+
+// Rodízio (vários números, Fase 2): qual número (slot) é o DONO de cada grupo
+// de destino. Gravado pelo robô ativo; mantido enquanto o dono continuar
+// membro e conectado. slot nulo = nenhum número da conta está no grupo.
+model DestinationSender {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destJid    String
+  slot       Int?
+  assignedAt DateTime @default(now())
+
+  @@unique([userId, destJid])
 }
 
 // Histórico de qual conta conectou qual número de WhatsApp.
