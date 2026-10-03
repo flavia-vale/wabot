@@ -21,7 +21,9 @@ test('rota Capacidade faz fetch lazy, preserva ultimo valor e tem estados textua
 })
 
 test('admin oferece navegacao Capacidade apenas sob tech:read', { skip }, async () => {
-  const admin = await readFile(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+  // O menu de cinco entradas (item 12) moveu o link de Capacidade para dentro da
+  // Operação, que só carrega o conteúdo para quem tem tech:read.
+  const admin = await readFile(new URL('../dashboard/app/admin/operacao/page.js', import.meta.url), 'utf8')
   assert.match(admin, /permissions\?\.includes\('tech:read'\)[\s\S]*href="\/admin\/capacidade"/)
 })
 
