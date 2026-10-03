@@ -23,6 +23,7 @@ import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipe
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
+import { parseAuditQuery, buildAuditWhere, buildAuditRows, canReadAudit } from '../../domain/admin/auditLabels.js'
 import { buildErrorObservability, buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
@@ -3875,6 +3876,29 @@ app.get('/sessions', async (req, reply) => {
         user: sanitizeUser(session.user, req.admin.role),
       })),
     }
+  })
+
+  // ---- Operação → Auditoria (M8): quem fez o quê. Só owner/admin. ----
+  // A leitura NÃO é auditada (viraria ruído na própria trilha). Payload redigido.
+  app.get('/audit', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    if (!canReadAudit(req.admin.role)) return reply.code(403).send({ error: 'Só dono e admin veem a auditoria' })
+    const q = parseAuditQuery(req.query)
+    const where = buildAuditWhere(q)
+    const [total, rows] = await Promise.all([
+      db.adminAuditLog.count({ where }),
+      db.adminAuditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (q.page - 1) * q.take,
+        take: q.take,
+        include: {
+          actorUser: { select: { id: true, email: true, name: true } },
+          targetUser: { select: { id: true, email: true, name: true } },
+        },
+      }),
+    ])
+    return { total, page: q.page, take: q.take, days: q.days, rows: buildAuditRows(rows, redactAdminPayload) }
   })
 
   // ---- Operação → Filas (M5): envios presos em 'sending', por cliente ----

@@ -579,3 +579,25 @@ continua separado de `manual_reconnect_requested` (mede a promessa do produto).
 DLQ continua nas rotas `/send-dlq/:userId` já existentes (Operação → Filas).
 Custo: 6 consultas pequenas por clique em "Verificar agora", zero processo
 novo, zero RAM.
+
+## Operação → Auditoria, "quem fez o quê" (item 9 / M8, 2026-10-03)
+
+**Era:** `AdminAuditLog` era gravado em toda ação do painel e nunca lido; só
+SQL na VPS mostrava quem fez o quê.
+
+**Agora:**
+
+| Peça | Onde mora |
+|---|---|
+| Dicionário de ações em frase leiga (`admin.user.block` → "bloqueou a conta"), query/where/paginação e linhas redigidas, PURO | `src/domain/admin/auditLabels.js` |
+| Rota `GET /api/admin/audit?days=30&action=&actor=&target=&page=&take=` (`admin:read` + só papel `owner`/`admin`, `take` ≤ 200, payload por `src/adminRedaction.js`, leitura NÃO auditada) | `src/api/routes/admin.js` |
+| Seção "Auditoria" em Operação (componente próprio, some para outros papéis; links para a ficha) | `dashboard/components/AuditoriaSection.js` |
+| Guarda | `test/admin-auditoria-tela.test.js` |
+
+**Não regredir:** ação nova `action: 'admin.…'` exige rótulo em `AUDIT_LABELS`
+(o teste varre `src/` e falha); a rota de leitura nunca chama
+`writeAdminAuditLog` (viraria ruído na própria trilha); `take` nunca passa de
+200; `before`/`after` só saem por `redactAdminPayload`; a seção fica em
+componente próprio (teto de linhas da Operação em `admin-inicio-enxuto`).
+Custo: 1 `count` + 1 `findMany` paginado por consulta (índices em `createdAt`,
+`action`), zero processo novo, zero RAM.
