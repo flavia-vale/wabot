@@ -13,14 +13,14 @@ test('resume por cliente: pior silêncio e "mesmo depois de reconectar"', () => 
     { userId: 'b', metadata: 'lixo' },
     { userId: null, metadata: '{}' },
   ])
-  assert.deepEqual(m.get('a'), { haMuito: true, silentForMs: 7200000 })
-  assert.deepEqual(m.get('b'), { haMuito: false, silentForMs: null })
+  assert.deepEqual(m.get('a'), { haMuito: true, silentForMs: 7200000, blindKind: null, stuckDrops: 0 })
+  assert.deepEqual(m.get('b'), { haMuito: false, silentForMs: null, blindKind: null, stuckDrops: 0 })
   assert.equal(m.size, 2)
 })
 
 test('só marca quem está conectada', () => {
   const m = new Map([['a', { haMuito: false, silentForMs: 1 }]])
-  assert.deepEqual(resolveReceptionBlindForRow(m, 'a', 'connected'), { haMuito: false, silentForMs: 1 })
+  assert.deepEqual(resolveReceptionBlindForRow(m, 'a', 'connected'), { haMuito: false, silentForMs: 1, blindKind: null, stuckDrops: 0 })
   assert.equal(resolveReceptionBlindForRow(m, 'a', 'disconnected'), null)
   assert.equal(resolveReceptionBlindForRow(m, 'x', 'connected'), null)
   assert.equal(resolveReceptionBlindForRow(undefined, 'a', 'connected'), null)

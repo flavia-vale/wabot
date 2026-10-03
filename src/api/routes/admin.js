@@ -37,6 +37,9 @@ import { loadEverPaidUserIds, currentPayingWhere, formerPayingWhere, stalePaying
 import { resolvePayingStatus } from '../../domain/admin/payingStatus.js'
 import { classifyOutreachSegment } from '../../domain/admin/outreachSegments.js'
 import { buildInbox } from '../../domain/admin/inboxPriority.js'
+import { ALERT_EVENT as CREDENTIAL_ALERT_EVENT, lastAlertsByUser, buildCredentialStatuses, hasBadCredential, latestBadSinceMs, resolveCredentialStatus } from '../../domain/admin/credentialStatus.js'
+import { probeCredentialReadOnly } from '../../credentialExpiry/sweep.js'
+import { EXPIRY_ALERT_PLATFORMS } from '../../credentialExpiry/policy.js'
 import { findPayingDown, findPayingBlind, STUCK_SENDING_MS } from '../../ops/adminOpsAlertPolicy.js'
 import { resolveQueueBackend, dlqDisponivel, buildFilasRows, validateReprocessReason, FILAS_MAX_LINHAS } from '../../domain/admin/stuckSendQueue.js'
 import { recoverStuckSendLogs } from '../../jobs/stuckSendLogs.js'
@@ -3346,7 +3349,7 @@ export async function adminRoutes(app) {
     })
     const ids = usuarios.map(u => u.id)
     const seguro = (p, padrao) => p.catch(() => padrao)
-    const [envios, credenciais, assinaturas, cobrancas, pagamentos, eventos, everPaidIds, blindRows, stuckSending, runningList] = await Promise.all([
+    const [envios, credenciais, assinaturas, cobrancas, pagamentos, eventos, everPaidIds, blindRows, stuckSending, runningList, avisosChave] = await Promise.all([
       seguro(db.messageLog.groupBy({ by: ['userId'], where: { userId: { in: ids }, status: 'success' }, _count: { _all: true }, _max: { sentAt: true } }), []),
       seguro(db.credential.groupBy({ by: ['userId'], where: { userId: { in: ids } }, _count: { _all: true } }), []),
       seguro(db.subscription.findMany({ where: { userId: { in: ids }, status: SUBSCRIPTION_ACTIVE_STATUS }, select: { userId: true } }), []),
@@ -3357,7 +3360,11 @@ export async function adminRoutes(app) {
       seguro(db.analyticsEvent.findMany({ where: { event: 'ops_wa_reception_blind', createdAt: { gte: new Date(nowMs - RECEPTION_BLIND_WINDOW_MS), lte: now } }, select: { userId: true, metadata: true } }), []),
       seguro(db.messageLog.count({ where: { status: 'sending', sentAt: { lt: new Date(nowMs - STUCK_SENDING_MS) } } }), 0),
       seguro(Promise.resolve(listRunningBots()), []),
+      // M6: último aviso de chave de loja vencida/recusada (já gravado pela
+      // sondagem diária; sem sondagem nova). Janela de 14 dias = validade do aviso.
+      seguro(db.analyticsEvent.findMany({ where: { event: CREDENTIAL_ALERT_EVENT, userId: { in: ids }, createdAt: { gte: new Date(nowMs - 14 * 24 * 60 * 60 * 1000) } }, select: { userId: true, event: true, metadata: true, createdAt: true } }), []),
     ])
+    const alertasChave = lastAlertsByUser(avisosChave)
     const porId = (linhas) => new Map(linhas.map(l => [l.userId, l]))
     const mapEnvios = porId(envios)
     const mapCred = porId(credenciais)
@@ -3402,13 +3409,15 @@ export async function adminRoutes(app) {
       }, now)
       const ownership = u.waSession ? resolveSessionOwner({ status: u.waSession.status, lifecycle: u.waSession.lifecycle, lastDisconnectCode: u.waSession.lastDisconnectCode, lastHeartbeatAt: u.waSession.lastHeartbeatAt, workerRunning: running.has(u.id), now: nowMs }) : { canAdminRetry: false }
       const telefoneBruto = u.contactPhone || u.waSession?.phone || ''
+      const chavesDoCliente = alertasChave.has(u.id) ? buildCredentialStatuses({ alerts: alertasChave.get(u.id), now }) : []
       return {
         id: u.id, nome: u.name, email: u.email,
         telefone: podeVerTelefone ? telefoneBruto : maskPhone(telefoneBruto),
         payingStatus: paying.status, everSent: Boolean(envio?._count?._all),
         segmento,
         operacional: caidos.has(u.id) ? 'robo-caido-agora' : cegas.has(u.id) ? 'cega-agora' : null,
-        detalheMs: caidos.get(u.id) ?? cegas.get(u.id) ?? null,
+        chaveDeLoja: hasBadCredential(chavesDoCliente),
+        detalheMs: caidos.get(u.id) ?? cegas.get(u.id) ?? (hasBadCredential(chavesDoCliente) ? latestBadSinceMs(chavesDoCliente) : null),
         canAdminRetry: Boolean(ownership.canAdminRetry),
       }
     })
@@ -3498,6 +3507,19 @@ export async function adminRoutes(app) {
     const running = (await listRunningBots()).includes(userId)
     const safeUser = sanitizeUser(user, req.admin.role)
 
+    // M6: status das chaves de loja a partir do último aviso da sondagem diária.
+    const avisosChave = await db.analyticsEvent.findMany({
+      where: { userId, event: CREDENTIAL_ALERT_EVENT },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { userId: true, event: true, metadata: true, createdAt: true },
+    }).catch(() => [])
+    const chavesLojas = buildCredentialStatuses({
+      alerts: lastAlertsByUser(avisosChave).get(userId) ?? null,
+      configured: user.credentials.map(c => c.platform),
+      now,
+    })
+
     const history = buildCustomerHistory({
       user: safeUser,
       origin: buildUserOrigin(user, { referrerMap: new Map(referrerRows.map(r => [r.id, r])), signupMetaMap }),
@@ -3520,7 +3542,36 @@ export async function adminRoutes(app) {
 
     await writeAdminAuditLog(req, { action: 'admin.customers.history', resource: 'user', resourceId: userId, targetUserId: userId })
     // A ficha só mostra o botão de bloquear a quem o servidor deixaria usar.
-    return { ...history, podeBloquear: hasPermission(req.admin.role, BLOCK_PERMISSION) }
+    return { ...history, chavesLojas, podeBloquear: hasPermission(req.admin.role, BLOCK_PERMISSION) }
+  })
+
+  // "Testar chave" da ficha (M6): sondagem manual de UMA loja de UMA conta,
+  // reaproveitando a do sweep diário. Só leitura: não grava credencial, não
+  // cria aviso e não manda e-mail. billing:read; rede ML/Amazon/Shopee.
+  app.post('/customers/:id/credenciais/:platform/testar', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+    const userId = String(req.params.id || '')
+    const platform = String(req.params.platform || '')
+    if (!EXPIRY_ALERT_PLATFORMS.includes(platform)) return reply.code(400).send({ error: 'Loja inválida' })
+    const cred = await db.credential.findUnique({ where: { userId_platform: { userId, platform } } }).catch(() => null)
+    if (!cred) return reply.code(404).send({ error: 'Essa cliente não tem essa loja cadastrada' })
+    const [{ checkMercadoLivreSession }, { checkAmazonSession }, { checkShopeeSession }] = await Promise.all([
+      import('../../converters/mercadolivre.js'),
+      import('../../converters/amazon.js'),
+      import('../../converters/shopee.js'),
+    ])
+    const probe = await probeCredentialReadOnly({
+      platform,
+      cred,
+      checkers: { mercadolivre: checkMercadoLivreSession, amazon: checkAmazonSession, shopee: checkShopeeSession },
+      logger: app.log,
+    })
+    const status = resolveCredentialStatus({ platform, probe })
+    await writeAdminAuditLog(req, {
+      action: 'admin.credentials.probe', resource: 'credential', resourceId: `${userId}:${platform}`, targetUserId: userId,
+      after: { platform, alive: probe.alive, reason: probe.reason },
+    })
+    return { platform, alive: probe.alive, reason: probe.reason, status: probe.alive === null ? 'sem-medicao' : status.status, label: status.label, checkedAt: new Date().toISOString() }
   })
 
   app.get('/logs', async (req, reply) => {

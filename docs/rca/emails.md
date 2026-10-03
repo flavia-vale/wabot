@@ -138,7 +138,7 @@ caminho só, e a cliente edita os textos pelo painel.
 | Gatilhos por ciclo de vida (passada diária) | `src/emailTriggers/lifecyclePolicy.js` + `lifecycleSweep.js` |
 | Gatilhos por acontecimento | `src/emailTriggers/events.js` |
 | Resumo semanal | `src/emailTriggers/weeklySummary.js` |
-| Aba E-mails do admin | `src/api/routes/adminEmails.js` + `dashboard/app/admin/emails/page.js` |
+| Aba E-mails do admin | `src/api/routes/adminEmails.js` + `dashboard/components/AdminContato.js` (rotas `/admin/clientes/contato` e `/admin/operacao/modelos`) |
 
 **Não regredir:**
 - **Não enviar e-mail fora do despachante.** Ele é quem barra endereço

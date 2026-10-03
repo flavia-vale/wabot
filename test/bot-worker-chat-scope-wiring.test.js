@@ -24,7 +24,10 @@ test('o default é `dm` (conversa individual fora da lista não é aberta)', () 
 
 test('a regra antiga continua valendo quando o modo novo está desligado', () => {
   // Ligar a Fase 2 não pode desligar em silêncio quem já usa a flag antiga.
-  assert.match(source, /return shouldIgnoreChatJid\(jid, \{/)
+  // Desde o censo de entrada (RCA 2026-10-03) a decisão é guardada para contar
+  // o grupo descartado — antes era `return` direto e o descarte era invisível.
+  assert.match(source, /const ignoreUnmonitored = shouldIgnoreChatJid\(jid, \{/)
+  assert.match(source, /if \(ignoreUnmonitored\) noteInboundIgnored\(jid, 'grupo_nao_monitorado'\)/)
 })
 
 test('a identidade da própria conta entra na lista no open', () => {

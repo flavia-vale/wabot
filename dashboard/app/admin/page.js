@@ -691,8 +691,6 @@ export default function AdminPage() {
         <div className="sticky top-0 z-20 rounded-2xl border border-emerald-100 bg-white/95 p-4 shadow-sm backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              {admin?.permissions?.includes('tech:read') && <Link href="/admin/capacidade" className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800 hover:bg-cyan-100">Capacidade</Link>}
-              {admin?.permissions?.includes('tech:read') && admin?.shardPocMode === 'enabled' && <Link href="/admin/teste-shard" className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800 hover:bg-violet-100">Teste shard</Link>}
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-base font-black text-white">B</div>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-lg font-black text-gray-900">Espelha Grupos</span>
@@ -700,21 +698,21 @@ export default function AdminPage() {
               </div>
             </div>
             <nav className="flex flex-wrap gap-1">
-              {TABS.map(([key, label]) => (
-                <button key={key} onClick={() => openTab(key)} className={`rounded-xl px-4 py-2 text-sm font-bold transition ${tab === key ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{label}</button>
-              ))}
+              <Link href="/admin/hoje" className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 transition hover:bg-gray-100">Hoje</Link>
+              <Link href="/admin/clientes" className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 transition hover:bg-gray-100">Clientes</Link>
               {admin?.permissions?.includes('billing:read') && <Link href="/admin/receita" className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 transition hover:bg-gray-100">Receita</Link>}
+              <Link href="/admin/funil" className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 transition hover:bg-gray-100">Crescimento</Link>
               {admin?.permissions?.includes('tech:read') && <Link href="/admin/operacao" className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 transition hover:bg-gray-100">Operação</Link>}
             </nav>
             <div className="flex items-center gap-2">
-              <Link href="/admin/hoje" className="rounded-xl border border-emerald-300 bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700">Hoje</Link>
-              <Link href="/admin/erros" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">Erros</Link>
-              <Link href="/admin/clientes" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">Clientes</Link>
-              <Link href="/admin/funil" className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">Funil</Link>
-              <Link href="/admin/emails" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Contato com cliente</Link>
               <button onClick={() => applyFilters()} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Atualizar</button>
               <Link href="/painel" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Voltar</Link>
             </div>
+          </div>
+          <div className="mt-2 flex gap-1 border-t border-gray-100 pt-2">
+            {TABS.map(([key, label]) => (
+              <button key={key} onClick={() => openTab(key)} className={`rounded-lg px-3 py-1 text-xs font-bold transition ${tab === key ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>{label}</button>
+            ))}
           </div>
         </div>
 

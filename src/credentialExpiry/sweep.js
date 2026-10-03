@@ -301,3 +301,36 @@ async function probePlatform({ db, platform, userId, cred, checkers, probeCaches
   }
   return publicResult
 }
+
+/**
+ * Sondagem de UMA loja de UM cliente, só leitura — para o botão "Testar chave"
+ * da ficha admin. Mesma regra do sweep (`checkers[platform](data)`; falha de
+ * sondagem vira `alive: null`, nunca "venceu"), mas SEM gravar nada: não usa o
+ * cache de sondagem, não persiste `credentialPatch` e não cria AnalyticsEvent.
+ * `probePlatform` (que roda em produção no sweep) segue intacta.
+ *
+ * Limite conhecido: se a loja rotacionar o código nesta chamada (ML/Amazon), a
+ * rotação é descartada aqui — o uso normal da cliente persiste a dela. Por isso
+ * o botão é manual, uma conta por vez, nunca em lote.
+ *
+ * @returns {Promise<{configured:boolean, alive:boolean|null, reason:string, rotated:boolean}>}
+ */
+export async function probeCredentialReadOnly({ platform, cred, checkers = {}, logger = console } = {}) {
+  if (!EXPIRY_ALERT_PLATFORMS.includes(platform)) return { configured: false, alive: null, reason: 'unsupported_platform', rotated: false }
+  if (!cred) return { configured: false, alive: null, reason: 'not_configured', rotated: false }
+  const check = checkers[platform]
+  if (typeof check !== 'function') return { configured: true, alive: null, reason: 'no_checker', rotated: false }
+  try {
+    const result = await check(parseCredentialData(cred.data))
+    const { credentialPatch, ...publicResult } = result || {}
+    return {
+      configured: publicResult.configured !== false,
+      alive: publicResult.alive === true || publicResult.alive === false ? publicResult.alive : null,
+      reason: String(publicResult.reason ?? 'unknown'),
+      rotated: Boolean(credentialPatch),
+    }
+  } catch (err) {
+    logger?.warn?.({ platform, err: err?.message }, 'credential-expiry: teste manual falhou')
+    return { configured: true, alive: null, reason: 'check_failed', rotated: false }
+  }
+}

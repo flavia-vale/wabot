@@ -107,15 +107,19 @@ test('patch: só DM de contato — nunca grupo, canal, status, a própria conta 
   const block = handleMessage.slice(0, handleMessage.indexOf('shouldIgnoreOwnDeviceDm?.('))
   assert.match(block, /!isJidGroup\(node\.attrs\.from\) && !isJidNewsletter\(node\.attrs\.from\) && !isJidStatusBroadcast\(node\.attrs\.from\)/)
   assert.match(block, /if \(isMe\(node\.attrs\.from\)\)/)
-  assert.match(block, /recipient && \(isJidUser\(recipient\) \|\| isLidUser\(recipient\)\) && !isMe\(recipient\)/)
-  assert.match(block, /onIncomingMessageNode\?\.\(\{ id: node\.attrs\.id, chatJid: ownDeviceDmRecipient \|\| node\.attrs\.from \}\)/)
+  // RCA 2026-10-03: a Meta AI (@bot) entra na regra A — mesma cópia fromMe do celular.
+  assert.match(block, /recipient && \(isJidUser\(recipient\) \|\| isLidUser\(recipient\) \|\| isJidMetaIa\(recipient\)\) && !isMe\(recipient\)/)
+  // Censo de entrada (RCA 2026-10-03): o gancho leva também `offline` e o tipo de
+  // cifra. Continua ANTES de qualquer decisão (ignore/ack/decrypt) e sem mudar fluxo.
+  assert.match(block, /onIncomingMessageNode\?\.\(\{\s*id: node\.attrs\.id,\s*chatJid: ownDeviceDmRecipient \|\| node\.attrs\.from,\s*offline: !!node\.attrs\.offline,\s*encType: getBinaryNodeChild\(node, 'enc'\)\?\.attrs\?\.type \|\| null\s*\}\)/)
 })
 
 const worker = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
 
 test('worker: ganchos passados ao socket e quarentena por chat ligada à queda 500', () => {
   assert.match(worker, /shouldIgnoreOwnDeviceDm: \(recipient\) =>/)
-  assert.match(worker, /onIncomingMessageNode: \(\{ id, chatJid \}\) => recentInboundChats\.record\(id, chatJid\)/)
+  assert.match(worker, /onIncomingMessageNode: \(\{ id, chatJid, offline, encType \}\) => noteInboundNode\(\{ id, chatJid, offline, encType \}\)/)
+  assert.match(worker, /function noteInboundNode\(\{ id, chatJid, offline, encType \}\) \{\s*recentInboundChats\.record\(id, chatJid\)/)
   assert.match(worker, /recentInboundChats\.get\(stuckMsgId\)/)
   assert.match(worker, /chatDropQuarantine\.isQuarantined\(jid\)/)
   // Toda checagem da regra B passa pela lista carregada (ready).
