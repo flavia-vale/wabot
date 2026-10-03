@@ -16,7 +16,7 @@ const src = readFileSync(join(__dirname, '../src/bot-worker.js'), 'utf8')
 // mesmo motivo de bot-worker-retry-cache-wiring.test.js: bot-worker.js roda como
 // processo próprio e não expõe essa lógica para import direto.
 
-const CONTADORES = ['failuresSinceLastAccepted', 'stableDropsSinceLastAccepted']
+const CONTADORES = ['failuresSinceLastAccepted', 'stableDropsSinceLastAccepted', 'stuckDropsSinceLastAccepted']
 
 test('os contadores de cegueira ficam em escopo de módulo, fora de startBotInner', () => {
   const startBotInnerIndex = src.indexOf('async function startBotInner()')

@@ -11,6 +11,7 @@
 
 import { resolveSessionOwner, SESSION_OWNER } from '../core/sessionOwnership.js'
 import { summarizeReceptionBlindRows } from '../domain/admin/receptionBlindStatus.js'
+import { BLIND_KIND } from '../core/inboundNodeCensus.js'
 
 export const OPS_ALERT_SLUG = 'admin_operacao_atencao'
 export const OPS_ALERT_COOLDOWN_HOURS = 12
@@ -36,6 +37,19 @@ function label(user) {
 
 function horas(ms) {
   return `${Math.max(1, Math.round(ms / 3_600_000))} h`
+}
+
+// Onde a mensagem de grupo some, em palavras da dona (censo de entrada, RCA
+// 2026-10-03). Robô sem o censo não manda o campo → nada acrescentado.
+function descreveCegueira(blindKind, stuckDrops) {
+  const quedas = Number(stuckDrops) > 0 ? `, ${Number(stuckDrops)} queda(s) por mensagem travada antes` : ''
+  switch (blindKind) {
+    case BLIND_KIND.NOTHING_ARRIVES: return ` — nada chega do WhatsApp${quedas}: parear de novo`
+    case BLIND_KIND.FAILS_TO_OPEN: return ` — chega e não abre${quedas}: Reconectar`
+    case BLIND_KIND.DROPPED_BY_RULE: return ` — chega e uma regra descarta${quedas}: conferir grupos monitorados`
+    case BLIND_KIND.NOT_ACCEPTED: return ` — chega e abre, mas nada é aceito${quedas}: filtro do robô`
+    default: return quedas
+  }
 }
 
 function lista(linhas, total) {
@@ -79,7 +93,7 @@ export function findPayingBlind(rows = [], payingById = new Map()) {
   for (const [userId, detail] of summarizeReceptionBlindRows(rows)) {
     const user = payingById.get(userId)
     if (!user) continue
-    if (Number(detail.silentForMs) >= BLIND_SILENT_MS) found.push({ user: { id: userId, ...user }, silentForMs: detail.silentForMs })
+    if (Number(detail.silentForMs) >= BLIND_SILENT_MS) found.push({ user: { id: userId, ...user }, silentForMs: detail.silentForMs, blindKind: detail.blindKind ?? null, stuckDrops: detail.stuckDrops ?? 0 })
   }
   return found.sort((a, b) => b.silentForMs - a.silentForMs)
 }
@@ -104,8 +118,10 @@ export function buildOpsAlerts({ payingDown = [], payingBlind = [], stuckSending
       count: payingBlind.length,
       vars: {
         resumo: `${payingBlind.length} cliente(s) pagante(s) conectada(s) mas sem receber há mais de 3 h`,
-        lista: lista(payingBlind.map(({ user, silentForMs }) => `- ${label(user)} — sem receber há ${horas(silentForMs)}`), payingBlind.length),
-        acao: 'Conectada de mentira: as ofertas dela não estão chegando. Reconecte pelo Admin → Online; se repetir, é caso de re-pareamento.',
+        lista: lista(payingBlind.map(({ user, silentForMs, blindKind, stuckDrops }) => `- ${label(user)} — sem receber há ${horas(silentForMs)}${descreveCegueira(blindKind, stuckDrops)}`), payingBlind.length),
+        acao: payingBlind.some(b => b.blindKind === BLIND_KIND.NOTHING_ARRIVES)
+          ? 'Conectada de mentira: as ofertas dela não estão chegando. Quem está marcada como "nada chega" precisa parear de novo (desconectar, esquecer o aparelho no celular e ler o QR) — Reconectar e reiniciar o robô não resolvem esse caso (RCA 2026-10-03). As outras: Reconecte pelo Admin → Online; se repetir, é caso de re-pareamento.'
+          : 'Conectada de mentira: as ofertas dela não estão chegando. Reconecte pelo Admin → Online; se repetir, é caso de re-pareamento.',
       },
     })
   }
