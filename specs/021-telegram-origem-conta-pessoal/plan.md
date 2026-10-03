@@ -26,6 +26,21 @@ começar agora (D5).
 
 ---
 
+## Aprovações da dona do produto (2026-10-03, rodada de questões em aberto)
+
+Registradas aqui; resolvem parte do que `research.md` §"Em aberto" listava como pendente.
+
+- **Aplicativo do Telegram criado** em my.telegram.org. `TELEGRAM_API_ID` e `TELEGRAM_API_HASH` **já estão no `.env` do STAGING** (nunca em chat, repo ou log; produção terá registro próprio depois).
+- **Conta de teste**: a dona tem uma conta de Telegram de teste para a Fase 0 (PR-0) e para os itens ⛔🔑 dos PRs seguintes.
+- **Limite de origens por conta = 10** (`TELEGRAM_ORIGIN_MAX_PER_ACCOUNT`, valor aprovado; fecha o item "Limite de origens por conta").
+- **Portas internas do `telegram-leitor` = 3021 (prod) e 3024 (staging)** (`TELEGRAM_LEITOR_PORT`, aprovadas). São portas locais (`127.0.0.1`), fora da regra dos 3 lugares do `AGENTS.md` (que é do painel/API). Para não "inventar valor", ficam documentadas em: (1) `ecosystem.config.cjs`, (2) `docs/rca/deploy-e-infra.md`, (3) este plano (D3). Mudar exige atualizar os três.
+- **Quem publica**: o robô do Espelha Grupos continua publicando nos destinos do Telegram; a conta da cliente só lê (reafirmado).
+- **RAM**: o custo do processo novo continua **HIPÓTESE** até a medição da Fase 0 (PR-0) **e** o OK final da dona com o número medido. Sem esse OK, nada de `pm2 start telegram-leitor` em produção.
+
+Ainda em aberto: número final de RAM/teto de contas (`TELEGRAM_LEITOR_MAX_ACCOUNTS`), processo separado × plano B A1, resultado das regras de uso do Telegram, autor de post do robô em canal (D5.a.2) — todos decididos no fim do PR-0.
+
+---
+
 ## Summary
 
 A cliente Premium conecta a própria conta do Telegram por QR; um processo PM2 novo e
@@ -399,4 +414,4 @@ Itens ⛔🔑 da tabela de PRs + quickstart.md.
 
 ## Constitution Check — reavaliação depois do desenho (Phase 1)
 
-Sem mudança de veredito: `protocol.js` intocado (contracts/broadcast-mirror-option.md usa `options`), migration só aditiva (data-model.md), um único reinício anunciado (PR-1), nenhum caminho de worker depois dele, vocabulário e segredo com guardas, memória **condicionada ao gate da Fase 0 e ao OK da dona**. Pendências que **não** são decididas aqui (registradas em research.md §"Em aberto"): número final de RAM/teto de contas, limite de origens por conta, portas internas definitivas, resultado das regras de uso do Telegram.
+Sem mudança de veredito: `protocol.js` intocado (contracts/broadcast-mirror-option.md usa `options`), migration só aditiva (data-model.md), um único reinício anunciado (PR-1), nenhum caminho de worker depois dele, vocabulário e segredo com guardas, memória **condicionada ao gate da Fase 0 e ao OK da dona**. Pendências que **não** são decididas aqui (registradas em research.md §"Em aberto"): número final de RAM/teto de contas, resultado das regras de uso do Telegram, autor de post do robô em canal. (Limite de 10 origens por conta e portas 3021/3024 foram aprovados em 2026-10-03 — ver "Aprovações da dona".)

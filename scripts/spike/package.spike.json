@@ -1,0 +1,10 @@
+{
+  "name": "telegram-spike",
+  "private": true,
+  "type": "module",
+  "description": "Medição da Fase 0 (feature 021). Copiado como package.json para ~/telegram-spike — NUNCA instalar dentro do repositório.",
+  "dependencies": {
+    "telegram": "2.26.22",
+    "qrcode-terminal": "0.12.0"
+  }
+}
