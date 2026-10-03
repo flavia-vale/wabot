@@ -138,7 +138,15 @@ export const COMPARISON_PAGES = {
     // da dona do produto (exceção nominal à FR-030 em
     // test/marketing-limites-que-nao-se-cruzam.test.js). "Limita grupos" vem
     // de competitors-data.js: 1 grupo no Starter, teto de 15 no Premium.
-    title: 'AchadinhosBot limita grupos? Aqui é ilimitado: R$ 39',
+    // 03/10/2026 (Frente 4 da análise SEO+GEO de 02/10): 95% das impressões
+    // com consulta são marca de concorrente, com CTR ~1%. Teste do formato
+    // "X ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)", mantendo o
+    // contraste R$ 39 da exceção FR-030 (decisão da dona do produto em 03/10).
+    // `titleAbsolute`: o título já traz a marca; sem ele o sufixo do layout
+    // duplicaria "Espelha Grupos" e passaria de 70 chars no Bing. Medir 4
+    // semanas pela série diária; CTR abaixo de 2,5% → parar de mexer.
+    title: 'AchadinhosBot ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)',
+    titleAbsolute: true,
     description: 'O AchadinhosBot cobra por grupo e só cobre Shopee. O Espelha Grupos custa R$ 39 por 30 dias, com grupos ilimitados, 6 lojas e 7 dias grátis com o Pro completo.',
     competitorSlugs: ['achadinhosbot', 'achadinho-pro'],
     // Par recíproco do `competitorNudge` de /bot-achadinhos-whatsapp: as duas
@@ -310,7 +318,15 @@ export const COMPARISON_PAGES = {
     // diferencial concreto. Sem preço do Shozap (não visível no site dele).
     // 29/09/2026: estilo pergunta + contraste, decisão da dona do produto
     // (exceção nominal à FR-030). Básico do Shozap: 3 grupos por campanha.
-    title: 'Shozap limita grupos? Aqui é ilimitado por R$ 39',
+    // 03/10/2026 (Frente 4 da análise SEO+GEO de 02/10): 95% das impressões
+    // com consulta são marca de concorrente, com CTR ~1%. Teste do formato
+    // "X ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)", mantendo o
+    // contraste R$ 39 da exceção FR-030 (decisão da dona do produto em 03/10).
+    // `titleAbsolute`: o título já traz a marca; sem ele o sufixo do layout
+    // duplicaria "Espelha Grupos" e passaria de 70 chars no Bing. Medir 4
+    // semanas pela série diária; CTR abaixo de 2,5% → parar de mexer.
+    title: 'Shozap ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)',
+    titleAbsolute: true,
     description: 'Shozap ou Espelha Grupos? Compare grupos, conexões e lojas por plano. Aqui: grupos ilimitados por R$ 39/30 dias e 7 dias grátis. Verificado em 04/08/2026.',
     competitorSlugs: ['shozap'],
     productPage: {
@@ -493,7 +509,15 @@ export const COMPARISON_PAGES = {
     // R$ 49,97 só p/ Shopee. Veja a opção de R$ 39", 64 chars), encurtado
     // para caber no teto de 55. Exceção nominal à FR-030; preço do Basic
     // verificado em competitors-data.js.
-    title: 'Achadinho Pro cobra R$ 49,97 só p/ Shopee. Veja R$ 39',
+    // 03/10/2026 (Frente 4 da análise SEO+GEO de 02/10): 95% das impressões
+    // com consulta são marca de concorrente, com CTR ~1%. Teste do formato
+    // "X ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)", mantendo o
+    // contraste R$ 39 da exceção FR-030 (decisão da dona do produto em 03/10).
+    // `titleAbsolute`: o título já traz a marca; sem ele o sufixo do layout
+    // duplicaria "Espelha Grupos" e passaria de 70 chars no Bing. Medir 4
+    // semanas pela série diária; CTR abaixo de 2,5% → parar de mexer.
+    title: 'Achadinho Pro ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)',
+    titleAbsolute: true,
     description: 'O Achadinho Pro cobre só Shopee no plano de entrada (R$ 49,97/mês). No Espelha Grupos são 6 lojas por R$ 39 ou R$ 69 a cada 30 dias e 7 dias grátis sem cartão.',
     competitorSlugs: ['achadinho-pro'],
     // Páginas de resposta (19/09/2026): quem chega comparando ferramenta ainda
@@ -1581,7 +1605,7 @@ export function getComparisonMetadata(slug) {
   const page = COMPARISON_PAGES[slug]
   const robots = buildSeoRobots(slug)
   return {
-    title: page.title,
+    title: page.titleAbsolute ? { absolute: page.title } : page.title,
     description: page.description,
     alternates: { canonical: slug },
     ...(robots ? { robots } : {}),
