@@ -20,7 +20,10 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR
 // 27/09/2026: 248 impressões e 1 clique na posição 7,4 — "A conta real, sem
 // promessa" não dava motivo para clicar. A pergunta literal fica, e o número
 // da tabela oficial entra no título (3% na venda padrão, até 30% na Extra).
-const title = 'Quanto ganha afiliado Shopee? 3% por venda, até 30%'
+// 03/10/2026 (Frente 2, item 7 da análise SEO+GEO): 312 impressões e 2
+// cliques para um termo de 500 buscas/mês. A consulta exata fica no começo e
+// o ano entra no título, como pedem as respostas que mais clicam.
+const title = 'Quanto ganha afiliado Shopee em 2026: 3% a 30%'
 const description = 'A Shopee paga 3% na venda padrão e até 30% em produtos de Comissão Extra. Veja o prazo de atribuição e como fazer a conta do quanto dá para ganhar por mês.'
 const slug = '/quanto-ganha-afiliado-shopee'
 const dates = getEditorialDates(slug)
@@ -215,6 +218,8 @@ export default function Page() {
                 <li><Link href="/blog/como-ser-afiliado-shopee-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Como ser afiliado Shopee: 5 passos e comissão de 3%</Link> — o cadastro passo a passo e as regras do programa.</li>
                 <li><Link href="/shopee-afiliados-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Divulgar Shopee no WhatsApp sem copiar e colar</Link> — o que muda na prática depois do cadastro.</li>
                 <li><Link href="/programa-de-afiliados" className="font-bold text-emerald-700 hover:text-emerald-800">Shopee, Amazon ou Mercado Livre: qual programa escolher</Link> — comissão e prazo de atribuição dos três lado a lado.</li>
+                <li><Link href="/ferramentas/calculadora-comissao-afiliado-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Calculadora de comissão de afiliado</Link> — faça a conta com os seus próprios números.</li>
+                <li><Link href="/blog/shopee-suspendeu-afiliado-o-que-fazer" className="font-bold text-emerald-700 hover:text-emerald-800">Shopee suspendeu sua conta de afiliada: o que fazer</Link> — regras do programa e próximos passos.</li>
               </ul>
             </section>
           </div>

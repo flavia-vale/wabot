@@ -102,6 +102,10 @@ export const EDITORIAL_DATES = {
   '/amazon-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-29' },
   '/shein-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-29' },
   '/magalu-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-29' },
+  '/netshoes-afiliados-whatsapp': { publishedAt: '2026-10-03', updatedAt: '2026-10-03' },
+  '/kabum-afiliados-whatsapp': { publishedAt: '2026-10-03', updatedAt: '2026-10-03' },
+  '/rakuten-afiliados-whatsapp': { publishedAt: '2026-10-03', updatedAt: '2026-10-03' },
+  '/grupo-whatsapp-lotado': { publishedAt: '2026-10-03', updatedAt: '2026-10-03' },
   '/guia/shopee-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
   '/guia/amazon-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
   '/guia/mercado-livre-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
@@ -126,14 +130,14 @@ export const EDITORIAL_DATES = {
   '/confiabilidade-sessao-whatsapp': { publishedAt: '2026-07-15', updatedAt: '2026-07-15' },
   '/espelha-grupos-e-confiavel': { publishedAt: '2026-09-11', updatedAt: '2026-09-29' },
   '/seguranca-credenciais-afiliado': { publishedAt: '2026-07-15', updatedAt: '2026-09-24' },
-  '/quanto-ganha-afiliado-shopee': { publishedAt: '2026-09-11', updatedAt: '2026-09-27' },
+  '/quanto-ganha-afiliado-shopee': { publishedAt: '2026-09-11', updatedAt: '2026-10-03' },
   '/vendas-e-comissao-afiliado-whatsapp': { publishedAt: '2026-09-11', updatedAt: '2026-09-23' },
   '/copiaram-minha-oferta-no-whatsapp': { publishedAt: '2026-09-11', updatedAt: '2026-09-11' },
   // 23/09/2026 — visibilidade no ChatGPT para "bot para afiliados no WhatsApp":
   // política de reembolso pública, o modo de busca automática da Shopee e cinco
   // comparativos com preço coletado na página oficial de cada concorrente.
   '/politica-de-reembolso': { publishedAt: '2026-09-23', updatedAt: '2026-09-27' },
-  '/bot-que-busca-ofertas-shopee-whatsapp': { publishedAt: '2026-09-23', updatedAt: '2026-09-29' },
+  '/bot-que-busca-ofertas-shopee-whatsapp': { publishedAt: '2026-09-23', updatedAt: '2026-10-03' },
   '/espelhar-grupos-de-ofertas-vale-a-pena': { publishedAt: '2026-09-27', updatedAt: '2026-09-29' },
   '/alternativas/easyfy': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
   '/alternativas/lucreshop': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },

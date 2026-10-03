@@ -49,6 +49,10 @@ export const COMPARISON_STORE_LINKS = [
   { href: '/amazon-afiliados-whatsapp', label: 'Amazon' },
   { href: '/shein-afiliados-whatsapp', label: 'SHEIN' },
   { href: '/magalu-afiliados-whatsapp', label: 'Magalu' },
+  // Lojas das redes Awin e Rakuten (Frente 2 da análise SEO+GEO de 02/10/2026).
+  { href: '/netshoes-afiliados-whatsapp', label: 'Netshoes' },
+  { href: '/kabum-afiliados-whatsapp', label: 'KaBuM' },
+  { href: '/rakuten-afiliados-whatsapp', label: 'Rakuten' },
 ]
 
 export const COMPARISON_SOURCE_LINKS = [
@@ -149,7 +153,7 @@ export const COMPARISON_PAGES = {
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', title: 'Ferramenta para divulgar ofertas em grupos do WhatsApp' },
       // 23/09/2026: estes concorrentes vendem busca automática na Shopee; quem
       // chega aqui precisa saber que o Espelha Grupos também tem esse modo.
-      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Garimpo de ofertas da Shopee no automático (radar)' },
       { href: '/espelhar-grupos-de-ofertas-vale-a-pena', title: 'Espelhar grupos de ofertas vale a pena?' },
       // 27/09/2026 (B1/B2 do plano GEO): as duas perguntas que as IAs respondem
       // como problema de empresa, respondidas para afiliada.
@@ -500,7 +504,7 @@ export const COMPARISON_PAGES = {
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', title: 'Ferramenta para divulgar ofertas em grupos do WhatsApp' },
       // 23/09/2026: estes concorrentes vendem busca automática na Shopee; quem
       // chega aqui precisa saber que o Espelha Grupos também tem esse modo.
-      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Garimpo de ofertas da Shopee no automático (radar)' },
       { href: '/espelhar-grupos-de-ofertas-vale-a-pena', title: 'Espelhar grupos de ofertas vale a pena?' },
       { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
     ],
@@ -736,7 +740,7 @@ export const COMPARISON_PAGES = {
       // canônica da categoria; esta fica no ar (67 impressões, posição 7,5) e
       // aponta para lá — apagar ou redirecionar perderia o histórico.
       { href: '/automacao-whatsapp-afiliados', title: 'Automação para afiliados no WhatsApp: os 3 modelos e 8 ferramentas comparadas' },
-      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Garimpo de ofertas da Shopee no automático (radar)' },
       { href: '/bot-afiliados-whatsapp', title: 'Bot para afiliados no WhatsApp: espelhar e buscar oferta' },
       { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
     ],
