@@ -666,6 +666,10 @@ extra):
 
 - Origem faltando no número que envia **não dispara alarme nenhum** (fica
   `quiet`, não `blind`). Por isso o aviso tem que estar no painel e no e-mail.
+- **A conferência vale para os DOIS números** (RCA staging 2026-10-03): depois
+  de uma troca os papéis se invertem, e o painel só olhava a prontidão — o
+  número que enviava estava fora de uma origem e a tela dizia "recebe de
+  todas". `GET /reserve/missing-groups` devolve o número que envia em `active`.
 - Seguir canal pela reserva é sempre por clique, em lote pequeno e espaçado —
   nunca automático (número novo seguindo muitos canais de uma vez = risco).
 - E-mail com template editado no admin (override no banco) não mostra o
