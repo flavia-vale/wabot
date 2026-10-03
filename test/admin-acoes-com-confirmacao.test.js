@@ -17,8 +17,9 @@ function corpoDaFuncao(fonte, assinatura) {
 }
 
 const CASOS = [
-  ['dashboard/app/admin/online/page.js', 'async function reconnect(userId)', 'adminOnlineReconnect'],
-  ['dashboard/app/admin/page.js', 'async function reconectarCliente(userId)', 'adminOnlineReconnect'],
+  ['dashboard/app/admin/clientes/[id]/page.js', 'async function reconnect(id)', 'adminOnlineReconnect'],
+  ['dashboard/app/admin/hoje/page.js', 'async function reconectar(item)', 'adminOnlineReconnect'],
+  ['dashboard/app/admin/clientes/[id]/page.js', 'async function submit(e)', 'adminUpdateAccess'],
   ['dashboard/app/admin/observabilidade/page.js', 'async function runReprocess()', 'adminPaymentDlqReprocess'],
   ['dashboard/app/admin/afiliados/page.js', 'async function handleMarkAllPaid()', 'adminAffiliateCycleMarkAllPaid'],
   ['dashboard/app/admin/emails/page.js', 'async function enviarIndividual()', 'adminWhatsappSend('],

@@ -533,3 +533,34 @@ vence comercial); todo segmento novo em `outreachSegments.js` precisa de
 gravidade em `GRAVIDADE`, senão some da caixa em silêncio (teste trava);
 telefone mascarado por papel (`canSeePhone`); reconectar sempre com confirmação.
 Custo: ~10 agregações em lote por abertura, zero processo novo, zero RAM.
+
+## Corte final do Início: Online e Sucesso do Cliente saíram (G2, 2026-10-03)
+
+**O que era:** o Início (`dashboard/app/admin/page.js`) ainda tinha as abas
+Online e Sucesso do Cliente, a tabela "WhatsApp desconectado" e dois painéis de
+cliente (drill-down) duplicados; `/admin/online` e `/admin/sucesso-cliente`
+repetiam a mesma lista. Eram 1.720 linhas e 10 consultas no boot (duplicadas em
+dois lugares).
+
+**Onde mora agora:**
+
+| Antes | Agora |
+|---|---|
+| Aba Online / `/admin/online`: filtros por cenário | Caixa Hoje com filtro por motivo (`?motivo=robo\|cega\|cobranca\|vencendo\|sem-envio`, `dashboard/lib/admin/inboxFiltros.js`) |
+| Drawer "Drill-down online", "Por que caiu", Tentar reconectar | Ficha `/admin/clientes/[id]` → aba **Robô** (rota de detalhe agora devolve `disconnectReason` e `canAdminRetry`) |
+| Registrar contato, Ajustar plano/acesso | Ficha → aba **Atendimento** (reconectar e ajustar acesso com `window.confirm`) |
+| Drill-down da Gestão de clientes | Botão "Abrir ficha" |
+| Cards de cenário do semáforo | Continuam; "Paradas" e "Sem receber" levam ao Hoje filtrado, "Erros 24h" a `/admin/erros` |
+
+**Não regredir:** Início ≤ 1.200 linhas e ≤ 7 consultas no boot
+(`adminMe` + 6; Afiliados só carrega ao abrir a aba); o resumo da frota usa
+`adminOnline({ limit: 1 })` porque o `summary` independe do `limit`; nenhum link
+para as páginas apagadas; filtro novo na caixa precisa de motivo existente em
+`GRAVIDADE` (teste trava). **Lacunas assumidas:** os cards "Caindo demais",
+"Cliente teve que agir", "Fonte dessincronizada", "Online agora" e "Pagantes
+online" são só número (a lista por cenário saiu junto com a aba; a rota
+`GET /online?cenario=` continua para uso futuro); a coluna "Recebendo" e a tag de
+número repetido que existiam só na aba Online não foram recriadas. A tag
+Pagante da caixa Hoje não aparecia (prop errada `payingStatus`, o componente lê
+`status`): corrigido. Guardas: `test/admin-fecha-corte-inicio.test.js`,
+`test/admin-inicio-enxuto.test.js`.

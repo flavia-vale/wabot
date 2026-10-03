@@ -38,10 +38,11 @@ test('nenhum e-mail pessoal fixo em dashboard/app/admin ou dashboard/lib/admin',
   }
 })
 
-test('as duas telas usam a regra compartilhada', () => {
-  for (const rel of ['dashboard/app/admin/page.js', 'dashboard/app/admin/sucesso-cliente/page.js']) {
+test('nenhuma tela do admin volta a ter lista fixa de e-mails da fila de atendimento', () => {
+  // A fila de Sucesso do Cliente saiu do Início (G2): o atendimento mora na caixa
+  // Hoje e na ficha, e quem decide o acesso é o backend (support:read).
+  for (const rel of ['dashboard/app/admin/page.js', 'dashboard/app/admin/hoje/page.js', 'dashboard/app/admin/clientes/[id]/page.js']) {
     const fonte = readFileSync(join(ROOT, rel), 'utf8')
-    assert.match(fonte, /from '@\/lib\/admin\/access'/, `${rel} não importa a regra`)
     assert.ok(!fonte.includes('CS_ALLOWED_EMAILS'), `${rel} ainda tem a lista`)
   }
 })

@@ -157,8 +157,8 @@ test('o carregador da tag é em LOTE e nunca derruba a listagem', async () => {
   assert.equal((await loadSharedPhoneCounts(quebrado, ['a'])).size, 0)
 })
 
-test('a tag aparece nas três telas do admin', () => {
-  for (const tela of ['clientes', 'online', 'sucesso-cliente']) {
+test('a tag aparece na lista de clientes do admin', () => {
+  for (const tela of ['clientes']) {
     const src = ler(`../dashboard/app/admin/${tela}/page.js`)
     assert.match(src, /SharedPhoneTag/, `a tag não chegou na aba ${tela}`)
   }
