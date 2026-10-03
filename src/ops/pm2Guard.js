@@ -68,6 +68,11 @@ export function decidePm2Save({ current = [], dumpNames = null, allowRemove = []
 export function resolveExpectedApps(env = process.env) {
   if (env.VIGIA_EXPECTED_APPS !== undefined && String(env.VIGIA_EXPECTED_APPS).trim() !== '') return splitNames(env.VIGIA_EXPECTED_APPS)
   if (String(env.APP_ENV ?? '').toLowerCase() === 'staging') return ['api-staging', 'visual-staging']
+  // Revisão C12: servidor SECUNDÁRIO do multi-servidor só roda o supervisor
+  // (ecosystem.node.config.cjs) — exigir api/dashboard ali daria 🔴 eterno.
+  const routing = ['1', 'true', 'on'].includes(String(env.SUPERVISOR_NODE_ROUTING ?? '').trim().toLowerCase())
+  const nodeId = String(env.SUPERVISOR_NODE_ID ?? '').trim()
+  if (routing && nodeId && nodeId !== 'n1') return ['bot-supervisor']
   const remote = String(env.BOT_SUPERVISOR_MODE ?? '').toLowerCase() === 'remote'
   return remote ? [...PRODUCTION_APPS] : ['api', 'dashboard']
 }
