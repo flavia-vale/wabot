@@ -14,7 +14,7 @@
 // Sem `--aplicar` é SÓ LEITURA. Nunca imprime a chave do Mercado Pago.
 import 'dotenv/config'
 import db from '../src/db.js'
-import { decideSubscriptionStatusFromCharge } from '../src/domain/payments/subscriptionPolicy.js'
+import { createMpGet, planSync, applySync } from '../src/domain/payments/subscriptionSync.js'
 
 const args = process.argv.slice(2)
 const alvo = args.find(a => !a.startsWith('--')) || null
@@ -25,27 +25,7 @@ function fmt(d) {
   return d ? `${new Date(d).toISOString().slice(0, 19).replace('T', ' ')}Z` : '—'
 }
 
-async function mpGet(caminho) {
-  if (!MP_TOKEN) return { ok: false, motivo: 'chave do Mercado Pago não configurada neste ambiente' }
-  try {
-    const r = await fetch(`https://api.mercadopago.com${caminho}`, {
-      headers: { Authorization: `Bearer ${MP_TOKEN}` },
-      signal: AbortSignal.timeout(10000),
-    })
-    const corpo = await r.json().catch(() => null)
-    if (!r.ok) return { ok: false, motivo: `o Mercado Pago respondeu ${r.status}`, corpo }
-    return { ok: true, corpo }
-  } catch (err) {
-    return { ok: false, motivo: String(err?.message || err).slice(0, 140) }
-  }
-}
-
-const TRADUCAO = {
-  authorized: 'VALENDO — o Mercado Pago cobra sozinho todo mês. A cliente não precisa fazer nada.',
-  pending: 'EM ABERTO no Mercado Pago — o checkout nasceu e ninguém concluiu.',
-  paused: 'PAUSADA no Mercado Pago.',
-  cancelled: 'CANCELADA no Mercado Pago.',
-}
+const mpGet = createMpGet({ token: MP_TOKEN })
 
 async function main() {
   if (!alvo) {
@@ -83,46 +63,31 @@ async function main() {
       console.log(`      ${fmt(p.createdAt)} · R$ ${p.amount} · ${origem}`)
     }
 
-    const assinaturas = await db.subscription.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-    })
-    if (!assinaturas.length) {
+    // Mesma lógica da ficha do cliente no painel: planSync lê, applySync grava.
+    const plano = await planSync({ db, userId: user.id, mpGet })
+    if (!plano.hasSubscriptions) {
       console.log('    nenhuma assinatura recorrente registrada (só pagamento avulso).')
       continue
     }
-
-    for (const sub of assinaturas) {
-      console.log(`\n    assinatura ${sub.plan} criada em ${fmt(sub.createdAt)}`)
-      console.log(`      aqui no nosso banco: ${sub.status} · próxima cobrança ${fmt(sub.nextChargeAt)}`)
-
-      const resposta = await mpGet(`/preapproval/${sub.mpSubscriptionId}`)
-      if (!resposta.ok) {
-        console.log(`      no Mercado Pago: não consegui consultar (${resposta.motivo})`)
+    for (const item of plano.items) {
+      console.log(`\n    assinatura ${item.plan}`)
+      console.log(`      aqui no nosso banco: ${item.storedStatus} · próxima cobrança ${fmt(item.storedNextChargeAt)}`)
+      if (item.action === 'unreachable') {
+        console.log(`      no Mercado Pago: não consegui consultar (${item.reason})`)
         continue
       }
-      const status = String(resposta.corpo?.status || '').toLowerCase()
-      const proxima = resposta.corpo?.next_payment_date || resposta.corpo?.auto_recurring?.next_payment_date || null
-      const cobradas = resposta.corpo?.summarized?.charged_quantity ?? null
-      console.log(`      no Mercado Pago: ${status || '?'} — ${TRADUCAO[status] || 'status fora da lista conhecida'}`)
-      console.log(`      cobranças já feitas: ${cobradas ?? '—'} · próxima cobrança ${fmt(proxima)}`)
-
-      const decisao = decideSubscriptionStatusFromCharge({ storedStatus: sub.status, snapshotStatus: status })
-      if (!decisao.update) {
+      console.log(`      no Mercado Pago: ${item.mpStatus || '?'} — ${item.explanation}`)
+      console.log(`      cobranças já feitas: ${item.mpCharged ?? '—'} · próxima cobrança ${fmt(item.mpNextChargeAt)}`)
+      if (item.action === 'none') {
         console.log('      >> nosso banco já bate com o Mercado Pago.')
         continue
       }
-      console.log(`      >> DIVERGÊNCIA: aqui está "${sub.status}" e no Mercado Pago está "${decisao.status}".`)
-      if (!aplicar) {
-        console.log('         Rode de novo com --aplicar para acertar (grava o que o MP respondeu).')
-        continue
-      }
-      await db.subscription.update({
-        where: { id: sub.id },
-        data: { status: decisao.status, nextChargeAt: proxima ? new Date(proxima) : sub.nextChargeAt ?? null },
-      })
-      console.log('         corrigido.')
+      console.log(`      >> DIVERGÊNCIA: aqui está "${item.storedStatus}" e no Mercado Pago está "${item.newStatus}".`)
+      if (!aplicar) console.log('         Rode de novo com --aplicar para acertar (grava o que o MP respondeu).')
+    }
+    if (aplicar && plano.pending > 0) {
+      const feito = await applySync({ db, userId: user.id, shown: plano, mpGet })
+      console.log(`\n    corrigidas: ${feito.applied} · mudaram no meio do caminho (não gravadas): ${feito.stale}`)
     }
   }
 }

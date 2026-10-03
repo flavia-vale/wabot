@@ -108,7 +108,151 @@ function CadastroTab({ cadastro }) {
   )
 }
 
-function FinanceiroTab({ financeiro }) {
+// Cobranças recorrentes DESTA cliente (mesma fonte do Financeiro > Cobranças
+// recorrentes, filtrada pelo e-mail e depois pelo id). Carrega ao abrir a aba.
+function CobrancasDaCliente({ userId, email }) {
+  const [state, setState] = useState(null)
+  useEffect(() => {
+    let active = true
+    Promise.resolve().then(() => api.adminSubscriptionCharges({ q: email || '', days: 365, limit: 100 }))
+      .then(data => { if (active) setState({ rows: asArray(data?.charges).filter(c => c.userId === userId), error: '' }) })
+      .catch(err => { if (active) setState({ rows: [], error: err?.message || 'Não consegui carregar as cobranças.' }) })
+    return () => { active = false }
+  }, [userId, email])
+  const rows = state?.rows ?? []
+  const aprovadas = rows.filter(r => r.outcome === 'aprovada')
+  const recusadas = rows.filter(r => r.outcome === 'recusada')
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-bold text-slate-800">Cobranças da assinatura (últimos 12 meses)</h3>
+      {!state && <p className="text-sm text-slate-500">Carregando…</p>}
+      {state?.error && <Alert type="error" title="Cobranças" message={state.error} />}
+      {state && !state.error && (
+        <>
+          <div className="mb-3 grid gap-3 sm:grid-cols-3">
+            <Card label="Tentativas" value={formatNumber(rows.length)} />
+            <Card label="Cobrou" value={formatNumber(aprovadas.length)} helper={formatCurrency(aprovadas.reduce((t, r) => t + Number(r.amount ?? 0), 0))} />
+            <Card label="Recusadas" value={formatNumber(recusadas.length)} />
+          </div>
+          {rows.length === 0 ? <p className="text-sm text-slate-500">Nenhuma cobrança de assinatura registrada.</p> : (
+            <ExpandableList
+              items={rows}
+              emptyLabel="Nenhuma."
+              render={(c) => (
+                <Row key={c.id}>
+                  <span className="font-bold text-slate-900">{c.amount == null ? '—' : formatCurrency(c.amount)}</span> · {c.statusLabel}
+                  <span className="block text-xs text-slate-500">{formatDate(c.attemptedAt)}{c.returnMessage ? ` · ${c.returnMessage}` : ''}{c.returnCode ? ` (${c.returnCode})` : ''}</span>
+                </Row>
+              )}
+            />
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+const ACAO_LABELS = {
+  update: 'Vai mudar',
+  none: 'Já bate com o Mercado Pago',
+  unreachable: 'Não consegui consultar o Mercado Pago',
+}
+
+// Sincronizar com o Mercado Pago em duas etapas: 1) "Ver diferença" só lê;
+// 2) "Aplicar" pede confirmação e manda de volta o diff que está na tela.
+function SincronizarMP({ userId, onApplied }) {
+  const [diff, setDiff] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  async function ver() {
+    setBusy(true); setMsg('')
+    try { setDiff(await api.adminAssinaturaDiff(userId)) }
+    catch (err) { setMsg(err?.message || 'Não consegui consultar o Mercado Pago.') }
+    finally { setBusy(false) }
+  }
+
+  async function aplicar() {
+    if (!diff) return
+    if (!window.confirm(`Gravar aqui o que o Mercado Pago respondeu (${diff.pending} assinatura(s) vão mudar)? A cliente não precisa fazer nada. Fica registrado na auditoria.`)) return
+    setBusy(true); setMsg('')
+    try {
+      const r = await api.adminAssinaturaSincronizar(userId, diff)
+      setMsg(r.stale > 0 ? `Gravado: ${r.applied}. ${r.stale} mudou(aram) no meio do caminho e não foi/foram gravada(s) — veja a diferença de novo.` : `Gravado: ${r.applied}.`)
+      setDiff(null)
+      await onApplied?.()
+    } catch (err) { setMsg(err?.message || 'Não consegui gravar.') }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-4">
+      <h3 className="mb-1 text-sm font-bold text-slate-800">Sincronizar com o Mercado Pago</h3>
+      <p className="mb-3 text-xs text-slate-500">Primeiro mostra o que mudaria; só grava depois que você confirmar.</p>
+      <button type="button" disabled={busy} onClick={ver} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+        {busy && !diff ? 'Consultando…' : 'Ver diferença'}
+      </button>
+      {msg && <p className="mt-3 text-sm text-slate-700">{msg}</p>}
+      {diff && (
+        <div className="mt-3 space-y-2">
+          {!diff.hasSubscriptions && <p className="text-sm text-slate-500">Nenhuma assinatura recorrente (só pagamento avulso).</p>}
+          {asArray(diff.items).map(item => (
+            <Row key={item.subscriptionId}>
+              <span className="font-bold text-slate-900">{item.plan}</span> · {ACAO_LABELS[item.action] ?? item.action}
+              <span className="block text-xs text-slate-500">Aqui: {item.storedStatus} · próxima {formatDate(item.storedNextChargeAt)}</span>
+              {item.action === 'unreachable'
+                ? <span className="block text-xs text-slate-500">{item.reason}</span>
+                : <span className="block text-xs text-slate-500">Mercado Pago: {item.mpStatus || '?'} · próxima {formatDate(item.mpNextChargeAt)}</span>}
+              {item.action === 'update' && <span className="block text-xs font-bold text-amber-700">Depois: {item.newStatus} · próxima {formatDate(item.newNextChargeAt)}</span>}
+            </Row>
+          ))}
+          {diff.pending > 0 && (
+            <button type="button" disabled={busy} onClick={aplicar} className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
+              {busy ? 'Gravando…' : `Aplicar ${diff.pending} mudança(s)`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// "Testar renovação": os 6 elos da cobrança automática, só leitura.
+function TestarRenovacao({ userId }) {
+  const [res, setRes] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [erro, setErro] = useState('')
+  async function testar() {
+    setBusy(true); setErro('')
+    try { setRes(await api.adminAssinaturaTestarRenovacao(userId)) }
+    catch (err) { setErro(err?.message || 'Não consegui testar agora.') }
+    finally { setBusy(false) }
+  }
+  const marca = (ok) => (ok === true ? '✓' : ok === false ? '✗' : '?')
+  return (
+    <div className="rounded-xl border border-slate-200 p-4">
+      <h3 className="mb-1 text-sm font-bold text-slate-800">Testar renovação</h3>
+      <p className="mb-3 text-xs text-slate-500">Confere os 6 passos da cobrança automática. Só lê, não altera nada.</p>
+      <button type="button" disabled={busy} onClick={testar} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+        {busy ? 'Testando…' : 'Testar renovação'}
+      </button>
+      {erro && <p className="mt-3 text-sm text-rose-700">{erro}</p>}
+      {res && (
+        <div className="mt-3 space-y-2">
+          {asArray(res.elos).map((elo, i) => (
+            <Row key={elo.id}>
+              <span className="font-bold text-slate-900">{marca(elo.ok)} {i + 1}. {elo.title}</span>
+              {asArray(elo.lines).map(l => <span key={l} className="block text-xs text-slate-500">{l}</span>)}
+            </Row>
+          ))}
+          <p className={`text-sm font-bold ${res.verdict?.armed ? 'text-emerald-700' : 'text-amber-700'}`}>{res.verdict?.text}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FinanceiroTab({ financeiro, userId, email, onChanged }) {
   const trial = financeiro?.trial ?? {}
   return (
     <div className="space-y-5">
@@ -151,6 +295,13 @@ function FinanceiroTab({ financeiro }) {
           />
         </div>
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SincronizarMP userId={userId} onApplied={onChanged} />
+        <TestarRenovacao userId={userId} />
+      </div>
+
+      <CobrancasDaCliente userId={userId} email={email} />
 
       {asArray(financeiro?.manualGrants).length > 0 && (
         <div>
@@ -388,6 +539,17 @@ function statusDoRobo(status, lifecycle) {
   return { label: 'Desconectado', cls: 'bg-red-100 text-red-700' }
 }
 
+// Nomes leigos dos eventos de conexão (o `type` cru continua sendo o fallback).
+const ROTULO_EVENTO = {
+  manual_stop_requested: 'Robô parado de propósito',
+  admin_reconnect_requested: 'Admin pediu reconexão',
+  manual_reconnect_requested: 'Cliente pediu reconexão',
+  manual_pairing_requested: 'Cliente pediu novo pareamento',
+  connected: 'Conectou',
+  reconnect_attempt: 'Tentando reconectar',
+  reconnect_success: 'Reconectou',
+}
+
 const TOM_MOTIVO = {
   red: 'bg-red-100 text-red-800',
   amber: 'bg-amber-100 text-amber-800',
@@ -405,6 +567,11 @@ function RoboTab({ userId }) {
   const [result, setResult] = useState(null)
   const [reconectando, setReconectando] = useState(false)
   const [aviso, setAviso] = useState('')
+  const [parando, setParando] = useState(false)
+  const [diag, setDiag] = useState(null)
+  const [diagCarregando, setDiagCarregando] = useState(false)
+  const [diagCx, setDiagCx] = useState(null)
+  const [diagCxCarregando, setDiagCxCarregando] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -417,10 +584,12 @@ function RoboTab({ userId }) {
   async function reconnect(id) {
     // Ação sobre a conta de uma cliente: nunca sem confirmar (Q4 da auditoria).
     if (!window.confirm('Subir o robô desta cliente agora? Ela não precisa fazer nada. Se o WhatsApp exigir QR novo, a API recusa e avisa.')) return
+    const motivoReconexao = (window.prompt('Motivo (fica registrado na auditoria, mín. 5 letras):') || '').trim()
+    if (motivoReconexao.length < 5) { setAviso('Reconexão cancelada: o motivo precisa ter pelo menos 5 letras.'); return }
     setReconectando(true)
     setAviso('')
     try {
-      const resposta = await api.adminOnlineReconnect(id)
+      const resposta = await api.adminOnlineReconnect(id, motivoReconexao)
       setAviso(resposta?.message || 'Robô iniciado.')
       const detail = await api.adminOnlineUser(id)
       setResult({ id, detail, error: '' })
@@ -428,6 +597,48 @@ function RoboTab({ userId }) {
       setAviso(err?.message || 'Não consegui subir o robô.')
     } finally {
       setReconectando(false)
+    }
+  }
+
+  async function parar(id) {
+    // Parar é escolha, não falha: a cliente não recebe aviso de "robô caiu" e o
+    // supervisor não religa sozinho. Nunca sem confirmar e sem motivo.
+    if (!window.confirm('Parar o robô desta cliente? Ele só volta quando ela conectar de novo (ou você usar "Tentar reconectar"). Ela não recebe aviso de queda.')) return
+    const motivoParada = (window.prompt('Motivo (fica registrado na auditoria, mín. 5 letras):') || '').trim()
+    if (motivoParada.length < 5) { setAviso('Parada cancelada: o motivo precisa ter pelo menos 5 letras.'); return }
+    setParando(true)
+    setAviso('')
+    try {
+      const resposta = await api.adminSessionStop(id, motivoParada)
+      setAviso(resposta?.message || 'Robô parado.')
+      const detail = await api.adminOnlineUser(id)
+      setResult({ id, detail, error: '' })
+    } catch (err) {
+      setAviso(err?.message || 'Não consegui parar o robô.')
+    } finally {
+      setParando(false)
+    }
+  }
+
+  async function diagnosticarConexao(id) {
+    setDiagCxCarregando(true)
+    try {
+      setDiagCx({ data: await api.adminDiagnosticoConexao(id), error: '' })
+    } catch (err) {
+      setDiagCx({ data: null, error: err?.message || 'Não consegui fazer o diagnóstico.' })
+    } finally {
+      setDiagCxCarregando(false)
+    }
+  }
+
+  async function diagnosticar(id) {
+    setDiagCarregando(true)
+    try {
+      setDiag({ data: await api.adminDiagnosticoEnvios(id), error: '' })
+    } catch (err) {
+      setDiag({ data: null, error: err?.message || 'Não consegui fazer o diagnóstico.' })
+    } finally {
+      setDiagCarregando(false)
     }
   }
 
@@ -455,6 +666,16 @@ function RoboTab({ userId }) {
             {reconectando ? 'Subindo…' : 'Tentar reconectar'}
           </button>
         )}
+        {session?.lifecycle !== 'stopped_by_user' && (
+          <button
+            type="button"
+            onClick={() => parar(userId)}
+            disabled={parando}
+            className={`${detail?.canAdminRetry ? '' : 'ml-auto '}rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-60`}
+          >
+            {parando ? 'Parando…' : 'Parar robô'}
+          </button>
+        )}
       </div>
       {aviso && <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">{aviso}</p>}
 
@@ -465,6 +686,69 @@ function RoboTab({ userId }) {
           <p className="mt-1 text-xs text-slate-500">{motivo.detail}</p>
         </div>
       )}
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Por que não envia?</h3>
+          <button
+            type="button"
+            onClick={() => diagnosticar(userId)}
+            disabled={diagCarregando}
+            className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-black text-white hover:bg-slate-900 disabled:opacity-60"
+          >
+            {diagCarregando ? 'Verificando…' : 'Verificar agora'}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-500">Confere, nesta ordem: conta, robô, WhatsApp, grupos e envios das últimas 6 horas. A primeira que falhar é a causa.</p>
+        {diag?.error && <p className="mt-3 text-sm text-red-700">{diag.error}</p>}
+        {diag?.data && (
+          <div className="mt-3 space-y-2">
+            <p className={`rounded-xl px-3 py-2 text-sm font-bold ${diag.data.veredito.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>{diag.data.veredito.frase}</p>
+            <ul className="divide-y divide-slate-100">
+              {asArray(diag.data.elos).map((elo) => (
+                <li key={elo.id} className="py-2 text-sm">
+                  <p className="font-bold text-slate-900">{elo.ok ? '✔' : '✗'} {elo.titulo}</p>
+                  {asArray(elo.frases).map((frase) => <p key={frase} className="mt-0.5 text-xs text-slate-600">{frase}</p>)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Por que não conecta?</h3>
+          <button
+            type="button"
+            onClick={() => diagnosticarConexao(userId)}
+            disabled={diagCxCarregando}
+            className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-black text-white hover:bg-slate-900 disabled:opacity-60"
+          >
+            {diagCxCarregando ? 'Verificando…' : 'Verificar agora'}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-500">Confere, nesta ordem: conta, vaga no servidor, o que ela fez na tela, WhatsApp e credencial dos últimos 3 dias. A primeira que falhar é a causa.</p>
+        {diagCx?.error && <p className="mt-3 text-sm text-red-700">{diagCx.error}</p>}
+        {diagCx?.data && (
+          <div className="mt-3 space-y-2">
+            <p className={`rounded-xl px-3 py-2 text-sm font-bold ${diagCx.data.veredito.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>
+              {diagCx.data.veredito.frase}
+              {diagCx.data.veredito.acao && <span className="mt-1 block text-xs font-medium">O que fazer: {diagCx.data.veredito.acao}</span>}
+            </p>
+            <ul className="divide-y divide-slate-100">
+              {asArray(diagCx.data.elos).map((elo) => (
+                <li key={elo.id} className="py-2 text-sm">
+                  <p className="font-bold text-slate-900">{elo.ok ? '✔' : '✗'} {elo.titulo}</p>
+                  {asArray(elo.frases).map((frase, i) => (
+                    <p key={frase} className="mt-0.5 text-xs text-slate-600">{frase}{asArray(elo.acoes)[i] ? ` → ${asArray(elo.acoes)[i]}` : ''}</p>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
         <Card label="Quedas 24h" value={formatNumber(cm.disconnects24h)} />
@@ -526,10 +810,11 @@ function RoboTab({ userId }) {
             render={(event) => (
               <div key={event.id} className="rounded-xl bg-slate-50 p-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-black text-slate-900">{event.type}</p>
+                  <p className="font-black text-slate-900">{ROTULO_EVENTO[event.type] || event.type}</p>
                   <span className="text-xs font-bold text-slate-500">{formatDateTime(event.occurredAt)}</span>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">Código {event.code || '—'} · lifecycle {event.lifecycle || '—'}</p>
+                <p className="mt-1 text-xs text-slate-500">Código {event.code || '—'} · lifecycle {event.lifecycle || '—'}{event.metadata?.source === 'admin' ? ' · feito pelo admin' : ''}</p>
+                {event.metadata?.reason && <p className="mt-1 text-xs text-slate-700">Motivo: {event.metadata.reason}</p>}
               </div>
             )}
           />
@@ -832,7 +1117,7 @@ export default function AdminClienteHistoricoPage() {
               ))}
             </nav>
             {tab === 'cadastro' && <CadastroTab cadastro={history.cadastro} />}
-            {tab === 'financeiro' && <FinanceiroTab financeiro={history.financeiro} />}
+            {tab === 'financeiro' && <FinanceiroTab financeiro={history.financeiro} userId={history.id} email={history.cadastro?.email} onChanged={reload} />}
             {tab === 'tecnico' && <TecnicoTab tecnico={history.tecnico} />}
             {tab === 'uso' && <UsoTab uso={history.uso} userId={history.id} onSaved={reload} />}
             {tab === 'robo' && <RoboTab userId={history.id} />}

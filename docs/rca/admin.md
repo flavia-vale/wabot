@@ -550,3 +550,56 @@ Auditoria (`admin.user.block|unblock`) grava o motivo. Ficha 360
 
 **Não regredir:** não baixar para `support:write`; não aceitar motivo curto nem
 pular o e-mail no servidor "porque a tela já pede". Custo: zero RAM.
+
+## Ficha 360 → aba Robô com Parar, motivo e "por que não envia" (item 6 / M2, 2026-10-03)
+
+**Era:** a aba Robô da ficha (`/admin/clientes/[id]`) já mostrava "Por que caiu",
+histórico de quedas e Reconectar (PR #2183), mas a admin não conseguia parar o
+robô sem a VPS (`scripts/parar-sessao.mjs`), nenhuma ação pedia motivo e o
+"por que não envia" só existia como script lendo `bot.log`.
+
+**Agora:**
+
+| Peça | Onde mora |
+|---|---|
+| Parar de propósito (PURO de rota; marca `stopped_by_user` ANTES do `stopBot`, grava `manual_stop_requested` com `source=admin` + motivo) | `src/domain/session/stopSession.js` — usado pela rota E por `scripts/parar-sessao.mjs` |
+| Rota `POST /api/admin/users/:id/session/stop` (`tech:write`, motivo ≥ 5 letras, auditoria `admin.session.stop`) | `src/api/routes/admin.js` |
+| Reconectar com motivo (opcional no servidor, a ficha sempre manda; vai no evento `admin_reconnect_requested` e na auditoria) | `POST /online/:userId/reconnect` |
+| Diagnóstico elo por elo (conta → robô → WhatsApp → grupos → envios), PURO | `src/domain/admin/diagnostics/envios.js`; usado por `GET /api/admin/users/:id/diagnostico/envios` (`support:read`, auditada) e por `scripts/diag-envios-vazios.mjs` |
+| Tela: botões Parar robô / Tentar reconectar (`confirm` + `prompt` de motivo), bloco "Por que não envia?", eventos com nome leigo e motivo | `dashboard/app/admin/clientes/[id]/page.js` (`RoboTab`) |
+| Guarda | `test/admin-ficha-robo.test.js` |
+
+**Não regredir:** o diagnóstico só lê banco e Redis (nunca `bot.log`, que é da
+frota inteira e não se atribui a uma conta — elos de log ficam só no script);
+`workerRunning: null` = "não sei", nunca "parado"; fila de erros (DLQ) só com
+`QUEUE_BACKEND=bullmq` (`null` = indisponível, não erro); a marca
+`stopped_by_user` vive só em `stopSession.js` (rota e script não a reescrevem);
+Parar nunca sem confirmar + motivo; evento próprio `admin_reconnect_requested`
+continua separado de `manual_reconnect_requested` (mede a promessa do produto).
+DLQ continua nas rotas `/send-dlq/:userId` já existentes (Operação → Filas).
+Custo: 6 consultas pequenas por clique em "Verificar agora", zero processo
+novo, zero RAM.
+
+## G4 — "Por que não conecta" na ficha do cliente (2026-10-03)
+
+**O que era:** `scripts/diag-nao-conecta.mjs` só rodava por SSH. A atendente
+não tinha como separar "QR venceu", "sem vaga", "WhatsApp recusou a versão
+(405)" e "tempo esgotado (408)" — causas que pedem ações opostas.
+
+**Onde mora:** regras puras em `src/domain/admin/diagnostics/conexao.js`
+(`diagnoseConexao`: elos conta → vaga → tela → WhatsApp → credencial, cada um
+com problema + "o que fazer" em frase leiga). Rota
+`GET /api/admin/users/:id/diagnostico/conexao` (`support:read`, auditada como
+`admin.user.diagnostico_conexao`), bloco "Por que não conecta?" na aba Robô da
+ficha, ao lado de "Por que não envia?". O script importa o mesmo módulo e
+imprime o `[VEREDITO]`. Teste: `test/admin-diagnostico-conexao.test.js`.
+
+**Não regredir:**
+- Só banco (`WaSession`, `WaConnectionEvent`, `AnalyticsEvent`) + existência da
+  pasta de credencial. NUNCA `bot.log` na rota (é da frota inteira).
+- A telemetria da tela mora em `AnalyticsEvent('session_telemetry')` desde
+  2026-10-02; o script lia `AdminAuditLog` (vazio) e foi corrigido.
+- 405 com `ops_wa_version_rejected` em várias contas = problema geral, nunca
+  pedir para a cliente parear de novo (ver `whatsapp-sessao.md`).
+- Sem jargão (`405`, `socket`, `handshake`, `pairing`) nas frases da tela.
+- Custo: 6 consultas pequenas por clique, zero processo novo, zero RAM.

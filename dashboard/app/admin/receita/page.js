@@ -765,6 +765,119 @@ function SubscriptionChargesPanel({ data, loading, filters, onFilters, search, o
   )
 }
 
+// Sub-aba "Retenção" (G3, item 13): LTV por coorte de primeiro pagamento e
+// churn com motivo. Os números vêm de `ltvRetention.js` / `churnReason.js` —
+// os mesmos dos scripts diag-ltv-retencao / diag-motivo-nao-renovou.
+const formatPercent = (value) => (value == null ? '—' : `${Math.round(value * 100)}%`)
+
+function cohortSentence(cohort) {
+  const marks = [['m1', 'no 1º mês'], ['m2', 'em 2 meses'], ['m3', 'em 3 meses'], ['m6', 'em 6 meses']]
+  const last = [...marks].reverse().find(([key]) => cohort.retention?.[key])
+  if (!last) return 'Coorte recente demais: ainda não dá para dizer quantas ficam.'
+  const cell = cohort.retention[last[0]]
+  return `Entraram ${cohort.customers} clientes; ${cell.retained} de ${cell.measurable} ainda tinham acesso pago ${last[1]} (${formatPercent(cell.rate)}).`
+}
+
+function RetentionPanel({ ltv, churn, loading }) {
+  if (loading) return <LoadingState message="Calculando retenção…" />
+  if (!ltv || !churn) return <Alert type="error">Não foi possível carregar a retenção agora. Tente de novo em instantes.</Alert>
+  const projection = ltv.projection
+  return (
+    <div className="space-y-6">
+      <p className="text-xs text-gray-500">
+        Acesso liberado na mão e conta de teste ficam de fora. “Retida” = ainda tinha acesso <span className="font-bold">pago</span> naquele marco. “—” = coorte nova demais para medir (não é zero).
+        {(ltv.truncated || churn.truncated) && ' Atenção: o teto de pagamentos foi atingido, os números podem estar incompletos.'}
+      </p>
+
+      <section>
+        <h3 className="mb-2 text-sm font-black text-gray-900">LTV por mês do primeiro pagamento</h3>
+        <div className="overflow-x-auto rounded-xl border border-gray-100">
+          <table className="min-w-[760px] w-full text-sm">
+            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <tr>
+                <th className="px-3 py-2">Coorte</th>
+                <th className="px-3 py-2">Clientes</th>
+                <th className="px-3 py-2">Receita</th>
+                <th className="px-3 py-2">1 mês</th>
+                <th className="px-3 py-2">2 meses</th>
+                <th className="px-3 py-2">3 meses</th>
+                <th className="px-3 py-2">6 meses</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {asArray(ltv.cohorts).length === 0 && (
+                <tr><td colSpan={7} className="px-3 py-4 text-center text-gray-500">Nenhum pagamento aprovado ainda.</td></tr>
+              )}
+              {asArray(ltv.cohorts).map(cohort => (
+                <tr key={cohort.cohort} className="align-top hover:bg-gray-50">
+                  <td className="px-3 py-2 font-bold text-gray-800">
+                    {formatMonth(cohort.cohort)}
+                    <p className="mt-1 max-w-[260px] text-[11px] font-normal text-gray-500">{cohortSentence(cohort)}</p>
+                  </td>
+                  <td className="px-3 py-2 text-gray-600">{formatNumber(cohort.customers)}</td>
+                  <td className="px-3 py-2 text-gray-600">{formatCurrency(cohort.revenue)}</td>
+                  {['m1', 'm2', 'm3', 'm6'].map(key => {
+                    const cell = cohort.retention?.[key]
+                    return (
+                      <td key={key} className="px-3 py-2 text-gray-700">
+                        {cell ? <><span className="font-bold">{formatPercent(cell.rate)}</span> <span className="text-[11px] text-gray-500">({cell.retained}/{cell.measurable})</span></> : '—'}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-[11px] text-gray-500">
+          Realizado: {formatNumber(ltv.totals?.payingCustomers)} pagantes, média de {formatCurrency(ltv.totals?.avgLtvRealized)} deixados por cliente.{' '}
+          {projection?.projectedLtv != null
+            ? `Projeção (estimativa, confiança ${projection.confidence}): ${formatCurrency(projection.projectedLtv)} por cliente ao longo da vida. Não some com o realizado.`
+            : `Sem projeção: ${projection?.reason ?? 'amostra pequena'}.`}
+        </p>
+      </section>
+
+      <section>
+        <h3 className="mb-1 text-sm font-black text-gray-900">Quem deixou de pagar nos últimos {churn.months} meses</h3>
+        <p className="mb-2 text-[11px] text-gray-500">{churn.note}</p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {asArray(churn.byReason).map(item => (
+            <div key={item.reason} className="rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100">
+              <p className="text-xl font-black text-gray-900">{formatNumber(item.count)}</p>
+              <p className="text-[11px] text-gray-600">{item.label}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-gray-100">
+          <table className="min-w-[560px] w-full text-sm">
+            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <tr>
+                <th className="px-3 py-2">Mês em que venceu</th>
+                <th className="px-3 py-2">Voluntário</th>
+                <th className="px-3 py-2">Involuntário</th>
+                <th className="px-3 py-2">Sem como afirmar</th>
+                <th className="px-3 py-2">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {asArray(churn.monthly).map(row => (
+                <tr key={row.month} className="hover:bg-gray-50">
+                  <td className="px-3 py-2 font-bold text-gray-800">{formatMonth(row.month)}</td>
+                  <td className="px-3 py-2 text-gray-600">{formatNumber(row.voluntario)}</td>
+                  <td className="px-3 py-2 text-gray-600">{formatNumber(row.involuntario)}</td>
+                  <td className="px-3 py-2 text-gray-600">{formatNumber(row.incerto)}</td>
+                  <td className="px-3 py-2 font-black text-gray-900">{formatNumber(row.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-[11px] text-gray-500">Amostra pequena: trate como pista, não como causa provada.</p>
+      </section>
+    </div>
+  )
+}
+
 function BillingKindBadge({ customer }) {
   const sub = customer?.recurringSubscription
   if (customer?.billingKind === 'recorrente' && sub) {
@@ -884,6 +997,7 @@ export default function ReceitaPage() {
   const [roi, setRoi] = useState(null)
   const [roiMonths, setRoiMonths] = useState(12)
   const [reconcilingRoi, setReconcilingRoi] = useState(false)
+  const [retention, setRetention] = useState(null)
 
   function openUserDetail(id) {
     if (!id) return
@@ -961,6 +1075,18 @@ export default function ReceitaPage() {
       .catch(() => { if (active) setRoi(null) })
     return () => { active = false }
   }, [financeTab, roiMonths])
+
+  // Sub-aba "Retenção": só busca quando a aba é aberta (uma vez).
+  const retentionLoading = financeTab === 'retencao' && retention == null
+
+  useEffect(() => {
+    if (financeTab !== 'retencao') return
+    let active = true
+    Promise.all([api.adminFinanceLtv(), api.adminFinanceChurn(6)])
+      .then(([ltv, churn]) => { if (active) setRetention({ ltv, churn }) })
+      .catch(() => { if (active) setRetention({ ltv: null, churn: null }) })
+    return () => { active = false }
+  }, [financeTab])
 
   async function reconcileRoi() {
     setReconcilingRoi(true)
@@ -1048,7 +1174,7 @@ export default function ReceitaPage() {
 
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
               <div className="flex flex-wrap gap-2">
-                {[['visao', 'Visão geral'], ['roi', 'ROI'], ['cobrancas', 'Cobranças recorrentes']].map(([id, label]) => (
+                {[['visao', 'Visão geral'], ['roi', 'ROI'], ['retencao', 'Retenção'], ['cobrancas', 'Cobranças recorrentes']].map(([id, label]) => (
                   <button
                     key={id}
                     type="button"
@@ -1066,6 +1192,10 @@ export default function ReceitaPage() {
 
             {financeTab === 'roi' && (
               <RoiPanel data={roi} loading={roiLoading} months={roiMonths} onMonths={setRoiMonths} onReconcile={reconcileRoi} reconciling={reconcilingRoi} onSaveCosts={saveFixedCosts} />
+            )}
+
+            {financeTab === 'retencao' && (
+              <RetentionPanel ltv={retention?.ltv} churn={retention?.churn} loading={retentionLoading} />
             )}
 
             {financeTab === 'cobrancas' && (

@@ -360,7 +360,13 @@ export const api = {
     return apiFetch(`/api/admin/online${query ? `?${query}` : ''}`)
   },
   adminOnlineUser: (id) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}`),
-  adminOnlineReconnect: (id) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}/reconnect`, { method: 'POST' }),
+  adminOnlineReconnect: (id, reason) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}/reconnect`, { method: 'POST', ...(reason ? { body: JSON.stringify({ reason }) } : {}) }),
+  adminAssinaturaDiff: (id) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/assinatura/diff`),
+  adminAssinaturaSincronizar: (id, diff) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/assinatura/sincronizar`, { method: 'POST', body: JSON.stringify({ diff, confirm: true }) }),
+  adminAssinaturaTestarRenovacao: (id) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/assinatura/testar-renovacao`),
+  adminSessionStop: (id, reason) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/session/stop`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  adminDiagnosticoEnvios: (id, hours = 6) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/diagnostico/envios?hours=${encodeURIComponent(hours)}`),
+  adminDiagnosticoConexao: (id, days = 3) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/diagnostico/conexao?days=${encodeURIComponent(days)}`),
   adminFilas: () => apiFetch('/api/admin/filas'),
   adminFilasReprocessar: (id, reason) => apiFetch(`/api/admin/filas/${encodeURIComponent(id)}/reprocessar`, { method: 'POST', body: JSON.stringify({ reason }) }),
   adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`),
@@ -421,6 +427,8 @@ export const api = {
   // corrente parcial) e futuro (projeção em cenários). Só busca quando a aba
   // é aberta — ver `roiLoading` em app/admin/page.js.
   adminFinanceRoi: (months) => apiFetch(`/api/admin/finance/roi${months ? `?months=${months}` : ''}`),
+  adminFinanceLtv: () => apiFetch('/api/admin/finance/ltv'),
+  adminFinanceChurn: (months = 6) => apiFetch(`/api/admin/finance/churn?months=${months}`),
   adminUpdateFinanceCosts: (costs) =>
     apiFetch('/api/admin/finance/costs', { method: 'PUT', body: JSON.stringify(costs) }),
   adminPayments: (params = {}) => {

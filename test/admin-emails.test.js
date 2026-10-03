@@ -116,6 +116,17 @@ function makeDb(overrides = {}) {
     emailSendLog: {
       findMany: async () => state.sendLogs,
       count: async () => state.sendLogs.length,
+      groupBy: async () => {
+        const acc = new Map()
+        for (const l of state.sendLogs) {
+          if (!l.batchId) continue
+          const k = `${l.batchId}|${l.status}`
+          const cur = acc.get(k) ?? { batchId: l.batchId, status: l.status, _count: { _all: 0 } }
+          cur._count._all += 1
+          acc.set(k, cur)
+        }
+        return [...acc.values()]
+      },
       create: async ({ data }) => { const row = { id: `l${state.sendLogs.length + 1}`, ...data }; state.sendLogs.push(row); return row },
       update: async () => ({}),
       updateMany: async () => ({ count: 0 }),

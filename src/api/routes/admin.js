@@ -3,7 +3,14 @@ import { boundedRange as boundedCampaignRange } from '../../domain/admin/campaig
 import { loadCampaignFunnel } from '../../domain/admin/campaignFunnelQuery.js'
 import { carregarVisaoEntrega } from '../../ops/deliveryQuality.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
-import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot, getBotMetrics, moveSessionToShard, rollbackSessionFromShard, getShardMetrics, getSupervisorNodesSnapshot, getSupervisorBootedAtMs } from '../../manager.js'
+import { stopSessionOnPurpose, validateStopReason } from '../../domain/session/stopSession.js'
+import { diagnoseEnvios } from '../../domain/admin/diagnostics/envios.js'
+import { diagnoseConexao } from '../../domain/admin/diagnostics/conexao.js'
+import { existsSync } from 'node:fs'
+import { getAuthInfoDir } from '../../paths.js'
+import { getPlanEntitlements } from '../../billing/plans.js'
+import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
+import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot, stopBot,getBotMetrics, moveSessionToShard, rollbackSessionFromShard, getShardMetrics, getSupervisorNodesSnapshot, getSupervisorBootedAtMs } from '../../manager.js'
 import { isNodeRoutingEnabled } from '../../supervisor/nodeRouting.js'
 import { buildNodesCapacityView, nodesViewDisabled } from '../../ops/capacity/nodesView.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
@@ -19,6 +26,7 @@ import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipe
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
+import { parseAuditQuery, buildAuditWhere, buildAuditRows, canReadAudit } from '../../domain/admin/auditLabels.js'
 import { buildErrorObservability, buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
@@ -34,6 +42,7 @@ import { resolveQueueBackend, dlqDisponivel, buildFilasRows, validateReprocessRe
 import { recoverStuckSendLogs } from '../../jobs/stuckSendLogs.js'
 import { wasStoppedByUser } from '../../email/accountActivity.js'
 import { SUBSCRIPTION_ACTIVE_STATUS } from '../../domain/payments/subscriptionPolicy.js'
+import { createMpGet, planSync, applySync, checkRenewal } from '../../domain/payments/subscriptionSync.js'
 import { sendAdminAlert } from '../../email/adminAlerts.js'
 import { resolveDashboardUrl } from '../../email/layout.js'
 import { createProbeTracker, buildProbeAlertVars, PROBE_ALERT_SLUG, PROBE_WINDOW_MS } from '../../domain/admin/adminProbePolicy.js'
@@ -55,6 +64,8 @@ import { selectShardPocCandidates, presentShardRuntimeMetrics } from '../../ops/
 import { resolveFinancePeriod, FINANCE_PERIODS } from '../../domain/admin/financePeriod.js'
 import { combineRevenueTotals, countDistinctPayingUsers, computeAverageLtv, computeMercadoPagoFees, computeNetRevenue } from '../../domain/admin/financeOverview.js'
 import { loadTestAccountUserIds, excludeUserIdsWhere, resolveTestAccountEmails } from '../../domain/admin/testAccounts.js'
+import { buildLtvReport } from '../../domain/admin/ltvRetention.js'
+import { classifyNonRenewals, buildChurnReport } from '../../domain/admin/churnReason.js'
 import { buildRoiReport } from '../../domain/admin/roi.js'
 import { costForMonth, monthIndex, monthKeyFromIndex, monthKeyOf, normalizeCostOverrides, resolveCostConfig, COST_CATEGORY_LABELS } from '../../domain/admin/operatingCosts.js'
 import { DEFAULT_OWNER_ADMIN_EMAILS, PRIMARY_OWNER_ADMIN_EMAIL } from '../../auth/reservedAdminEmails.js'
@@ -907,10 +918,12 @@ async function buildFleetScenarios(now = new Date()) {
       where: { type: { in: ['disconnect', 'disconnect_terminal'] }, occurredAt: { gte: since24h, lte: now } },
       _count: { _all: true },
     }).catch(() => []),
-    db.waConnectionEvent.findMany({
+    // groupBy (agregação no SQLite) em vez de `distinct` do Prisma, que traz
+    // todas as linhas para a memória da API e deduplica lá.
+    db.waConnectionEvent.groupBy({
+      by: ['userId'],
       where: { type: { in: ['manual_reconnect_requested', 'manual_pairing_requested'] }, occurredAt: { gte: since24h, lte: now } },
-      select: { userId: true },
-      distinct: ['userId'],
+      _max: { occurredAt: true },
     }).catch(() => []),
     // Sem `distinct` de propósito: precisamos do `metadata` para separar quem
     // parou agora de quem está cega há dias, e com `distinct` a linha que
@@ -920,10 +933,10 @@ async function buildFleetScenarios(now = new Date()) {
       where: { event: 'ops_wa_reception_blind', createdAt: { gte: blindSince, lte: now } },
       select: { userId: true, metadata: true },
     }).catch(() => []),
-    db.analyticsEvent.findMany({
+    db.analyticsEvent.groupBy({
+      by: ['userId'],
       where: { event: 'ops_wa_group_desync_unresolved', createdAt: { gte: since7d, lte: now } },
-      select: { userId: true },
-      distinct: ['userId'],
+      _max: { createdAt: true },
     }).catch(() => []),
     db.waConnectionEvent.findMany({
       where: { type: { in: OFFLINE_EPISODE_EVENT_TYPES }, occurredAt: { gte: addDays(now, -2), lte: now } },
@@ -1624,13 +1637,8 @@ export async function adminRoutes(app) {
 
   app.get('/online', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
-    const result = await buildAdminOnlineOverview({ query: req.query ?? {}, adminRole: req.admin.role })
-    await writeAdminAuditLog(req, {
-      action: 'admin.online.read',
-      resource: 'waConnectionEvent',
-      after: { totalSessions: result.summary.totalSessions, disconnectedAlerts: result.summary.disconnectedAlerts },
-    })
-    return result
+    // Leitura periódica: NÃO grava AdminAuditLog (RCA admin Q1b) — só escrita é auditada.
+    return buildAdminOnlineOverview({ query: req.query ?? {}, adminRole: req.admin.role })
   })
 
   // Botão "Tentar reconectar" da aba online. Sobe o robô da cliente sem que
@@ -1679,11 +1687,15 @@ export async function adminRoutes(app) {
       return reply.code(409).send({ error: 'Reconectar daqui não resolve este caso', motivo: ownership.reason, owner: ownership.owner })
     }
 
+    // Motivo é opcional aqui (a Caixa "Hoje" reconecta em 1 clique); a ficha
+    // do cliente sempre manda. Se vier, grava no evento e na auditoria.
+    const motivoReconexao = String(req.body?.reason ?? '').trim().slice(0, 300) || null
+
     recordWaConnectionEventSafe({
       userId,
       type: 'admin_reconnect_requested',
       lifecycle: session?.lifecycle ?? null,
-      metadata: { source: 'admin', owner: ownership.owner, adminId: req.admin?.id ?? null },
+      metadata: { source: 'admin', owner: ownership.owner, adminId: req.admin?.id ?? null, ...(motivoReconexao ? { reason: motivoReconexao } : {}) },
     })
 
     try {
@@ -1697,9 +1709,194 @@ export async function adminRoutes(app) {
       action: 'admin.online.reconnect',
       resource: 'waSession',
       targetUserId: userId,
-      after: { owner: ownership.owner, previousStatus: session?.status ?? null },
+      after: { owner: ownership.owner, previousStatus: session?.status ?? null, reason: motivoReconexao },
     })
     return { ok: true, owner: ownership.owner, message: 'Robô iniciado — acompanhe o status nos próximos minutos' }
+  })
+
+  // Botão "Parar robô" da ficha (aba Robô). Mesmo passo a passo do painel da
+  // cliente e do scripts/parar-sessao.mjs: src/domain/session/stopSession.js.
+  // Motivo obrigatório (auditado); evento `manual_stop_requested` com
+  // source=admin para o aviso "seu robô caiu" não sair por uma parada de propósito.
+  app.post('/users/:id/session/stop', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    const userId = String(req.params.id || '')
+    const check = validateStopReason(req.body)
+    if (!check.ok) return reply.code(400).send({ error: check.error })
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, email: true } }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    const before = await db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true } }).catch(() => null)
+
+    const { rodando, parado } = await stopSessionOnPurpose({
+      db,
+      userId,
+      stopBot,
+      isRunning: isRunningSafe,
+      record: recordWaConnectionEventSafe,
+      eventType: MANUAL_STOP_EVENT,
+      source: 'admin',
+      metadata: { adminId: req.admin?.id ?? null, reason: check.reason },
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.session.stop',
+      resource: 'waSession',
+      resourceId: userId,
+      targetUserId: userId,
+      before,
+      after: { lifecycle: 'stopped_by_user', wasRunning: rodando, stopBot: typeof parado === 'string' ? parado : Boolean(parado), reason: check.reason },
+    })
+    return { ok: true, wasRunning: rodando, message: 'Robô parado. Só volta quando a cliente conectar de novo (ou você usar Tentar reconectar).' }
+  })
+
+  // Ficha 360 > Financeiro (M3). Sincronizar com o Mercado Pago em DUAS etapas:
+  // o GET mostra o diff (só leitura), o POST grava o que o admin viu e confirmou
+  // (relê o MP e recusa o que mudou no meio). Regra em
+  // src/domain/payments/subscriptionSync.js — a mesma do script de SSH.
+  const mpGetAdmin = () => createMpGet({ token: process.env.MP_ACCESS_TOKEN })
+
+  app.get('/users/:id/assinatura/diff', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+    const userId = String(req.params.id || '')
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    return planSync({ db, userId, mpGet: mpGetAdmin() })
+  })
+
+  app.post('/users/:id/assinatura/sincronizar', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:write'))) return
+    const userId = String(req.params.id || '')
+    // Sem o diff mostrado e o "confirmo" explícito, nada grava.
+    if (req.body?.confirm !== true || !Array.isArray(req.body?.diff?.items)) {
+      return reply.code(400).send({ error: 'Mostre a diferença primeiro e confirme: envie o diff exibido e confirm=true.' })
+    }
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    const result = await applySync({ db, userId, shown: req.body.diff, mpGet: mpGetAdmin() })
+    await writeAdminAuditLog(req, {
+      action: 'admin.assinatura.sincronizar',
+      resource: 'subscription',
+      targetUserId: userId,
+      after: { applied: result.applied, stale: result.stale, results: result.results },
+    })
+    return { ok: true, ...result }
+  })
+
+  app.get('/users/:id/assinatura/testar-renovacao', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+    const userId = String(req.params.id || '')
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, accessExpiresAt: true } }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    return checkRenewal({ db, user, mpGet: mpGetAdmin() })
+  })
+
+  // "Por que não envia", elo por elo, em frases leigas. Só banco e Redis (nunca
+  // bot.log). Regras em src/domain/admin/diagnostics/envios.js — o mesmo módulo
+  // do scripts/diag-envios-vazios.mjs.
+  app.get('/users/:id/diagnostico/envios', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const userId = String(req.params.id || '')
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, plan: true, status: true, accessExpiresAt: true },
+    }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const hours = Math.min(48, Math.max(1, Number(req.query?.hours) || 6))
+    const nowMs = Date.now()
+    const since = new Date(nowMs - hours * 3_600_000)
+    const [session, workerRunning, groups, targets, porStatus, ultimo, presos] = await Promise.all([
+      db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true, lastHeartbeatAt: true } }).catch(() => null),
+      isRunningSafe(userId),
+      db.group.findMany({ where: { userId }, select: { id: true, name: true, role: true, kind: true } }).catch(() => []),
+      db.groupTarget.findMany({ where: { userId }, select: { monitorId: true, postId: true } }).catch(() => []),
+      db.messageLog.groupBy({ by: ['status'], where: { userId, sentAt: { gte: since } }, _count: { _all: true } }).catch(() => []),
+      db.messageLog.findFirst({ where: { userId }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }).catch(() => null),
+      db.messageLog.count({ where: { userId, status: 'sending', sentAt: { lt: new Date(nowMs - STUCK_SENDING_MS) } } }).catch(() => 0),
+    ])
+
+    // Fila de erros só existe com BullMQ; sem ele ou sem Redis, "não sei" (null).
+    let dlqTotal = null
+    if (dlqDisponivel(process.env)) {
+      try {
+        const { listDlq } = await import('../../jobs/sendDlq.js')
+        dlqTotal = (await listDlq({ redisUrl: process.env.REDIS_URL, userId, limit: 1 })).total ?? 0
+      } catch { dlqTotal = null }
+    }
+
+    const byStatus = {}
+    let total = 0
+    for (const row of porStatus) { byStatus[row.status] = row._count._all; total += row._count._all }
+    const result = diagnoseEnvios({
+      nowMs,
+      hours,
+      user,
+      canUseChannels: getPlanEntitlements(user).canUseChannels,
+      workerRunning,
+      session,
+      groups,
+      targets,
+      logs: { total, byStatus, lastSentAt: ultimo?.sentAt ?? null },
+      stuckSending: presos,
+      dlqTotal,
+    })
+    await writeAdminAuditLog(req, { action: 'admin.user.diagnostico_envios', resource: 'user', resourceId: userId, targetUserId: userId, after: { veredito: result.veredito.eloId } })
+    return result
+  })
+
+  // "Por que não conecta", elo por elo, em frases leigas. Só banco (WaSession,
+  // WaConnectionEvent, AnalyticsEvent) + existência da pasta de credencial —
+  // nunca o log de arquivo. Regras em src/domain/admin/diagnostics/conexao.js, o mesmo
+  // módulo do scripts/diag-nao-conecta.mjs.
+  app.get('/users/:id/diagnostico/conexao', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const userId = String(req.params.id || '')
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, status: true, accessExpiresAt: true },
+    }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const days = Math.min(14, Math.max(1, Number(req.query?.days) || 3))
+    const nowMs = Date.now()
+    const since = new Date(nowMs - days * 86_400_000)
+    const [session, workerRunning, eventos, telaRows, recusas, versao] = await Promise.all([
+      db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true, lastHeartbeatAt: true, lastDisconnectCode: true, blockNotice: true } }).catch(() => null),
+      isRunningSafe(userId),
+      db.waConnectionEvent.findMany({ where: { userId, occurredAt: { gte: since } }, orderBy: { occurredAt: 'desc' }, take: 80, select: { type: true, code: true, occurredAt: true } }).catch(() => []),
+      db.analyticsEvent.findMany({ where: { userId, event: SESSION_TELEMETRY_EVENT, createdAt: { gte: since } }, orderBy: { createdAt: 'desc' }, take: 120, select: { createdAt: true, metadata: true } }).catch(() => []),
+      db.analyticsEvent.groupBy({ by: ['userId'], where: { event: 'ops_session_capacity_limit', createdAt: { gte: since } }, _count: { _all: true } }).catch(() => []),
+      db.analyticsEvent.count({ where: { event: 'ops_wa_version_rejected', createdAt: { gte: since } } }).catch(() => 0),
+    ])
+    const tela = telaRows.map((row) => {
+      let meta = {}
+      try { meta = typeof row.metadata === 'string' ? JSON.parse(row.metadata || '{}') : (row.metadata || {}) } catch { /* linha malformada: ignora */ }
+      return { event: meta.event, at: row.createdAt }
+    }).filter(t => t.event)
+    let credencial = null
+    try {
+      const dir = getAuthInfoDir(userId)
+      credencial = { existe: existsSync(dir), backupPareamento: existsSync(`${dir}.pairing-backup`) }
+    } catch { credencial = null }
+
+    const result = diagnoseConexao({
+      nowMs,
+      days,
+      user,
+      session,
+      eventos,
+      tela,
+      credencial,
+      vagas: {
+        recusasDela: recusas.find(r => r.userId === userId)?._count?._all ?? 0,
+        recusasServidor: recusas.reduce((sum, r) => sum + (r._count?._all ?? 0), 0),
+        limite: process.env.MAX_SESSIONS_PER_PROCESS || null,
+      },
+      versaoRecusadaServidor: versao,
+      workerRunning,
+    })
+    await writeAdminAuditLog(req, { action: 'admin.user.diagnostico_conexao', resource: 'user', resourceId: userId, targetUserId: userId, after: { veredito: result.veredito.eloId } })
+    return result
   })
 
   app.get('/online/:userId', async (req, reply) => {
@@ -2402,6 +2599,56 @@ export async function adminRoutes(app) {
   async function loadCostOverrides() {
     return db.operatingCostSettings.findUnique({ where: { id: 1 } }).catch(() => null)
   }
+
+  // G3 (item 13): LTV por coorte e churn com motivo. Rotas finas sobre os
+  // módulos puros `ltvRetention.js` e `churnReason.js` — a MESMA conta dos
+  // scripts `diag-ltv-retencao.mjs` / `diag-motivo-nao-renovou.mjs`. Só leitura
+  // em lote (2 a 4 consultas, teto de linhas), conta de teste fora, zero RAM nova.
+  const LTV_PAYMENT_ROW_LIMIT = 20_000
+  async function loadLtvReport() {
+    const testAccounts = await loadTestAccountUserIds(db)
+    const payments = await db.payment.findMany({
+      where: { status: 'approved', ...excludeUserIdsWhere(testAccounts.ids) },
+      select: { userId: true, plan: true, amount: true, status: true, createdAt: true, expiresAt: true, daysGranted: true },
+      orderBy: { createdAt: 'asc' },
+      take: LTV_PAYMENT_ROW_LIMIT,
+    })
+    const userIds = [...new Set(payments.map(p => p.userId))]
+    const users = userIds.length
+      ? await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, plan: true, createdAt: true } })
+      : []
+    const now = new Date()
+    return {
+      now,
+      userIds,
+      truncated: payments.length >= LTV_PAYMENT_ROW_LIMIT,
+      report: buildLtvReport({ users, payments, now }),
+    }
+  }
+
+  app.get('/finance/ltv', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+    const { report, truncated } = await loadLtvReport()
+    await writeAdminAuditLog(req, { action: 'admin.finance.ltv.read', resource: 'finance' })
+    // Sem e-mail por cliente: a tela mostra coorte, não pessoa.
+    const { customers: _customers, ...rest } = report
+    return { ...rest, truncated }
+  })
+
+  app.get('/finance/churn', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+    const months = Math.min(24, Math.max(1, Number.parseInt(req.query?.months, 10) || 6))
+    const { report, userIds, now, truncated } = await loadLtvReport()
+    const [subscriptions, charges] = userIds.length
+      ? await Promise.all([
+        db.subscription.findMany({ where: { userId: { in: userIds } }, select: { userId: true, status: true, cancelledAt: true } }),
+        db.subscriptionCharge.findMany({ where: { userId: { in: userIds } }, select: { userId: true, status: true, attemptedAt: true } }),
+      ])
+      : [[], []]
+    const classified = classifyNonRenewals(report.customers, { subscriptions, charges })
+    await writeAdminAuditLog(req, { action: 'admin.finance.churn.read', resource: 'finance', after: { months } })
+    return { ...buildChurnReport(classified, { now, months, monthKey: monthKeyOf }), truncated }
+  })
 
   /**
    * Edita os gastos fixos mensais (Claude + servidor) e a cotação do dólar do
@@ -3724,6 +3971,29 @@ app.get('/sessions', async (req, reply) => {
         user: sanitizeUser(session.user, req.admin.role),
       })),
     }
+  })
+
+  // ---- Operação → Auditoria (M8): quem fez o quê. Só owner/admin. ----
+  // A leitura NÃO é auditada (viraria ruído na própria trilha). Payload redigido.
+  app.get('/audit', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    if (!canReadAudit(req.admin.role)) return reply.code(403).send({ error: 'Só dono e admin veem a auditoria' })
+    const q = parseAuditQuery(req.query)
+    const where = buildAuditWhere(q)
+    const [total, rows] = await Promise.all([
+      db.adminAuditLog.count({ where }),
+      db.adminAuditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (q.page - 1) * q.take,
+        take: q.take,
+        include: {
+          actorUser: { select: { id: true, email: true, name: true } },
+          targetUser: { select: { id: true, email: true, name: true } },
+        },
+      }),
+    ])
+    return { total, page: q.page, take: q.take, days: q.days, rows: buildAuditRows(rows, redactAdminPayload) }
   })
 
   // ---- Operação → Filas (M5): envios presos em 'sending', por cliente ----
