@@ -9,6 +9,8 @@ import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 import { DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from '@/lib/marketing-content'
 import { AUTOMATION_MODELS, OUR_MODEL_COVERAGE, buildCompetitorModelRows } from '@/lib/automation-models'
 import { CUSTO_FRASE, PRECO_PLANOS_FRASE, fraseNumerosProprios, precoDoPlano } from '@/lib/resposta-citavel'
+import { CanalVideo } from '@/components/marketing/CanalVideo'
+import { VIDEO_AFILIADO_SHOPEE_AUTOMATICO, videoPublicado } from '../../src/tutorialVideo.js'
 
 const siteUrl = getSiteUrl()
 // "As outras lojas" sai da lista canônica: a resposta escrita à mão ficou
@@ -955,6 +957,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     // MEDIDA em test/inbound-titulos-clique.test.js (8,09% de clique) e só sai
     // de lá com dado de Search Console. O H1 é que carrega preço e teste.
     description: 'Espelha os grupos que você segue e troca cada link pelo seu código de afiliada em 6 lojas. Basic R$ 39, Pro R$ 69 por 30 dias, 7 dias grátis sem cartão.',
+    // Frente 5 da análise SEO+GEO (03/10): o vídeo do canal entra aqui assim
+    // que for publicado (id em src/tutorialVideo.js); até lá, nada aparece.
+    video: videoPublicado(VIDEO_AFILIADO_SHOPEE_AUTOMATICO),
     eyebrow: 'Bot para afiliados',
     h1: 'Bot para afiliados no WhatsApp: R$ 39 por 30 dias, 7 dias grátis',
     lead: `Um bot para afiliados no WhatsApp acompanha os grupos de origem que você já segue, troca cada link de produto ou cupom pelo seu código de afiliada e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso em ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}), com intervalo entre envios, limite por destino e histórico de tudo o que saiu.`,
@@ -1744,6 +1749,14 @@ export function PreservationCommercialPage({ pageKey }) {
             </div>
           </div>
         </section>
+
+        {page.video ? (
+          <section style={s.section}>
+            <div className="wrap">
+              <CanalVideo video={page.video} />
+            </div>
+          </section>
+        ) : null}
 
         {related.length ? (
           <section style={s.section}>
