@@ -151,7 +151,13 @@ Como funciona:
    com lista própria (`allowedPlatforms`) não ganhou sozinho — liga na tela
    Espelhamento.
 
-⚠️ **Hipóteses a medir antes de ir para produção** (`diag-rakuten.mjs
+✅ **Medido em 2026-10-03** (`docs/revisao-rakuten-2026-10-03.md`): (a) o
+formato do Link Locator bate com o leitor; (b) o `id` do `clickurl` é o mesmo
+do deep link gerado pela API oficial `POST /v1/links/deep_links`, no mesmo
+formato que montamos. Pedir token novo não derruba o anterior. A mesma
+revisão lista os gaps abertos (R1–R18) e o plano de correção.
+
+Texto original: ⚠️ **Hipóteses a medir antes de ir para produção** (`diag-rakuten.mjs
 <email> --rakuten`): (a) formato do XML do Link Locator (`<ns1:return>` com
 `<ns1:mid>`/`<ns1:name>`; se vier `FORMATO DESCONHECIDO`, o parser precisa de
 ajuste e nada converte — nada quebra); (b) o `id` do `clickurl` é o mesmo do
