@@ -14,6 +14,7 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { createAdminService, buildUserOrigin } from '../../domain/admin/service.js'
 import { summarizeReceptionBlindRows, resolveReceptionBlindForRow } from '../../domain/admin/receptionBlindStatus.js'
 import { buildCustomerHistory } from '../../domain/admin/customerHistory.js'
+import { BLOCK_PERMISSION, validateBlockRequest } from '../../domain/admin/blockPolicy.js'
 import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipeline.js'
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
@@ -2920,14 +2921,9 @@ export async function adminRoutes(app) {
   // bloqueada. Entre em contato com o suporte", igual para qualquer causa, e a
   // pessoa precisava abrir chamado para descobrir o que nós já sabíamos.
   app.post('/users/:id/block', async (req, reply) => {
-    if (!(await requireAdmin(req, reply, 'support:write'))) return
-
-    const status = String(req.body?.status ?? 'suspended').trim()
-    if (status !== 'suspended' && status !== 'banned') {
-      return reply.code(400).send({ error: 'status deve ser suspended ou banned' })
-    }
-    const reason = String(req.body?.reason ?? '').trim().slice(0, 400)
-    if (!reason) return reply.code(400).send({ error: 'Escreva o motivo — ele é mostrado para a cliente' })
+    // Papel alto (só o dono) + motivo ≥ 10 letras + e-mail digitado: ver
+    // src/domain/admin/blockPolicy.js (auditoria 3.6).
+    if (!(await requireAdmin(req, reply, BLOCK_PERMISSION))) return
 
     const before = await db.user.findUnique({
       where: { id: req.params.id },
@@ -2935,9 +2931,18 @@ export async function adminRoutes(app) {
     })
     if (!before) return reply.code(404).send({ error: 'Cliente não encontrado' })
 
+    const check = validateBlockRequest({
+      action: 'block',
+      status: req.body?.status,
+      reason: req.body?.reason,
+      confirmEmail: req.body?.confirmEmail,
+      accountEmail: before.email,
+    })
+    if (!check.ok) return reply.code(400).send({ error: check.error })
+
     const after = await db.user.update({
       where: { id: before.id },
-      data: { status, blockedReason: reason, blockedAt: new Date() },
+      data: { status: check.status, blockedReason: check.reason, blockedAt: new Date() },
       select: { id: true, email: true, status: true, blockedReason: true, blockedAt: true },
     })
 
@@ -2948,20 +2953,28 @@ export async function adminRoutes(app) {
       targetUserId: before.id,
       before,
       after,
-      reason,
+      reason: check.reason,
     })
 
     return { ok: true, user: after }
   })
 
   app.post('/users/:id/unblock', async (req, reply) => {
-    if (!(await requireAdmin(req, reply, 'support:write'))) return
+    if (!(await requireAdmin(req, reply, BLOCK_PERMISSION))) return
 
     const before = await db.user.findUnique({
       where: { id: req.params.id },
       select: { id: true, email: true, status: true, blockedReason: true, blockedAt: true },
     })
     if (!before) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const check = validateBlockRequest({
+      action: 'unblock',
+      reason: req.body?.reason,
+      confirmEmail: req.body?.confirmEmail,
+      accountEmail: before.email,
+    })
+    if (!check.ok) return reply.code(400).send({ error: check.error })
 
     const after = await db.user.update({
       where: { id: before.id },
@@ -2976,7 +2989,7 @@ export async function adminRoutes(app) {
       targetUserId: before.id,
       before,
       after,
-      reason: String(req.body?.reason ?? '').trim().slice(0, 400) || null,
+      reason: check.reason,
     })
 
     return { ok: true, user: after }
@@ -3257,7 +3270,8 @@ export async function adminRoutes(app) {
     })
 
     await writeAdminAuditLog(req, { action: 'admin.customers.history', resource: 'user', resourceId: userId, targetUserId: userId })
-    return history
+    // A ficha só mostra o botão de bloquear a quem o servidor deixaria usar.
+    return { ...history, podeBloquear: hasPermission(req.admin.role, BLOCK_PERMISSION) }
   })
 
   app.get('/logs', async (req, reply) => {

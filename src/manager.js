@@ -91,6 +91,19 @@ export async function getSupervisorBootedAtMs(nodeId = null) {
 }
 
 /**
+ * Momento (epoch ms) da última batida do supervisor, ou `null` (N/A em
+ * `inline`, ou sem batida). Best-effort: nunca lança. Usado por `/health`.
+ */
+export async function getSupervisorHeartbeatAtMs(nodeId = null) {
+  if (MODE !== 'remote' || !remoteClient?.getSupervisorHeartbeatAtMs) return null
+  try {
+    return await remoteClient.getSupervisorHeartbeatAtMs(nodeId)
+  } catch {
+    return null
+  }
+}
+
+/**
  * Robôs ligados por nó do supervisor: `{ n1: 12, n2: null }` (null = não
  * medido, NUNCA 0). Em `inline` ou com SUPERVISOR_NODE_ROUTING desligado há um
  * nó só ('n1'). Nunca lança.

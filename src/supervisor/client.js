@@ -78,6 +78,7 @@ function warnOnProtocolMismatch(raw) {
  * @property {()=>number} stopAllBots
  * @property {()=>Promise<boolean>} isSupervisorAlive
  * @property {()=>Promise<number|null>} getSupervisorBootedAtMs
+ * @property {()=>Promise<number|null>} getSupervisorHeartbeatAtMs
  * @property {()=>Promise<void>} close
  */
 
@@ -332,6 +333,30 @@ export function createSupervisorClient({
     }
   }
 
+  // Momento (epoch ms) da ÚLTIMA batida do supervisor (o valor do heartbeat é
+  // `Date.now()` de quem renovou), ou null se a chave não existe (supervisor
+  // morto: o TTL de 30 s expirou). Com roteamento por nó: a batida mais ANTIGA,
+  // e qualquer nó sem chave devolve null (um nó morto não se esconde).
+  async function getSupervisorHeartbeatAtMs(nodeId = null) {
+    if (!publisherCheck) {
+      try { await init() } catch { return null }
+    }
+    const parse = value => {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+    }
+    try {
+      if (nodeRouting) {
+        if (nodeId) return parse(await publisherCheck.get(heartbeatKey(nodeId)))
+        const beats = (await Promise.all(nodeIds.map(id => publisherCheck.get(heartbeatKey(id))))).map(parse)
+        return beats.every(Boolean) ? Math.min(...beats) : null
+      }
+      return parse(await publisherCheck.get(SUPERVISOR_HEARTBEAT_KEY))
+    } catch {
+      return null
+    }
+  }
+
   // ---- Superfície compatível com src/core/sessionCore.js ----
 
   // Comandos fire-and-forget assíncronos: aguardam ack do supervisor.
@@ -538,7 +563,7 @@ export function createSupervisorClient({
     onQR, onStatus, getLastQR,
     resumePersistedBots, startSessionHealthMonitor, stopAllBots,
     // extras
-    isSupervisorAlive, getSupervisorBootedAtMs, getLastEvent, close, _events: events,
+    isSupervisorAlive, getSupervisorBootedAtMs, getSupervisorHeartbeatAtMs, getLastEvent, close, _events: events,
     moveSessionToShard, rollbackSessionFromShard, getShardMetrics,
     resolveNodeId, nodeIds, nodeRouting, getNodeCapacities,
   })

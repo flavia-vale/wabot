@@ -534,30 +534,19 @@ gravidade em `GRAVIDADE`, senão some da caixa em silêncio (teste trava);
 telefone mascarado por papel (`canSeePhone`); reconectar sempre com confirmação.
 Custo: ~10 agregações em lote por abertura, zero processo novo, zero RAM.
 
-## MRR canônico e selo do Início (2026-10-03, item 2 das fatias restantes)
+## Bloquear/banir conta com papel alto e dupla confirmação (item 5, 2026-10-03)
 
-**O que era:** a auditoria (2.1) dizia que `activeMrr` contava por `plan`. No
-`develop` a contagem já filtrava por `currentPayingWhere`, mas a conta estava
-duplicada em `/finance/overview` e `/finance/roi` (3 `count` cada). O Início
-também dizia "Atualização em tempo real" sem haver polling.
-**Onde mora:** `src/domain/admin/mrr.js` (`computeCanonicalMrr` pura +
-`loadCanonicalMrr`, 1 `groupBy` por plano). As duas rotas chamam o mesmo
-helper. Selo do Início = "Atualizado às HH:MM" (hora da última carga; botão
-Atualizar já existente recarrega).
-**Não regredir:** MRR nunca por `plan` sozinho (cortesia/trial/liberação
-escrevem `plan`); guarda `test/admin-mrr-canonico.test.js`.
-**Medição pendente (read-only, rodar no banco de prod antes do merge):** quantos
-com `plan` pago e acesso vigente NÃO têm pagamento aprovado (se > 0, o painel
-já os excluía; este número só dá o tamanho do "plano sem pagamento"):
+**Era:** `POST /users/:id/block|unblock` pedia só `support:write` (o mesmo nível
+de "registrar contato"), o motivo podia ter 1 letra e a ficha nem tinha botão.
 
-```sql
-SELECT COUNT(*) FROM User u
-WHERE u.plan IN ('basic','pro','premium') AND u.status='active'
-  AND (u.accessExpiresAt IS NULL OR u.accessExpiresAt > strftime('%s','now')*1000)
-  AND NOT EXISTS (SELECT 1 FROM Payment p WHERE p.userId=u.id AND p.status='approved')
-  AND NOT EXISTS (SELECT 1 FROM SubscriptionCharge c WHERE c.userId=u.id AND c.status IN ('approved','accredited','processed'));
-```
-Status de cobrança aprovada = `CHARGE_OUTCOME_STATUSES.aprovada` (`src/domain/payments/chargeOutcome.js`).
-O MRR exibido NÃO muda por este PR
-(a regra de pagante já era a canônica); o resultado só informa quantas contas
-têm plano sem pagamento.
+**Agora:** regra PURA em `src/domain/admin/blockPolicy.js`
+(`validateBlockRequest`): permissão `admin:write` (só o dono; o papel `admin`
+NÃO tem), motivo ≥ 10 letras (bloquear E desbloquear) e `confirmEmail` igual
+ao e-mail da conta (o servidor confere de novo). Status só `suspended`/`banned`.
+Auditoria (`admin.user.block|unblock`) grava o motivo. Ficha 360
+(`/admin/clientes/[id]`): botão `BloquearConta` só aparece com
+`podeBloquear` (devolvido por `GET /customers/:id/history`), pede
+`window.confirm` + digitar o e-mail. Guarda: `test/admin-bloqueio-seguro.test.js`.
+
+**Não regredir:** não baixar para `support:write`; não aceitar motivo curto nem
+pular o e-mail no servidor "porque a tela já pede". Custo: zero RAM.

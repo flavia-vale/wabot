@@ -446,6 +446,11 @@ export const api = {
   adminUpdateAccess: (id, data) =>
     apiFetch(`/api/admin/users/${id}/access`, { method: 'POST', body: JSON.stringify(data) }),
 
+  adminUserBlock: (id, data) =>
+    apiFetch(`/api/admin/users/${id}/block`, { method: 'POST', body: JSON.stringify(data) }),
+  adminUserUnblock: (id, data) =>
+    apiFetch(`/api/admin/users/${id}/unblock`, { method: 'POST', body: JSON.stringify(data) }),
+
   adminAutomationQuota: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/automation-quota${query ? `?${query}` : ''}`)
