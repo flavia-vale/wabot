@@ -629,6 +629,10 @@ asserções de `test/admin-acoes-com-confirmacao.test.js` sobre `runReprocess` e
 `enviarIndividual` apontam para os arquivos novos (nunca apagar a garantia);
 menu = só 5 entradas. Custo: zero RAM, zero processo.
 
+## Design system: seção "Admin" em proposta (G5 passo 1, 2026-10-03)
+
+DS v2.1 (`docs/design-system/design-system-v2.html`, âncora `#admin`): tabela densa, chips, barra de ações, faixas de gravidade da caixa Hoje, KPI, bloco da Operação, voz e lista de divergências D1-D12. **Só documentação**: nenhuma tela migrada; o passo 2 só depois do OK da dona.
+
 ## Retenção de `AnalyticsEvent ops_*` em 90 dias (item 3 / M7, 2026-10-03)
 
 - **O que era:** `AnalyticsEvent` sem limpeza para `ops_*`. Medição em produção: 409.199 linhas. Top: `ops_mirror_fallback_all_destinations` 205.663, `ops_store_photo_over_origin` 68.493, `ops_custom_domain_link_resolved` 53.871, `ops_wa_group_desync_autoheal` 28.170, `ops_wa_group_desync_unresolved` 13.132.
