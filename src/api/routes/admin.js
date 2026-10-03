@@ -14,6 +14,7 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { createAdminService, buildUserOrigin } from '../../domain/admin/service.js'
 import { summarizeReceptionBlindRows, resolveReceptionBlindForRow } from '../../domain/admin/receptionBlindStatus.js'
 import { buildCustomerHistory } from '../../domain/admin/customerHistory.js'
+import { BLOCK_PERMISSION, validateBlockRequest } from '../../domain/admin/blockPolicy.js'
 import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipeline.js'
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
@@ -23,11 +24,14 @@ import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpiso
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
 import { isSessionLive, RECEPTION_BLIND_WINDOW_MS } from '../../domain/session/sessionLiveness.js'
 import { withPayingStatus } from '../../domain/admin/payingStatus.js'
+import { loadCanonicalMrr } from '../../domain/admin/mrr.js'
 import { loadEverPaidUserIds, currentPayingWhere, formerPayingWhere, stalePayingWhere } from '../../domain/admin/payingLoader.js'
 import { resolvePayingStatus } from '../../domain/admin/payingStatus.js'
 import { classifyOutreachSegment } from '../../domain/admin/outreachSegments.js'
 import { buildInbox } from '../../domain/admin/inboxPriority.js'
 import { findPayingDown, findPayingBlind, STUCK_SENDING_MS } from '../../ops/adminOpsAlertPolicy.js'
+import { resolveQueueBackend, dlqDisponivel, buildFilasRows, validateReprocessReason, FILAS_MAX_LINHAS } from '../../domain/admin/stuckSendQueue.js'
+import { recoverStuckSendLogs } from '../../jobs/stuckSendLogs.js'
 import { wasStoppedByUser } from '../../email/accountActivity.js'
 import { SUBSCRIPTION_ACTIVE_STATUS } from '../../domain/payments/subscriptionPolicy.js'
 import { sendAdminAlert } from '../../email/adminAlerts.js'
@@ -326,8 +330,8 @@ function parseLpPlanInput(body = {}, existing = null) {
     return { ok: false, error: 'Título, descrição e valor do plano são obrigatórios.' }
   }
 
-  if (!['trial', 'basic', 'pro'].includes(existing?.id ?? body.id)) {
-    return { ok: false, error: 'Plano inválido. Use trial, basic ou pro.' }
+  if (!['trial', 'basic', 'pro', 'premium'].includes(existing?.id ?? body.id)) {
+    return { ok: false, error: 'Plano inválido. Use trial, basic, pro ou premium.' }
   }
 
   return { ok: true, data: { title, description, price, features: JSON.stringify(features), position } }
@@ -457,7 +461,7 @@ function buildAdminObservabilityContract({
   const queues = {
     offerQueueItems: queueCounts,
     paymentWebhookDlq: { open: dlqOpen ?? 0 },
-    sendDlq: dlqSnapshot,
+    sendDlq: { ...dlqSnapshot, backend: resolveQueueBackend() },
   }
 
   const database = {
@@ -1252,6 +1256,7 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       plan: true,
       lastActivityAt: true,
       createdAt: true,
+      accessExpiresAt: true,
       waSession: {
         select: {
           status: true,
@@ -1314,10 +1319,31 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
   const offlineMetrics24h = summarizeEpisodes(offlineEpisodes, { since: since24h, now })
   const offlineMetrics7d = summarizeEpisodes(offlineEpisodes, { since: since7d, now })
 
+  // "Por que caiu" e "pode reconectar" na ficha do cliente (seção Robô): mesma
+  // regra da lista que o Início tinha (resolveSessionOwner + describeDisconnectReason).
+  const ownership = resolveSessionOwner({
+    status: user.waSession?.status ?? 'disconnected',
+    lifecycle: user.waSession?.lifecycle ?? null,
+    lastDisconnectCode: user.waSession?.lastDisconnectCode ?? null,
+    lastEventType: recentEvents[0]?.type ?? null,
+    workerRunning: await isRunningSafe(userId),
+    lastHeartbeatAt: user.waSession?.lastHeartbeatAt ?? null,
+    accessExpiresAt: user.accessExpiresAt ?? null,
+    now: now.getTime(),
+  })
+  const disconnectReason = describeDisconnectReason({
+    owner: ownership.owner,
+    hasSession: Boolean(user.waSession),
+    lastDisconnectCode: user.waSession?.lastDisconnectCode ?? null,
+  })
+
   return {
     checkedAt: now.toISOString(),
     user: sanitizeUser(user, adminRole),
     session: user.waSession,
+    sessionOwner: ownership.owner,
+    canAdminRetry: Boolean(ownership.canAdminRetry),
+    disconnectReason,
     online: isSessionOnline(user.waSession, now),
     connectionMetrics: {
       disconnects24h,
@@ -2087,7 +2113,6 @@ export async function adminRoutes(app) {
     const testAccounts = await loadTestAccountUserIds(db)
     const notTestUser = excludeUserIdsWhere(testAccounts.ids)
     const notTestReferred = excludeUserIdsWhere(testAccounts.ids, 'referredUserId')
-    const notTestAccount = excludeUserIdsWhere(testAccounts.ids, 'id')
 
     const [
       approvedOneTimePeriod,
@@ -2098,9 +2123,6 @@ export async function adminRoutes(app) {
       subscriptionPayingUsers,
       pendingPayments,
       failedPayments,
-      activeBasic,
-      activePro,
-      activePremium,
       trialsActive,
       expiring7d,
       expiring30d,
@@ -2119,11 +2141,6 @@ export async function adminRoutes(app) {
       db.subscriptionCharge.groupBy({ by: ['userId'], where: { ...subscriptionChargeApprovedWhere, ...notTestUser } }),
       db.payment.count({ where: { status: 'pending', ...notTestUser } }),
       db.payment.count({ where: { status: { notIn: ['approved', 'pending'] }, ...notTestUser } }),
-      // Assinaturas ativas = quem JÁ PAGOU e está em dia, por plano. Cortesia e
-      // liberação manual têm `plan` preenchido e não entram no MRR.
-      db.user.count({ where: { ...currentPayingWhere(now), plan: 'basic', ...notTestAccount } }),
-      db.user.count({ where: { ...currentPayingWhere(now), plan: 'pro', ...notTestAccount } }),
-      db.user.count({ where: { ...currentPayingWhere(now), plan: 'premium', ...notTestAccount } }),
       db.user.count({ where: { status: 'active', plan: 'trial', OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: now } }] } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 30) } } }),
@@ -2141,8 +2158,10 @@ export async function adminRoutes(app) {
       db.refund.aggregate({ where: { ...notTestUser }, _sum: { amount: true, gatewayFeeLoss: true }, _count: { _all: true } }),
     ])
 
+    // MRR canônico (src/domain/admin/mrr.js): só pagante pela regra de
+    // payingLoader × preço atual do plano. Mesma conta do ROI.
     const currentPrices = await getCurrentPlanPrices()
-    const activeMrr = activeBasic * currentPrices.basic + activePro * currentPrices.pro + activePremium * currentPrices.premium
+    const { activeMrr, activeBasic, activePro, activePremium, paidActiveUsers } = await loadCanonicalMrr(db, { now, prices: currentPrices, testAccountIds: testAccounts.ids })
 
     // Payment.amount e SubscriptionCharge.amount estão em reais (Float);
     // comissões em centavos (Int) → /100. Combinação em módulo puro e testado
@@ -2216,7 +2235,7 @@ export async function adminRoutes(app) {
       activeBasic,
       activePro,
       activePremium,
-      paidActiveUsers: activeBasic + activePro + activePremium,
+      paidActiveUsers,
       trialsActive,
       expiring7d,
       expiring30d,
@@ -2337,7 +2356,7 @@ export async function adminRoutes(app) {
     // horária).
     const agora = new Date()
     const [assinaturasAtivas, ultimaCobranca, ultimaSincronizacao, recusadas7d, aprovadas7d] = await Promise.all([
-      db.subscription.count({ where: { status: 'authorized' } }).catch(() => null),
+      db.subscription.count({ where: { status: 'authorized', plan: { not: 'extra_number' } } }).catch(() => null),
       db.subscriptionCharge.findFirst({ orderBy: { attemptedAt: 'desc' }, select: { attemptedAt: true } }).catch(() => null),
       db.subscriptionCharge.findFirst({ orderBy: { syncedAt: 'desc' }, select: { syncedAt: true } }).catch(() => null),
       db.subscriptionCharge.count({ where: { status: { in: ['rejected', 'cancelled', 'expired'] }, attemptedAt: { gte: addDays(agora, -7) } } }).catch(() => null),
@@ -2461,7 +2480,7 @@ export async function adminRoutes(app) {
       ],
     }
 
-    const [payments, charges, commissions, refunds, activeBasic, activePro, activePremium, prices] = await Promise.all([
+    const [payments, charges, commissions, refunds, prices] = await Promise.all([
       db.payment.findMany({
         where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser },
         select: { userId: true, amount: true, provider: true, createdAt: true },
@@ -2485,9 +2504,6 @@ export async function adminRoutes(app) {
         orderBy: { refundedAt: 'asc' },
         take: ROI_ROW_LIMIT,
       }),
-      db.user.count({ where: { ...currentPayingWhere(now), plan: 'basic', ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
-      db.user.count({ where: { ...currentPayingWhere(now), plan: 'pro', ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
-      db.user.count({ where: { ...currentPayingWhere(now), plan: 'premium', ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
       getCurrentPlanPrices(),
     ])
 
@@ -2539,7 +2555,7 @@ export async function adminRoutes(app) {
       revenueByMonth,
       now,
       projectionMonths,
-      activeMrr: activeBasic * prices.basic + activePro * prices.pro + activePremium * prices.premium,
+      activeMrr: (await loadCanonicalMrr(db, { now, prices, testAccountIds: testAccounts.ids })).activeMrr,
       costOverrides,
     })
 
@@ -2907,14 +2923,9 @@ export async function adminRoutes(app) {
   // bloqueada. Entre em contato com o suporte", igual para qualquer causa, e a
   // pessoa precisava abrir chamado para descobrir o que nós já sabíamos.
   app.post('/users/:id/block', async (req, reply) => {
-    if (!(await requireAdmin(req, reply, 'support:write'))) return
-
-    const status = String(req.body?.status ?? 'suspended').trim()
-    if (status !== 'suspended' && status !== 'banned') {
-      return reply.code(400).send({ error: 'status deve ser suspended ou banned' })
-    }
-    const reason = String(req.body?.reason ?? '').trim().slice(0, 400)
-    if (!reason) return reply.code(400).send({ error: 'Escreva o motivo — ele é mostrado para a cliente' })
+    // Papel alto (só o dono) + motivo ≥ 10 letras + e-mail digitado: ver
+    // src/domain/admin/blockPolicy.js (auditoria 3.6).
+    if (!(await requireAdmin(req, reply, BLOCK_PERMISSION))) return
 
     const before = await db.user.findUnique({
       where: { id: req.params.id },
@@ -2922,9 +2933,18 @@ export async function adminRoutes(app) {
     })
     if (!before) return reply.code(404).send({ error: 'Cliente não encontrado' })
 
+    const check = validateBlockRequest({
+      action: 'block',
+      status: req.body?.status,
+      reason: req.body?.reason,
+      confirmEmail: req.body?.confirmEmail,
+      accountEmail: before.email,
+    })
+    if (!check.ok) return reply.code(400).send({ error: check.error })
+
     const after = await db.user.update({
       where: { id: before.id },
-      data: { status, blockedReason: reason, blockedAt: new Date() },
+      data: { status: check.status, blockedReason: check.reason, blockedAt: new Date() },
       select: { id: true, email: true, status: true, blockedReason: true, blockedAt: true },
     })
 
@@ -2935,20 +2955,28 @@ export async function adminRoutes(app) {
       targetUserId: before.id,
       before,
       after,
-      reason,
+      reason: check.reason,
     })
 
     return { ok: true, user: after }
   })
 
   app.post('/users/:id/unblock', async (req, reply) => {
-    if (!(await requireAdmin(req, reply, 'support:write'))) return
+    if (!(await requireAdmin(req, reply, BLOCK_PERMISSION))) return
 
     const before = await db.user.findUnique({
       where: { id: req.params.id },
       select: { id: true, email: true, status: true, blockedReason: true, blockedAt: true },
     })
     if (!before) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const check = validateBlockRequest({
+      action: 'unblock',
+      reason: req.body?.reason,
+      confirmEmail: req.body?.confirmEmail,
+      accountEmail: before.email,
+    })
+    if (!check.ok) return reply.code(400).send({ error: check.error })
 
     const after = await db.user.update({
       where: { id: before.id },
@@ -2963,7 +2991,7 @@ export async function adminRoutes(app) {
       targetUserId: before.id,
       before,
       after,
-      reason: String(req.body?.reason ?? '').trim().slice(0, 400) || null,
+      reason: check.reason,
     })
 
     return { ok: true, user: after }
@@ -3244,7 +3272,8 @@ export async function adminRoutes(app) {
     })
 
     await writeAdminAuditLog(req, { action: 'admin.customers.history', resource: 'user', resourceId: userId, targetUserId: userId })
-    return history
+    // A ficha só mostra o botão de bloquear a quem o servidor deixaria usar.
+    return { ...history, podeBloquear: hasPermission(req.admin.role, BLOCK_PERMISSION) }
   })
 
   app.get('/logs', async (req, reply) => {
@@ -3697,6 +3726,52 @@ app.get('/sessions', async (req, reply) => {
     }
   })
 
+  // ---- Operação → Filas (M5): envios presos em 'sending', por cliente ----
+  // Vale para fila em memória (produção) e BullMQ. Só groupBy/in, teto de 500.
+  app.get('/filas', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const nowMs = Date.now()
+    const cutoff = new Date(nowMs - STUCK_SENDING_MS)
+    const presos = await db.messageLog.groupBy({
+      by: ['userId'],
+      where: { status: 'sending', sentAt: { lt: cutoff } },
+      _count: { _all: true },
+      _min: { sentAt: true },
+      orderBy: { _min: { sentAt: 'asc' } },
+      take: FILAS_MAX_LINHAS,
+    })
+    const ids = presos.map(p => p.userId)
+    const [usuarios, ultimosSucessos] = ids.length
+      ? await Promise.all([
+        db.user.findMany({ where: { id: { in: ids } }, select: { id: true, email: true, name: true } }),
+        db.messageLog.groupBy({ by: ['userId'], where: { userId: { in: ids }, status: 'success' }, _max: { sentAt: true } }),
+      ])
+      : [[], []]
+    const linhas = buildFilasRows({ presos, usuarios, ultimosSucessos, nowMs })
+    await writeAdminAuditLog(req, { action: 'admin.filas.list', resource: 'filas', after: { clientes: linhas.length } })
+    return {
+      backend: resolveQueueBackend(),
+      presosDesdeMin: Math.round(STUCK_SENDING_MS / 60_000),
+      totalPresos: linhas.reduce((n, l) => n + l.presos, 0),
+      linhas,
+    }
+  })
+
+  // Destrava os 'sending' presos de UM cliente (mesma função do watchdog; não
+  // reenvia — a fonte reenfileira por conta própria).
+  app.post('/filas/:userId/reprocessar', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    const userId = String(req.params.userId ?? '').trim()
+    if (!userId || userId.length > 128) return reply.code(400).send({ error: 'userId inválido' })
+    const motivo = validateReprocessReason(req.body)
+    if (!motivo.ok) return reply.code(400).send({ error: motivo.error })
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } })
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    const result = await recoverStuckSendLogs({ db, userId, cutoffMs: STUCK_SENDING_MS })
+    await writeAdminAuditLog(req, { action: 'admin.filas.reprocessar', resource: 'filas', resourceId: userId, after: { ...result, reason: motivo.reason } })
+    return result
+  })
+
   // ---- DLQ do pipeline de envio (BullMQ) ----
   //
   // Disponível apenas quando o worker do usuário está em backend bullmq
@@ -3708,6 +3783,11 @@ app.get('/sessions', async (req, reply) => {
   // valor não pode ser usado cru: rejeita vazio/malformado (400) e confirma
   // que o usuário existe (404), evitando construir chaves Redis arbitrárias.
   async function resolveDlqUserId(req, reply) {
+    // Em produção a fila é em memória: não há DLQ do Redis (M5, envio-e-filas.md).
+    if (!dlqDisponivel()) {
+      reply.code(409).send({ error: 'Fila em memória neste ambiente: não há DLQ. Use Operação → Filas.' })
+      return null
+    }
     const userId = String(req.params.userId ?? '').trim()
     if (!userId || userId.length > 128 || /[\s:]/.test(userId)) {
       reply.code(400).send({ error: 'userId inválido' })

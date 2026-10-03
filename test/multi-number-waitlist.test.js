@@ -132,5 +132,9 @@ test('tela WhatsApp: cartão da lista de espera está no retorno de quem está c
   assert.ok(inicio > 0, 'retorno antecipado de conectada não encontrado')
   const blocoConectada = tela.slice(inicio, tela.indexOf('\n  }\n', inicio))
   assert.match(blocoConectada, /<WhatsAppConnectedOverview/)
-  assert.match(blocoConectada, /<MultiNumberWaitlistCard \/>/)
+  assert.match(blocoConectada, /<MultiNumberSection \/>/)
+  // A seção mostra a reserva para quem tem acesso e a lista de espera para os demais.
+  const secao = readFileSync(new URL('../dashboard/components/MultiNumberSection.js', import.meta.url), 'utf8')
+  assert.match(secao, /reserve\?\.access\?\.allowed\) return <ReserveNumberCard/)
+  assert.match(secao, /return <MultiNumberWaitlistCard \/>/)
 })

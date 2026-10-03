@@ -18,6 +18,7 @@
 
 import { createHash } from 'node:crypto'
 import { getDefaultAwinClient } from '../integrations/awin/client.js'
+import { AwinAuthError, AwinHttpError, AwinRateLimitError } from '../integrations/awin/errors.js'
 import {
   buildAwinDeepLink,
   cleanDestinationUrl,
@@ -27,9 +28,16 @@ import {
 } from '../integrations/awin/storeMatcher.js'
 
 export const AWIN_NOT_JOINED_ERROR = 'awin_store_not_joined'
-const SHORT_RESOLVE_TIMEOUT_MS = 5_000
+// Tempos curtos de propósito (R2, revisão 2026-10-03): a mensagem do
+// espelhamento tem 25 s na fila (incomingQueue) e a Awin é só UMA das lojas
+// dela. Awin lenta = sai o link longo, nunca a oferta some por tempo.
+const SHORT_RESOLVE_TIMEOUT_MS = 3_000
 const SHORT_RESOLVE_MAX_HOPS = 4
-const GENERATE_TIMEOUT_MS = 8_000
+const GENERATE_TIMEOUT_MS = 4_000
+// Teto de tempo da Awin por MENSAGEM (vários links Awin na mesma oferta são
+// convertidos um de cada vez). Passou do teto → link longo, sem chamada.
+export const AWIN_MESSAGE_BUDGET_MS = 10_000
+const MIN_CALL_MS = 500
 // Produto que ficou só com o link longo (cota do dia no fim) tenta o curto de
 // novo depois disso.
 export const AWIN_SHORT_RETRY_MS = 24 * 60 * 60_000
@@ -48,11 +56,15 @@ export function awinDestinationKey(destinationUrl) {
 // tidd.ly → próximo endereço, sem seguir para fora da Awin (o destino final só
 // é LIDO no Location, nunca buscado — sem clique contado para ninguém).
 export async function resolveAwinShortUrl(url, { fetchFn = globalThis.fetch, timeoutMs = SHORT_RESOLVE_TIMEOUT_MS } = {}) {
+  // O mesmo teto vale para TODOS os saltos juntos, não para cada um.
+  const deadline = Date.now() + timeoutMs
   let current = url
   for (let hop = 0; hop < SHORT_RESOLVE_MAX_HOPS; hop++) {
     if (!isAwinShortUrl(current)) return current
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) return null
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const timer = setTimeout(() => controller.abort(), remaining)
     let response
     try {
       response = await fetchFn(current, { method: 'GET', redirect: 'manual', signal: controller.signal })
@@ -61,6 +73,9 @@ export async function resolveAwinShortUrl(url, { fetchFn = globalThis.fetch, tim
     } finally {
       clearTimeout(timer)
     }
+    // Só o Location interessa: o corpo é descartado para a conexão não ficar
+    // presa esperando alguém ler (R3).
+    try { await response?.body?.cancel?.() } catch { /* já fechado */ }
     const location = response?.headers?.get?.('location')
     if (!location || response.status < 300 || response.status >= 400) return null
     try {
@@ -73,19 +88,60 @@ export async function resolveAwinShortUrl(url, { fetchFn = globalThis.fetch, tim
 }
 
 // Link curto não muda de destino: guarda o resultado para o robô não abrir o
-// mesmo tidd.ly duas vezes (antes do sanitizador e na conversão). Teto de
-// entradas fixo — memória: < 1 MB.
+// mesmo tidd.ly duas vezes (antes do sanitizador e na conversão). Falha também
+// fica guardada, por pouco tempo (R2): o mesmo tidd.ly que não abriu não
+// gasta outros 3 s na mesma mensagem nem nas cópias dela. Teto de entradas
+// fixo — memória: < 1 MB.
 const SHORT_CACHE_MAX = 2_000
+export const AWIN_SHORT_FAIL_TTL_MS = 5 * 60_000
 const shortCache = new Map()
 
 export async function resolveAwinShortUrlCached(url, options = {}) {
-  if (shortCache.has(url)) return shortCache.get(url)
+  const now = options.now ? options.now() : Date.now()
+  const hit = shortCache.get(url)
+  if (hit && (hit.target || now - hit.at < AWIN_SHORT_FAIL_TTL_MS)) return hit.target
   const target = await resolveAwinShortUrl(url, options)
-  if (target) {
-    if (shortCache.size >= SHORT_CACHE_MAX) shortCache.delete(shortCache.keys().next().value)
-    shortCache.set(url, target)
-  }
+  if (shortCache.has(url)) shortCache.delete(url)
+  else if (shortCache.size >= SHORT_CACHE_MAX) shortCache.delete(shortCache.keys().next().value)
+  shortCache.set(url, { target: target || null, at: now })
   return target
+}
+
+// Disjuntor por conta (R2/R7): Awin fora do ar ou lenta → 3 falhas seguidas
+// abrem o disjuntor por 5 min, e nesse tempo sai o link longo SEM chamada (nem
+// espera). Código de acesso recusado (401/403) abre por 30 min. Falta de vaga
+// no limite por minuto e recusa de um link só (4xx) não contam. Memória: 1
+// entrada pequena por conta Awin.
+export const AWIN_BREAKER_FAILURES = 3
+export const AWIN_BREAKER_OPEN_MS = 5 * 60_000
+export const AWIN_BREAKER_AUTH_OPEN_MS = 30 * 60_000
+const breakers = new Map()
+
+export function awinBreakerIsOpen(accountId, now = Date.now()) {
+  const state = breakers.get(accountId)
+  return Boolean(state?.openUntil && now < state.openUntil)
+}
+
+function recordAwinResult(accountId, error, now) {
+  if (!error) { breakers.delete(accountId); return }
+  if (error instanceof AwinRateLimitError) return
+  // 4xx de UM link (destino que a loja recusa) não diz nada da Awin.
+  if (error instanceof AwinHttpError && Number(error.status) < 500) return
+  const state = breakers.get(accountId) ?? { failures: 0, openUntil: 0 }
+  if (error instanceof AwinAuthError) {
+    state.failures = AWIN_BREAKER_FAILURES
+    state.openUntil = now + AWIN_BREAKER_AUTH_OPEN_MS
+  } else {
+    state.failures++
+    if (state.failures >= AWIN_BREAKER_FAILURES) state.openUntil = now + AWIN_BREAKER_OPEN_MS
+  }
+  breakers.set(accountId, state)
+}
+
+/** Só para testes. */
+export function resetAwinRuntimeState() {
+  breakers.clear()
+  shortCache.clear()
 }
 
 /**
@@ -105,10 +161,10 @@ export async function awinStorePageUrl(url, { resolveShortUrl = resolveAwinShort
 }
 
 // De onde o link aponta e (se já for da Awin) de quem ele é.
-async function readLink(url, deps) {
+async function readLink(url, deps, timeoutMs) {
   let target = url
   if (isAwinShortUrl(url)) {
-    target = await (deps.resolveShortUrl ?? resolveAwinShortUrlCached)(url)
+    target = await (deps.resolveShortUrl ?? resolveAwinShortUrlCached)(url, { timeoutMs })
     if (!target) throw notConvertible('Não foi possível abrir o link curto da Awin.', 'short_unresolved')
   }
   const click = parseAwinClickUrl(target)
@@ -129,12 +185,16 @@ function withTimeout(promise, ms) {
  * @returns {Promise<{ url: string, awin: { own: boolean, short: boolean, cached: boolean,
  *   advertiserId: number, storeName: string, destinationUrl: string } }>}
  */
-export async function convert(url, creds, _options = {}) {
+export async function convert(url, creds, options = {}) {
   const matcher = creds?.matcher
   const accounts = creds?.accountsById
   if (!matcher || !accounts?.size) throw notConvertible('Nenhuma conta Awin cadastrada.', 'no_account')
+  const clock = () => (creds.now ? creds.now() : Date.now())
+  // `deadline` = teto da mensagem inteira (bot-worker). Sem ele, só os tempos
+  // de cada chamada valem (Converter links / Criar oferta).
+  const timeLeft = () => (Number.isFinite(options?.deadline) ? options.deadline - clock() : Infinity)
 
-  const link = await readLink(url, creds)
+  const link = await readLink(url, creds, Math.max(1_000, Math.min(SHORT_RESOLVE_TIMEOUT_MS, timeLeft())))
 
   // Já é link da cliente: não mexe (não gasta chamada nem cota).
   if (link.wasAwin && link.publisherId && creds.publisherIds?.has(link.publisherId)) {
@@ -167,9 +227,15 @@ export async function convert(url, creds, _options = {}) {
   const longUrl = buildAwinDeepLink({ advertiserId: store.advertiserId, publisherId: account.publisherId, destinationUrl })
   let shortUrl = null
   let apiLongUrl = null
-  const now = creds.now ? creds.now() : Date.now()
+  const now = clock()
   const retryShort = cached && !cached.shortUrl && now - new Date(cached.createdAt).getTime() >= AWIN_SHORT_RETRY_MS
   if (!cached || retryShort) {
+    const left = timeLeft()
+    const budget = Math.min(creds.generateTimeoutMs ?? GENERATE_TIMEOUT_MS, left)
+    // Disjuntor aberto ou sem tempo na mensagem: link longo, sem chamada.
+    if (awinBreakerIsOpen(account.id, now) || left < MIN_CALL_MS) {
+      return { url: longUrl, awin: { ...info, short: false, cached: false } }
+    }
     try {
       const client = creds.client ?? getDefaultAwinClient()
       const generated = await withTimeout(client.generateLink(account.token, account.publisherId, {
@@ -177,10 +243,12 @@ export async function convert(url, creds, _options = {}) {
         ...(destinationUrl ? { destinationUrl } : {}),
         shorten: true,
         noWait: true,
-      }), creds.generateTimeoutMs ?? GENERATE_TIMEOUT_MS)
+      }), budget)
       shortUrl = generated?.shortUrl || null
       apiLongUrl = generated?.url || null
-    } catch {
+      recordAwinResult(account.id, null, clock())
+    } catch (error) {
+      recordAwinResult(account.id, error, clock())
       // Plano B: link longo montado aqui (limite por minuto, cota, Awin fora).
       // Não guarda — a próxima vez tenta o curto de novo.
       return { url: longUrl, awin: { ...info, short: false, cached: false } }

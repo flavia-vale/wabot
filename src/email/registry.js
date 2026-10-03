@@ -708,6 +708,31 @@ Como resolver, em menos de dois minutos:
 [[botao:Abrir minhas credenciais|{{link_lojas}}]]`,
   },
   {
+    slug: 'rakuten_dados_recusados',
+    name: 'Rakuten parou de aceitar os dados de acesso',
+    description: 'Sai quando a conta Rakuten da cliente passa a ser recusada (SID, Client ID ou Client Secret trocados ou vencidos). A conversão de links da Rakuten continua por 7 dias com o que já estava guardado; as promoções param de atualizar. Revisão 2026-10-03 (R9).',
+    group: 'saude',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 7,
+    variables: [
+      { name: 'link_credenciais', description: 'Endereço da tela de credenciais', example: 'https://espelhagrupos.com.br/painel/ids-afiliada' },
+    ],
+    title: 'A Rakuten parou de aceitar seus dados',
+    subject: 'A Rakuten parou de aceitar seus dados de acesso',
+    body: `{{saudacao}} A Rakuten parou de aceitar os dados de acesso que você cadastrou. Isso costuma acontecer quando o Client Secret é trocado no portal da Rakuten.
+
+O que muda agora: as promoções da Rakuten param de atualizar. Os links das lojas da Rakuten continuam sendo convertidos por mais 7 dias com o que já estava guardado; depois disso, param.
+
+Como resolver, em menos de dois minutos:
+
+1. Entre no portal de desenvolvedores da Rakuten e copie o Client ID e o Client Secret.
+2. Aqui no nosso painel, abra "Minhas credenciais" e escolha a Rakuten.
+3. Clique em Editar, cole os dois e salve. A gente testa na hora e te diz se ficou certo.
+
+[[botao:Abrir minhas credenciais|{{link_credenciais}}]]`,
+  },
+  {
     slug: 'nao_conseguiu_conectar_sem_vaga',
     name: 'Não conseguiu conectar (servidor estava lotado)',
     description:
@@ -792,6 +817,29 @@ Para resolver agora:
 [[botao:Adicionar um grupo ao link|{{link_painel}}]]
 
 Assim que o grupo novo entrar, o link volta a mandar as pessoas para ele.`,
+  },
+  {
+    slug: 'whatsapp_reserva_assumiu',
+    name: 'Número reserva assumiu os envios',
+    description: 'Sai quando o número principal cai ou é bloqueado e o número reserva passa a enviar (vários números por conta).',
+    group: 'saude',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [{ name: 'link_whatsapp', description: 'Endereço da tela de conexão', example: 'https://espelhagrupos.com.br/painel/whatsapp' }],
+    title: 'Seu número reserva assumiu',
+    subject: 'O número reserva assumiu os envios do robô',
+    body: `{{saudacao}} O WhatsApp principal do robô caiu, e o número reserva assumiu os envios para não deixar seus grupos parados.
+
+Ele só consegue enviar nos grupos em que também está. Confira no painel se algum grupo ficou de fora.
+
+1. Abra o painel na tela do WhatsApp.
+2. Veja quais grupos estão sem o número reserva e adicione ele.
+3. Quando o número principal voltar, use "Voltar para o número 1".
+
+[[botao:Ver meus números|{{link_whatsapp}}]]
+
+Se precisar de ajuda, me chama no {{whatsapp_suporte}}.`,
   },
   {
     slug: 'whatsapp_desconectado',

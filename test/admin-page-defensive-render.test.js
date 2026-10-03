@@ -34,8 +34,6 @@ test('admin page normaliza coleções opcionais antes de renderizar listas vinda
   }
 
   const defensivePatterns = [
-    'asArray(customer.contactReasons).map',
-    'asArray(successQueue?.queue).map',
     'asArray(systemMetrics?.routes).slice',
     'asArray(systemMetrics?.recentErrors).slice',
     'Object.entries(asPlainObject(sessionTelemetry?.summary))',

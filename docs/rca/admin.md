@@ -533,3 +533,20 @@ vence comercial); todo segmento novo em `outreachSegments.js` precisa de
 gravidade em `GRAVIDADE`, senão some da caixa em silêncio (teste trava);
 telefone mascarado por papel (`canSeePhone`); reconectar sempre com confirmação.
 Custo: ~10 agregações em lote por abertura, zero processo novo, zero RAM.
+
+## Bloquear/banir conta com papel alto e dupla confirmação (item 5, 2026-10-03)
+
+**Era:** `POST /users/:id/block|unblock` pedia só `support:write` (o mesmo nível
+de "registrar contato"), o motivo podia ter 1 letra e a ficha nem tinha botão.
+
+**Agora:** regra PURA em `src/domain/admin/blockPolicy.js`
+(`validateBlockRequest`): permissão `admin:write` (só o dono; o papel `admin`
+NÃO tem), motivo ≥ 10 letras (bloquear E desbloquear) e `confirmEmail` igual
+ao e-mail da conta (o servidor confere de novo). Status só `suspended`/`banned`.
+Auditoria (`admin.user.block|unblock`) grava o motivo. Ficha 360
+(`/admin/clientes/[id]`): botão `BloquearConta` só aparece com
+`podeBloquear` (devolvido por `GET /customers/:id/history`), pede
+`window.confirm` + digitar o e-mail. Guarda: `test/admin-bloqueio-seguro.test.js`.
+
+**Não regredir:** não baixar para `support:write`; não aceitar motivo curto nem
+pular o e-mail no servidor "porque a tela já pede". Custo: zero RAM.

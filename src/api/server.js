@@ -61,6 +61,9 @@ import { nodesWithoutHeartbeat } from '../supervisor/preflight.js'
 import { runSessionCapacityAlertSweep } from '../ops/sessionCapacityAlertSweep.js'
 import { runAdminOpsAlertSweep } from '../ops/adminOpsAlertSweep.js'
 import { sendMail, isEmailConfigured } from '../email/mailer.js'
+import * as sessionManager from '../manager.js'
+import { createNumberFailoverSweep } from '../jobs/numberFailover.js'
+import { notifyNumberSwitched } from '../emailTriggers/events.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
 import { emailPrefsRoutes } from './routes/emailPrefs.js'
 import { shopeeSalesRoutes } from './routes/shopeeSales.js'
@@ -387,6 +390,24 @@ async function runAdminOpsAlertTick() {
   } catch (err) {
     app.log.error({ err: err.message }, 'avisos operacionais da dona: passada falhou')
   }
+}
+
+// Vários números por conta (docs/rca/multi-numero.md): troca automática para o
+// número reserva. Passada de 1 min, in-process; MULTI_NUMBER_ENABLED desligado
+// = nem consulta o banco.
+const runNumberFailoverTick = createNumberFailoverSweep({
+  db,
+  manager: sessionManager,
+  logger: app.log,
+  notify: ({ user }) => (isEmailConfigured() ? notifyNumberSwitched({ db, sendMail, user, logger: app.log }) : Promise.resolve()),
+})
+function startNumberFailoverSweep() {
+  const timer = setInterval(() => {
+    runNumberFailoverTick()
+      .then(summary => { if (summary?.switched > 0) app.log.warn({ ...summary }, 'troca automática de número: passada concluída') })
+      .catch(err => app.log.error({ err: err.message }, 'troca automática de número: passada falhou'))
+  }, 60_000)
+  timer.unref?.()
 }
 
 function startSessionCapacityAlertSweep() {
@@ -741,8 +762,18 @@ app.register(leadNurtureRoutes, { prefix: '/api/lead-nurture' })
 app.register(emailPrefsRoutes, { prefix: '/api/emails' })
 app.register(shopeeSalesRoutes, { prefix: '/api/shopee-sales' })
 
-// Liveness: processo está de pé
-app.get('/health', () => ({ ok: true }))
+// Liveness: processo está de pé. Em `remote` informa também o supervisor
+// (`supervisor: { alive, lastHeartbeatAt }`), mas o status HTTP é SEMPRE 200:
+// o smoke test do deploy bate aqui e supervisor fora do ar não pode derrubá-lo.
+// Quem decide 503 é `/ready/bots`. Ver docs/rca/deploy-e-infra.md.
+app.get('/health', async () => {
+  if (SUPERVISOR_MODE !== 'remote') return buildHealthPayload({ mode: SUPERVISOR_MODE })
+  const sinal = await withTimeout(
+    Promise.all([isSupervisorAlive(), getSupervisorHeartbeatAtMs()]).then(([alive, at]) => ({ alive, at })),
+    1500,
+  ).catch(() => null)
+  return buildHealthPayload({ mode: SUPERVISOR_MODE, supervisorAlive: sinal?.alive ?? null, heartbeatAtMs: sinal?.at ?? null })
+})
 
 // Prometheus scrape endpoint. Fora do rate limit global (allowlist), então
 // precisa de proteção própria: METRICS_TOKEN exige Authorization: Bearer;
@@ -954,6 +985,7 @@ startActivityCacheCleanup()
 startLeadNurtureSweep()
 startCredentialExpirySweep()
 startSessionCapacityAlertSweep()
+startNumberFailoverSweep()
 startNodeRoutingGuard()
 startDualOwnerSweep()
 startEmailQueueJob()

@@ -211,6 +211,15 @@ export const api = {
   multiNumberWaitlist: () => apiFetch('/api/multi-number/waitlist'),
   multiNumberWaitlistJoin: (body) => apiFetch('/api/multi-number/waitlist', { method: 'POST', body: JSON.stringify(body) }),
   multiNumberWaitlistLeave: () => apiFetch('/api/multi-number/waitlist', { method: 'DELETE' }),
+  reserveState: () => apiFetch('/api/multi-number/reserve'),
+  reserveStart: () => apiFetch('/api/multi-number/reserve/start', { method: 'POST' }),
+  reserveStop: () => apiFetch('/api/multi-number/reserve/stop', { method: 'POST' }),
+  reserveQr: () => apiFetch('/api/multi-number/reserve/qr'),
+  reservePairingCode: (phone) => apiFetch('/api/multi-number/reserve/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
+  reserveMissingGroups: () => apiFetch('/api/multi-number/reserve/missing-groups'),
+  reserveSwitch: () => apiFetch('/api/multi-number/reserve/switch', { method: 'POST' }),
+  extraNumberSubscribe: (payerEmail) => apiFetch('/api/payments/extra-number/subscribe', { method: 'POST', body: JSON.stringify(payerEmail ? { payerEmail } : {}) }),
+  extraNumberCancel: () => apiFetch('/api/payments/extra-number/cancel', { method: 'POST' }),
   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
   sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),
   sessionQRLatest: () => apiFetch('/api/session/qr-latest'),
@@ -352,6 +361,8 @@ export const api = {
   },
   adminOnlineUser: (id) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}`),
   adminOnlineReconnect: (id) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}/reconnect`, { method: 'POST' }),
+  adminFilas: () => apiFetch('/api/admin/filas'),
+  adminFilasReprocessar: (id, reason) => apiFetch(`/api/admin/filas/${encodeURIComponent(id)}/reprocessar`, { method: 'POST', body: JSON.stringify({ reason }) }),
   adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`),
   adminCustomers: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
@@ -436,6 +447,11 @@ export const api = {
   },
   adminUpdateAccess: (id, data) =>
     apiFetch(`/api/admin/users/${id}/access`, { method: 'POST', body: JSON.stringify(data) }),
+
+  adminUserBlock: (id, data) =>
+    apiFetch(`/api/admin/users/${id}/block`, { method: 'POST', body: JSON.stringify(data) }),
+  adminUserUnblock: (id, data) =>
+    apiFetch(`/api/admin/users/${id}/unblock`, { method: 'POST', body: JSON.stringify(data) }),
 
   adminAutomationQuota: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()

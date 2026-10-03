@@ -11,6 +11,7 @@ import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
 import { PayingTag } from '@/components/PayingTag'
+import { FILTROS_MOTIVO, filtrarPorMotivo, contarPorFiltro } from '@/lib/admin/inboxFiltros'
 
 const s = {
   page: { maxWidth: 960, margin: '0 auto', padding: 16, color: 'var(--ink)' },
@@ -34,6 +35,12 @@ const s = {
   }),
   chips: { display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   chip: (cor) => ({ borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 700, background: cor, color: 'var(--ink)' }),
+  filtro: (ativo) => ({
+    border: `1px solid ${ativo ? 'var(--accent-strong)' : 'var(--line-strong)'}`,
+    background: ativo ? 'var(--accent-strong)' : 'var(--surface)',
+    color: ativo ? 'var(--surface)' : 'var(--ink)',
+    borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+  }),
   vazio: { fontSize: 13, color: 'var(--ink-soft)', padding: '8px 0' },
   tempo: { fontSize: 12, color: 'var(--danger)', fontWeight: 700 },
 }
@@ -60,7 +67,7 @@ function Linha({ item, onReconectar, ocupado }) {
       <div style={s.who}>
         <div style={s.nome}>
           <span>{item.nome || item.email || 'Cliente'}</span>
-          <PayingTag payingStatus={item.payingStatus} />
+          <PayingTag status={item.payingStatus} />
           {item.detalheMs ? <span style={s.tempo}>há {horas(item.detalheMs)}</span> : null}
         </div>
         {item.nome && <div style={s.email}>{item.email}</div>}
@@ -88,6 +95,9 @@ export default function HojePage() {
   const [carregando, setCarregando] = useState(true)
   const [aviso, setAviso] = useState('')
   const [reconectando, setReconectando] = useState(null)
+  // Filtro por motivo (?motivo=robo|cega|cobranca|vencendo|sem-envio). Lido da URL
+  // só depois do primeiro await, pela mesma regra do set-state-in-effect.
+  const [motivo, setMotivo] = useState('')
 
   // Nenhum setState antes do primeiro await: a regra react-hooks/set-state-in-effect
   // do lint do dashboard barra setState síncrono dentro de effect (CI vermelho em 2026-10-02).
@@ -96,6 +106,7 @@ export default function HojePage() {
       const inbox = await api.adminInbox()
       setErro('')
       setData(inbox)
+      setMotivo(atual => atual || new URLSearchParams(window.location.search).get('motivo') || '')
     } catch (err) {
       setErro(err.message || 'Não consegui carregar a caixa.')
     } finally {
@@ -121,9 +132,21 @@ export default function HojePage() {
     }
   }
 
-  const agora = data?.agora ?? []
-  const semana = data?.semana ?? []
-  const pagantesAgora = agora.filter(i => i.payingStatus === 'pagante').length
+  function escolherMotivo(chave) {
+    const proximo = chave === motivo ? '' : chave
+    setMotivo(proximo)
+    const url = new URL(window.location.href)
+    if (proximo) url.searchParams.set('motivo', proximo)
+    else url.searchParams.delete('motivo')
+    window.history.replaceState(null, '', url)
+  }
+
+  const todosAgora = data?.agora ?? []
+  const todosSemana = data?.semana ?? []
+  const agora = filtrarPorMotivo(todosAgora, motivo)
+  const semana = filtrarPorMotivo(todosSemana, motivo)
+  const contagem = contarPorFiltro([...todosAgora, ...todosSemana])
+  const pagantesAgora = todosAgora.filter(i => i.payingStatus === 'pagante').length
 
   return (
     <main style={s.page}>
@@ -147,7 +170,16 @@ export default function HojePage() {
           <div style={s.chips}>
             <span style={s.chip('var(--accent-3)')}>{pagantesAgora} pagante(s) precisando de ação agora</span>
             <span style={s.chip('var(--bg-soft)')}>{semana.length} conversa(s) para esta semana</span>
-            {data.servidor?.enviosPresos > 0 && <span style={s.chip('var(--accent-2)')}>{data.servidor.enviosPresos} envio(s) presos há mais de {data.servidor.presosDesdeMin} min</span>}
+            {data.servidor?.enviosPresos > 0 && <Link href="/admin/operacao#filas" style={{ ...s.chip('var(--accent-2)'), textDecoration: 'none' }}>{data.servidor.enviosPresos} envio(s) presos há mais de {data.servidor.presosDesdeMin} min — ver Filas</Link>}
+          </div>
+
+          <div style={s.chips} role="group" aria-label="Filtrar por motivo">
+            {FILTROS_MOTIVO.map(f => (
+              <button key={f.chave} type="button" aria-pressed={motivo === f.chave} onClick={() => escolherMotivo(f.chave)} style={s.filtro(motivo === f.chave)}>
+                {f.rotulo} ({contagem[f.chave] ?? 0})
+              </button>
+            ))}
+            {motivo && <button type="button" onClick={() => escolherMotivo(motivo)} style={s.btn('normal')}>Limpar filtro</button>}
           </div>
 
           <section style={s.section}>

@@ -8,21 +8,21 @@ const painel = readFileSync(new URL('../dashboard/app/admin/page.js', import.met
 // O card do robô do Telegram foi para a página Operação (G2 da auditoria).
 const operacao = readFileSync(new URL('../dashboard/app/admin/operacao/page.js', import.meta.url), 'utf8')
 
-test('a fila proativa não volta para a aba Início', () => {
-  // Pedido de 2026-09-05: a aba Início é "o que precisa de decisão agora"; a
-  // fila é trabalho de atendimento e tem aba própria.
-  assert.doesNotMatch(painel, /tab === 'inicio' \|\| tab === 'sucesso'\) && success/)
-  assert.match(painel, /tab === 'sucesso' && success/)
+test('as abas Online e Sucesso do Cliente não voltam para o Início', () => {
+  // G2 (corte final do Início): a fila de atendimento virou a caixa /admin/hoje
+  // e o detalhe de conexão virou a seção Robô da ficha do cliente.
+  assert.doesNotMatch(painel, /\['online', 'Online'\]/)
+  assert.doesNotMatch(painel, /\['sucesso', 'Sucesso do Cliente'\]/)
+  assert.doesNotMatch(painel, /tab === 'sucesso'/)
+  assert.doesNotMatch(painel, /api\.adminSuccessOverview\(|api\.adminSuccessQueue\(|api\.adminWaDisconnectedUsers\(/)
+  assert.doesNotMatch(painel, /function (OnlineDetailDrawer|WhatsAppDisconnectedTable|DetailPanel|ManualAccessEditor)\(/)
 })
 
-test('todo card do semáforo tem drill-down de pessoas', () => {
-  const cenarios = ['parado', 'blind', 'quedas', 'manual', 'desync']
-  for (const cenario of cenarios) {
-    assert.match(painel, new RegExp(`openScenario\\('${cenario}'\\)`), `cenário sem drill-down: ${cenario}`)
-  }
-  // Os dois cards de gente do comando também abrem a lista de quem são.
-  assert.match(painel, /openWaStatus\('connected'\)/)
-  assert.match(painel, /openErrorsDrilldown\(\)/)
+test('os cards do semáforo que têm lista levam à caixa Hoje; o resto não finge ser clicável', () => {
+  assert.match(painel, /router\.push\('\/admin\/hoje\?motivo=robo'\)/)
+  assert.match(painel, /router\.push\('\/admin\/hoje\?motivo=cega'\)/)
+  assert.match(painel, /router\.push\('\/admin\/erros'\)/)
+  assert.doesNotMatch(painel, /openScenario|openWaStatus|openErrorsDrilldown/)
 })
 
 test('os cards técnicos abrem o detalhe do que está pendente', () => {
@@ -52,14 +52,19 @@ test('a explicação responde às três perguntas, em linguagem leiga', () => {
   }
 })
 
-test('a tabela de desconectados mostra POR QUE caiu, não só o código', () => {
-  assert.match(painel, /Por que caiu/)
-  assert.match(painel, /disconnectReason\?\.label/)
+test('a ficha do cliente mostra POR QUE caiu, não só o código', () => {
+  const ficha = readFileSync(new URL('../dashboard/app/admin/clientes/[id]/page.js', import.meta.url), 'utf8')
+  assert.match(ficha, /Por que caiu/)
+  assert.match(ficha, /detail\?\.disconnectReason/)
+  const rota = readFileSync(new URL('../src/api/routes/admin.js', import.meta.url), 'utf8')
+  const detalhe = rota.slice(rota.indexOf('async function buildAdminOnlineUserDetail'), rota.indexOf('async function isRunningSafe'))
+  assert.match(detalhe, /disconnectReason/)
+  assert.match(detalhe, /canAdminRetry: Boolean\(ownership\.canAdminRetry\)/)
 })
 
 test('a tag de pagante aparece nas tabelas de cliente do painel', () => {
   const ocorrencias = painel.match(/<PayingTag/g) ?? []
-  assert.ok(ocorrencias.length >= 5, `esperava a tag em todas as listas de cliente, achei ${ocorrencias.length}`)
+  assert.ok(ocorrencias.length >= 1, `esperava a tag na Gestão de clientes, achei ${ocorrencias.length}`)
 })
 
 // --- Funil em pipeline (2026-09-05) ---

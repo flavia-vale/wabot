@@ -4,7 +4,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRakutenClient, credentialFingerprint } from '../src/integrations/rakuten/client.js'
-import { RakutenAuthError, RakutenRateLimitError } from '../src/integrations/rakuten/errors.js'
+import { RakutenAccessDeniedError, RakutenAuthError, RakutenRateLimitError } from '../src/integrations/rakuten/errors.js'
 import { extractAdvertiser, extractCouponPage, parseRakutenDate, rakutenOfferId, translateCoupon } from '../src/integrations/rakuten/translate.js'
 import { testRakutenCredentials, RAKUTEN_MESSAGES } from '../src/integrations/rakuten/accountService.js'
 
@@ -100,7 +100,7 @@ test('token: Basic do par no cabeçalho, SID no corpo; reaproveita o token até 
   assert.equal(calls.filter((c) => c.url.endsWith('/token')).length, 2, 'token vencido é renovado')
 })
 
-test('token recusado no meio → renova uma vez e repete; recusado de novo → erro de acesso', async () => {
+test('token recusado no meio → renova uma vez e repete; recusado de novo → acesso negado (passageiro)', async () => {
   let dataCalls = 0
   const client = createRakutenClient({
     limiter: noLimit,
@@ -115,7 +115,9 @@ test('token recusado no meio → renova uma vez e repete; recusado de novo → e
   assert.equal(dataCalls, 2)
 
   const always401 = createRakutenClient({ limiter: noLimit, fetchFn: async (url) => (url.endsWith('/token') ? response(200, { access_token: 'x', expires_in: 3600 }) : response(401, {})) })
-  await assert.rejects(always401.listCoupons(CREDS), RakutenAuthError)
+  // Revisão 2026-10-03 (R2): recusa em pedido de DADOS é passageira — quem
+  // decide desligar a conta é a sync, depois de 3 seguidas.
+  await assert.rejects(always401.listCoupons(CREDS), RakutenAccessDeniedError)
 })
 
 test('dados recusados na Rakuten (400/401 invalid_client) → erro de acesso sem segredo na mensagem; 429 → pausa', async () => {

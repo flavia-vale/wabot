@@ -18,7 +18,7 @@ import { buildJustConnectedNextStep } from '../../../../src/credentialBlockAlert
 import { VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
 import { SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
 import { WhatsAppConnectedOverview } from '@/components/WhatsAppConnectedOverview'
-import { MultiNumberWaitlistCard } from '@/components/MultiNumberWaitlistCard'
+import { MultiNumberSection } from '@/components/MultiNumberSection'
 import {
   QR_POLL_INTERVAL_MS,
   INACTIVITY_RESET_SECONDS,
@@ -687,7 +687,7 @@ export default function WhatsAppPage() {
             que ficar AQUI: conectada, a tela sai por este retorno e nunca
             chega ao JSX de baixo. */}
         <div style={{ marginTop: 16 }}>
-          <MultiNumberWaitlistCard />
+          <MultiNumberSection />
         </div>
       </>
     )

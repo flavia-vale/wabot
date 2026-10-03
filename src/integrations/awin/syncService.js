@@ -107,6 +107,13 @@ async function syncProgrammes({ db, client, account, token, runId }) {
   const body = await client.listProgrammes(token, account.publisherId, { relationship: 'joined', countryCode: 'BR' })
   const stores = extractProgrammes(body)
   if (!stores) return null
+  // Lista vazia com lojas guardadas = resposta estranha: apagar tudo desligaria
+  // a conversão (todo link da Awin seria apagado das ofertas). Mantém as
+  // antigas; loja que saiu de verdade some quando a lista voltar com itens.
+  if (!stores.length) {
+    const known = await db.awinProgramme.count({ where: { accountId: account.id } })
+    if (known > 0) return known
+  }
   for (const store of stores) {
     const data = { name: store.name, displayUrl: store.displayUrl, logoUrl: store.logoUrl, domainsJson: JSON.stringify(store.domains), lastSeenRunId: runId }
     await db.awinProgramme.upsert({
@@ -141,6 +148,8 @@ export async function syncAwinAccount(accountId, deps = {}) {
     const startedAt = now()
     const run = await db.awinSyncRun.create({ data: { userId: account.userId, accountId: account.id, trigger, status: 'running', startedAt } })
     const counters = { pages: 0, inserted: 0, updated: 0, skipped: 0, expired: 0 }
+    // Quantas estavam valendo ANTES de ler: base da trava de leitura vazia (R1).
+    const activeBefore = await db.awinPromotion.count({ where: { accountId: account.id, status: 'active' } })
     const skipReasons = new Map()
     let complete = true
     let failure = null
@@ -173,7 +182,15 @@ export async function syncAwinAccount(accountId, deps = {}) {
       data: { status: 'expired', expiredAt: finishedAt },
     })
     counters.expired += expiredByDate.count
-    if (complete) {
+    // Trava R1 (revisão 2026-10-03): a Awin devolver lista vazia (ou bem menor)
+    // por instabilidade conta como "leitura completa" — sem a trava, TODAS as
+    // promoções venciam de uma vez e voltavam como novas na leitura seguinte
+    // (reenvio em massa). Sumiço de mais da metade numa leitura só não vence
+    // ninguém por ausência; a data de fim continua valendo acima.
+    const seenThisRun = counters.inserted + counters.updated
+    const absenceTrusted = seenThisRun > 0 && seenThisRun * 2 >= activeBefore
+    const absenceSkipped = complete && !absenceTrusted ? activeBefore : 0
+    if (complete && absenceTrusted) {
       const expiredByAbsence = await db.awinPromotion.updateMany({
         where: { accountId: account.id, status: 'active', OR: [{ lastSeenRunId: null }, { lastSeenRunId: { not: run.id } }] },
         data: { status: 'expired', expiredAt: finishedAt },
@@ -231,7 +248,7 @@ export async function syncAwinAccount(accountId, deps = {}) {
     })
     if (old.length) await db.awinSyncRun.deleteMany({ where: { id: { in: old.map((row) => row.id) } } })
 
-    return { runId: run.id, status: runStatus, ...counters, programmes, errors: errors.slice(0, MAX_ERRORS) }
+    return { runId: run.id, status: runStatus, ...counters, absenceSkipped, programmes, errors: errors.slice(0, MAX_ERRORS) }
   } finally {
     runningAccounts.delete(accountId)
   }

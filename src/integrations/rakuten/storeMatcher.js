@@ -16,6 +16,7 @@
 // Link sem `murl` (fs-bin/click de outra pessoa) = destino desconhecido →
 // não serve → o sanitizador apaga o link e o resto da oferta segue.
 
+import { isOfferUrl } from '../../detector.js'
 import { cleanDestinationUrl as cleanAwinDestinationUrl, normalizeStoreDomain as normalizeAwinStoreDomain } from '../awin/storeMatcher.js'
 
 export const RAKUTEN_CLICK_HOSTS = ['linksynergy.com']
@@ -167,6 +168,26 @@ export function createRakutenStoreMatcher(stores = [], { linkIds = [] } = {}) {
     return byAdvertiser.get(String(advertiserId ?? '')) || null
   }
 
+  // A página pode ser desta loja? Domínio desconhecido segue pela loja do
+  // `mid` — guardamos só o site principal de cada loja, e a Rakuten confere o
+  // domínio no clique (decisão de 2026-10-01). Só a página de uma loja FIXA
+  // (Shopee, ML, Amazon, Magalu, SHEIN, AliExpress) nunca serve: `mid` da
+  // Netshoes com `murl` da Amazon virava um link nosso quebrado e o link da
+  // Amazon, que converteríamos, se perdia (revisão 2026-10-03, R6).
+  function destinationFitsStore(store, url) {
+    if (!store) return false
+    return !isOfferUrl(String(url ?? ''))
+  }
+
+  // Loja de um link da Rakuten (ou página): pela página primeiro; pelo `mid`
+  // só quando a página é dessa mesma loja.
+  function storeForClick({ advertiserId, destinationUrl }) {
+    const byPage = destinationUrl ? storeForUrl(destinationUrl) : null
+    if (byPage) return byPage
+    const byMid = advertiserId ? storeForAdvertiser(advertiserId) : null
+    return byMid && (!destinationUrl || destinationFitsStore(byMid, destinationUrl)) ? byMid : null
+  }
+
   // Link da Rakuten: dá para saber SEM rede se serve. Já é dela → fica. De
   // outra pessoa → só com a página de destino (`murl`) E de loja aprovada.
   function clickLinkIsUsable(url) {
@@ -174,7 +195,7 @@ export function createRakutenStoreMatcher(stores = [], { linkIds = [] } = {}) {
     if (!click) return false
     if (click.linkId && ownLinkIds.has(click.linkId)) return true
     if (!click.destinationUrl) return false
-    return Boolean((click.advertiserId && byAdvertiser.has(click.advertiserId)) || storeForUrl(click.destinationUrl))
+    return Boolean(storeForClick(click))
   }
 
   return {
@@ -182,6 +203,7 @@ export function createRakutenStoreMatcher(stores = [], { linkIds = [] } = {}) {
     ownLinkIds,
     storeForUrl,
     storeForAdvertiser,
+    storeForClick,
     isRakutenLink: (url) => (isRakutenTrackingUrl(url) ? clickLinkIsUsable(url) : Boolean(storeForUrl(url))),
   }
 }

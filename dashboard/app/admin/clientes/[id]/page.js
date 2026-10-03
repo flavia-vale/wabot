@@ -357,6 +357,290 @@ function UsoTab({ uso, userId, onSaved }) {
   )
 }
 
+function formatRelative(value) {
+  if (!value) return 'sem atividade'
+  const ms = Date.now() - new Date(value).getTime()
+  if (!Number.isFinite(ms)) return 'sem atividade'
+  const minutes = Math.max(0, Math.round(ms / 60000))
+  if (minutes < 1) return 'agora'
+  if (minutes < 60) return `${minutes}min atrás`
+  const hours = Math.round(minutes / 60)
+  if (hours < 48) return `${hours}h atrás`
+  return `${Math.round(hours / 24)}d atrás`
+}
+
+function formatDurationMs(value) {
+  const ms = Math.max(0, Number(value ?? 0))
+  if (!Number.isFinite(ms) || ms <= 0) return '0min'
+  const minutes = Math.max(1, Math.round(ms / 60000))
+  if (minutes < 60) return `${minutes}min`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours < 24) return rest ? `${hours}h ${rest}min` : `${hours}h`
+  const days = Math.floor(hours / 24)
+  const remHours = hours % 24
+  return remHours ? `${days}d ${remHours}h` : `${days}d`
+}
+
+function statusDoRobo(status, lifecycle) {
+  if (status === 'connected') return { label: 'Conectado', cls: 'bg-emerald-100 text-emerald-700' }
+  if (status === 'connecting' || lifecycle === 'reconnecting') return { label: lifecycle === 'reconnecting' ? 'Reconectando' : 'Conectando', cls: 'bg-amber-100 text-amber-800' }
+  return { label: 'Desconectado', cls: 'bg-red-100 text-red-700' }
+}
+
+const TOM_MOTIVO = {
+  red: 'bg-red-100 text-red-800',
+  amber: 'bg-amber-100 text-amber-800',
+  purple: 'bg-purple-100 text-purple-800',
+  sky: 'bg-sky-100 text-sky-800',
+  emerald: 'bg-emerald-100 text-emerald-800',
+  slate: 'bg-slate-100 text-slate-700',
+}
+
+// Seção "Robô" (G2 fecha o corte do Início): o que era o drawer "Drill-down
+// online" e o botão Tentar reconectar das telas Online/Início. Carrega só
+// quando a aba abre (GET /online/:id), para a ficha não pagar essa consulta
+// em quem só quer ver o cadastro.
+function RoboTab({ userId }) {
+  const [result, setResult] = useState(null)
+  const [reconectando, setReconectando] = useState(false)
+  const [aviso, setAviso] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    api.adminOnlineUser(userId)
+      .then(detail => { if (!cancelled) setResult({ id: userId, detail, error: '' }) })
+      .catch(err => { if (!cancelled) setResult({ id: userId, detail: null, error: err?.message || 'Não consegui carregar a conexão.' }) })
+    return () => { cancelled = true }
+  }, [userId])
+
+  async function reconnect(id) {
+    // Ação sobre a conta de uma cliente: nunca sem confirmar (Q4 da auditoria).
+    if (!window.confirm('Subir o robô desta cliente agora? Ela não precisa fazer nada. Se o WhatsApp exigir QR novo, a API recusa e avisa.')) return
+    setReconectando(true)
+    setAviso('')
+    try {
+      const resposta = await api.adminOnlineReconnect(id)
+      setAviso(resposta?.message || 'Robô iniciado.')
+      const detail = await api.adminOnlineUser(id)
+      setResult({ id, detail, error: '' })
+    } catch (err) {
+      setAviso(err?.message || 'Não consegui subir o robô.')
+    } finally {
+      setReconectando(false)
+    }
+  }
+
+  if (!result || result.id !== userId) return <LoadingState />
+  if (result.error) return <Alert type="error" title="Robô" message={result.error} />
+  const detail = result.detail
+  const session = detail?.session
+  const meta = statusDoRobo(session?.status, session?.lifecycle)
+  const cm = detail?.connectionMetrics ?? {}
+  const motivo = detail?.disconnectReason
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <span className={`rounded-full px-3 py-1 text-xs font-black ${meta.cls}`}>{meta.label}</span>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">Sinal: {formatRelative(session?.lastHeartbeatAt)}</span>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">Código: {session?.lastDisconnectCode || '—'}</span>
+        {detail?.canAdminRetry && (
+          <button
+            type="button"
+            onClick={() => reconnect(userId)}
+            disabled={reconectando}
+            className="ml-auto rounded-lg bg-sky-600 px-3 py-2 text-xs font-black text-white hover:bg-sky-700 disabled:opacity-60"
+          >
+            {reconectando ? 'Subindo…' : 'Tentar reconectar'}
+          </button>
+        )}
+      </div>
+      {aviso && <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">{aviso}</p>}
+
+      {motivo && meta.label !== 'Conectado' && (
+        <div>
+          <h3 className="mb-2 text-sm font-bold text-slate-800">Por que caiu</h3>
+          <span className={`inline-block rounded-full px-3 py-1 text-xs font-black ${TOM_MOTIVO[motivo.tone] || TOM_MOTIVO.slate}`}>{motivo.label}</span>
+          <p className="mt-1 text-xs text-slate-500">{motivo.detail}</p>
+        </div>
+      )}
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        <Card label="Quedas 24h" value={formatNumber(cm.disconnects24h)} />
+        <Card label="Reconexões manuais 24h" value={formatNumber(cm.manualReconnects24h)} helper="start/pareamento pedido pela cliente" />
+        <Card label="Offline auto 24h" value={formatDurationMs((cm.automaticOfflineMs24h || 0) + (cm.ongoingOfflineMs24h || 0))} helper="tempo até recuperar sozinho" />
+        <Card label="Quedas 7d" value={formatNumber(cm.disconnects7d)} />
+        <Card label="Reconexões manuais 7d" value={formatNumber(cm.manualReconnects7d)} helper="trabalho real da cliente" />
+        <Card label="Parado até a cliente agir 7d" value={formatDurationMs(cm.manualOfflineMs7d)} helper={`${formatNumber(cm.manualRecoveries7d)} episódio(s) que só voltaram com ação dela`} />
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Linha do tempo das quedas (7 dias)</h3>
+        <p className="mt-1 text-[11px] text-slate-500">Cada linha é um episódio fora do ar: quando começou, quanto durou e se o robô voltou sozinho ou só voltou depois que o cliente agiu.</p>
+        <div className="mt-3 divide-y divide-slate-100">
+          {asArray(detail?.offlineEpisodes).map((ep) => {
+            const cls = ep.open ? 'bg-amber-50 text-amber-800' : ep.endedBy === 'sozinho' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+            const rotulo = ep.open ? 'em aberto' : ep.endedBy === 'sozinho' ? 'voltou sozinho' : ep.endedBy === 'cliente' ? 'o cliente teve que agir' : 'interrompido'
+            return (
+              <div key={`${ep.startedAt}-${ep.endedAt || 'aberto'}`} className="grid grid-cols-[1fr_auto] items-center gap-3 py-2 text-sm">
+                <div>
+                  <p className="font-bold text-slate-900">{formatDateTime(ep.startedAt)} → {ep.endedAt ? formatDateTime(ep.endedAt) : 'agora'}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {formatDurationMs(ep.durationMs)} fora
+                    {ep.code ? ` · código ${ep.code}` : ''}
+                    {ep.stuckMsg ? ' · mensagem travada' : ''}
+                    {ep.terminal ? ' · sessão deslogada' : ''}
+                  </p>
+                </div>
+                <span className={`whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-black ${cls}`}>{rotulo}</span>
+              </div>
+            )
+          })}
+          {!asArray(detail?.offlineEpisodes).length && <p className="py-3 text-sm text-slate-500">Nenhuma queda registrada nos últimos 7 dias.</p>}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Erros agrupados por tipo (7d)</h3>
+        <div className="mt-3 divide-y divide-slate-100">
+          {asArray(detail?.errorsByType).map((item) => (
+            <div key={item.errorMsg} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-sm">
+              <div>
+                <p className="break-words text-xs font-bold text-slate-900">{item.errorMsg}</p>
+                <p className="mt-1 text-xs text-slate-500">{item.category || 'UNKNOWN'} · último {formatDateTime(item.lastSeenAt)}</p>
+              </div>
+              <span className="self-start rounded-full bg-red-50 px-3 py-1 text-xs font-black text-red-700">{formatNumber(item.count)}x</span>
+            </div>
+          ))}
+          {!asArray(detail?.errorsByType).length && <p className="py-4 text-sm text-slate-500">Sem erros recentes nos últimos 7 dias.</p>}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Linha do tempo de conexão</h3>
+        <div className="mt-3 space-y-2">
+          <ExpandableList
+            items={detail?.recentEvents}
+            emptyLabel="Sem eventos de conexão nos últimos 7 dias."
+            render={(event) => (
+              <div key={event.id} className="rounded-xl bg-slate-50 p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-black text-slate-900">{event.type}</p>
+                  <span className="text-xs font-bold text-slate-500">{formatDateTime(event.occurredAt)}</span>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">Código {event.code || '—'} · lifecycle {event.lifecycle || '—'}</p>
+              </div>
+            )}
+          />
+        </div>
+      </section>
+    </div>
+  )
+}
+
+// Ajuste manual de plano/acesso (era o editor do "Drill-down" do Início).
+function AjusteDeAcesso({ userId, planoAtual, onApplied }) {
+  const [form, setForm] = useState({ plan: planoAtual ?? '', days: '', reason: '', partnerCode: '' })
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!window.confirm('Alterar o plano/acesso desta cliente agora? A mudança vale na hora.')) return
+    setSaving(true)
+    setMessage('')
+    try {
+      await api.adminUpdateAccess(userId, {
+        plan: form.plan || undefined,
+        days: form.days === '' ? undefined : Number(form.days),
+        reason: form.reason,
+        partnerCode: form.partnerCode.trim() || undefined,
+      })
+      setMessage('Acesso atualizado com sucesso.')
+      setForm((current) => ({ ...current, days: '', reason: '', partnerCode: '' }))
+      await onApplied?.()
+    } catch (err) {
+      setMessage(err.message || 'Falha ao atualizar acesso.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-700">Ajuste manual de plano/acesso</p>
+      <div className="mt-2 grid gap-2 md:grid-cols-3">
+        <select value={form.plan} onChange={(e) => setForm((f) => ({ ...f, plan: e.target.value }))} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs">
+          <option value="">Sem alterar plano</option>
+          <option value="trial">trial</option>
+          <option value="basic">basic</option>
+          <option value="pro">pro</option>
+          <option value="premium">premium (Instagram Stories)</option>
+        </select>
+        <input value={form.days} onChange={(e) => setForm((f) => ({ ...f, days: e.target.value }))} type="number" min="-365" max="365" placeholder="Dias (+/-)" className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs" />
+        <input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Motivo (obrigatório)" className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs" required minLength={5} />
+      </div>
+      <div className="mt-2">
+        <input value={form.partnerCode} onChange={(e) => setForm((f) => ({ ...f, partnerCode: e.target.value }))} placeholder="Código do parceiro influenciador (opcional — só para cortesia de parceria)" className="w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs" maxLength={32} />
+        <p className="mt-1 text-[11px] text-slate-500">Preenchendo aqui, o motivo é gravado como <code>parceiro-influenciador:&lt;código&gt;</code>, o que permite auditar depois quantas cortesias de parceria estão de pé. Cada cortesia ativa é uma sessão WhatsApp a mais no servidor.</p>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <p className="text-[11px] text-slate-500">Altera plano e/ou expiração imediatamente.</p>
+        <button disabled={saving} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Aplicando...' : 'Aplicar acesso'}</button>
+      </div>
+      {message && <p className="mt-2 text-xs text-slate-700">{message}</p>}
+    </form>
+  )
+}
+
+// Registrar contato (era o botão da fila de Sucesso do Cliente e da tabela de
+// WhatsApp desconectado). Fica na ficha porque o contato nasce olhando UMA cliente.
+function RegistrarContato({ userId, onSaved }) {
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!notes.trim()) return
+    setSaving(true)
+    setMessage('')
+    try {
+      await api.adminCreateContactLog(userId, { channel: 'whatsapp', reason: 'support', outcome: 'contacted', notes: notes.trim() })
+      setNotes('')
+      setMessage('Contato registrado.')
+      await onSaved?.()
+    } catch (err) {
+      setMessage(err.message || 'Falha ao registrar contato.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+      <form onSubmit={submit}>
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-700">Registrar contato</p>
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Resumo do que foi conversado" className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs" />
+        <div className="mt-2 flex items-center justify-between gap-2">
+          {message ? <p className="text-xs text-slate-700">{message}</p> : <span />}
+          <button disabled={saving || !notes.trim()} className="rounded-lg bg-sky-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Salvando…' : 'Registrar contato'}</button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function AtendimentoTab({ history, onChanged }) {
+  return (
+    <div className="space-y-5">
+      <RegistrarContato userId={history.id} onSaved={onChanged} />
+      <AjusteDeAcesso key={`${history.id}-${history.financeiro?.plan}`} userId={history.id} planoAtual={history.financeiro?.plan} onApplied={onChanged} />
+    </div>
+  )
+}
+
 const KIND_STYLES = {
   cadastro: ['bg-slate-100 text-slate-700', 'Cadastro'],
   financeiro: ['bg-emerald-100 text-emerald-800', 'Financeiro'],
@@ -392,7 +676,77 @@ const TABS = [
   ['financeiro', 'Financeiro'],
   ['tecnico', 'Técnico'],
   ['uso', 'Uso'],
+  ['robo', 'Robô'],
+  ['atendimento', 'Atendimento'],
 ]
+
+// Bloquear / banir / desbloquear a conta. Ação pesada: só quem o servidor
+// deixa (`podeBloquear`), motivo de 10+ letras e dupla confirmação — o
+// window.confirm e depois digitar o e-mail da conta. O servidor confere tudo
+// de novo (src/domain/admin/blockPolicy.js).
+function BloquearConta({ userId, email, status, podeBloquear, onSaved }) {
+  const [aberto, setAberto] = useState(false)
+  const [alvo, setAlvo] = useState('suspended')
+  const [motivo, setMotivo] = useState('')
+  const [emailDigitado, setEmailDigitado] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  if (!podeBloquear) return null
+  const bloqueada = status === 'suspended' || status === 'banned'
+
+  async function confirmar(event) {
+    event.preventDefault()
+    if (motivo.trim().length < 10) { setErro('Escreva o motivo com pelo menos 10 letras.'); return }
+    if (emailDigitado.trim().toLowerCase() !== String(email ?? '').trim().toLowerCase()) { setErro('O e-mail digitado não é o da conta.'); return }
+    const pergunta = bloqueada
+      ? `Liberar o acesso de ${email}? A cliente volta a entrar no painel.`
+      : `${alvo === 'banned' ? 'BANIR' : 'Suspender'} a conta de ${email}? Ela perde o acesso ao painel e o motivo aparece para ela.`
+    if (!window.confirm(pergunta)) return
+    setSalvando(true)
+    setErro('')
+    try {
+      const corpo = { reason: motivo.trim(), confirmEmail: emailDigitado.trim() }
+      if (bloqueada) await api.adminUserUnblock(userId, corpo)
+      else await api.adminUserBlock(userId, { ...corpo, status: alvo })
+      setAberto(false)
+      setMotivo('')
+      setEmailDigitado('')
+      await onSaved?.()
+    } catch (err) {
+      setErro(err?.message || 'Não consegui concluir.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  if (!aberto) {
+    return (
+      <button type="button" onClick={() => setAberto(true)} className="rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">
+        {bloqueada ? 'Desbloquear conta' : 'Bloquear / banir conta'}
+      </button>
+    )
+  }
+
+  return (
+    <form onSubmit={confirmar} className="w-full max-w-md space-y-2 rounded-2xl border border-red-200 bg-white p-4">
+      <h3 className="text-sm font-bold text-slate-800">{bloqueada ? 'Desbloquear conta' : 'Bloquear ou banir conta'}</h3>
+      {!bloqueada && (
+        <select value={alvo} onChange={e => setAlvo(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+          <option value="suspended">Suspender (pode ser desfeito)</option>
+          <option value="banned">Banir</option>
+        </select>
+      )}
+      <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={3} maxLength={400} placeholder="Motivo (mínimo 10 letras)" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+      <input value={emailDigitado} onChange={e => setEmailDigitado(e.target.value)} placeholder={`Digite ${email ?? 'o e-mail da conta'} para confirmar`} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+      {erro && <p className="text-xs font-semibold text-red-700">{erro}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={salvando} className="rounded-xl bg-red-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">{salvando ? 'Salvando...' : 'Confirmar'}</button>
+        <button type="button" onClick={() => { setAberto(false); setErro('') }} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">Cancelar</button>
+      </div>
+    </form>
+  )
+}
 
 export default function AdminClienteHistoricoPage() {
   const params = useParams()
@@ -448,7 +802,10 @@ export default function AdminClienteHistoricoPage() {
             </div>
             <p className="text-sm text-slate-500">{history.cadastro?.email} · {history.cadastro?.contactPhone || 'sem celular'}</p>
           </div>
-          <Link href="/admin/clientes" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Voltar à lista</Link>
+          <div className="flex flex-wrap items-start gap-2">
+            <BloquearConta userId={history.id} email={history.cadastro?.email} status={history.cadastro?.status} podeBloquear={history.podeBloquear === true} onSaved={reload} />
+            <Link href="/admin/clientes" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Voltar à lista</Link>
+          </div>
         </div>
 
         <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3 lg:grid-cols-6">
@@ -478,6 +835,8 @@ export default function AdminClienteHistoricoPage() {
             {tab === 'financeiro' && <FinanceiroTab financeiro={history.financeiro} />}
             {tab === 'tecnico' && <TecnicoTab tecnico={history.tecnico} />}
             {tab === 'uso' && <UsoTab uso={history.uso} userId={history.id} onSaved={reload} />}
+            {tab === 'robo' && <RoboTab userId={history.id} />}
+            {tab === 'atendimento' && <AtendimentoTab history={history} onChanged={reload} />}
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

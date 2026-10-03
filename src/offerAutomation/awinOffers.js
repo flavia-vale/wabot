@@ -248,7 +248,7 @@ export async function loadAwinOffers({ db, automation, sentItemIds = [], now = n
     take: CANDIDATE_ROWS_PER_STORE,
   })))
   const rows = perStore.flat()
-  if (!rows.length) return { skipped: 'no_awin_promotions', sentItemIds: pruneAwinSentIds(sentItemIds, []) }
+  if (!rows.length) return { skipped: 'no_awin_promotions', sentItemIds: pruneAwinSentIds(sentItemIds, await knownPromotions(db, automation.userId, account.id)) }
   const picked = selectAwinCandidates(rows, {
     sentItemIds,
     advertiserIds: automation.awinAdvertiserIds,
@@ -256,13 +256,18 @@ export async function loadAwinOffers({ db, automation, sentItemIds = [], now = n
     now,
     limit: Math.max(1, Number(limit) || 1),
   })
-  // Memória podada: fica só o que ainda está ativo (inclusive as promoções que
-  // não entraram nesta leitura — a identidade vem de todas as ativas).
-  const active = await db.awinPromotion.findMany({
-    where: { userId: automation.userId, accountId: account.id, status: 'active' },
+  return { offers: picked.map(awinPromotionToOffer), rawCount: rows.length, sentItemIds: pruneAwinSentIds(sentItemIds, await knownPromotions(db, automation.userId, account.id)) }
+}
+
+// Memória podada pelo que ainda EXISTE no banco (ativa ou vencida), não só pelo
+// que está ativo: promoção vencida por instabilidade da Awin que volta a valer
+// não sai de novo (R1, revisão 2026-10-03). A vencida é apagada do banco depois
+// da retenção (syncService) e só então sai da memória.
+function knownPromotions(db, userId, accountId) {
+  return db.awinPromotion.findMany({
+    where: { userId, accountId },
     select: { promotionId: true, advertiserId: true, url: true, title: true },
   })
-  return { offers: picked.map(awinPromotionToOffer), rawCount: rows.length, sentItemIds: pruneAwinSentIds(sentItemIds, active) }
 }
 
 // Na entrega da fila de revisão: a promoção ainda vale?

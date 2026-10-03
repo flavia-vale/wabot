@@ -692,3 +692,30 @@ fica `error:worker_restart`. `resendText` não vai para o painel (`/logs`).
 **Não regredir:** não reenviar a partir de `messageText`; não deixar de zerar
 `resendText` no sucesso. Testes: `test/bot-worker-restart-reprocess-wiring.test.js`,
 `test/message-log-sanitizer.test.js`.
+
+## Painel admin: Operação → Filas (envios presos) e DLQ só com BullMQ (M5, 2026-10-03)
+
+**O que era:** o card "Trabalhos parados" do Início e as rotas `/send-dlq/*`
+mediam a DLQ do Redis. Dado medido em 2026-10-02: `QUEUE_BACKEND` não está no
+`.env` de produção (`grep -c '^QUEUE_BACKEND=bullmq' .env` = 0) → fila em
+memória, DLQ de envio **não existe**. O que existe de verdade é `MessageLog`
+preso em `status='sending'` (`src/jobs/stuckSendLogs.js`).
+
+**Onde mora:**
+- Regra pura: `src/domain/admin/stuckSendQueue.js` (`isStuckSending`,
+  `resolveQueueBackend`, `dlqDisponivel`, `buildFilasRows`). Limite =
+  `STUCK_SENDING_MS` (30 min, `src/ops/adminOpsAlertPolicy.js`).
+- `GET /api/admin/filas` (`tech:read`, auditada): por cliente, presos, mais
+  antigo, último sucesso; só `groupBy`/`in`, teto 500; devolve `backend`.
+- `POST /api/admin/filas/:userId/reprocessar` (`tech:write`, motivo ≥ 5,
+  auditada): chama `recoverStuckSendLogs({ userId })` — vira `error:send_stuck`
+  e a fonte reenfileira; **não reenvia** payload.
+- Tela: seção "Filas" em `/admin/operacao#filas`
+  (`dashboard/components/FilasSection.js`, confirm + motivo). O chip "envios
+  presos" de `/admin/hoje` linka para ela.
+- `/send-dlq/*` respondem **409** "Fila em memória" sem `QUEUE_BACKEND=bullmq`;
+  o card de DLQ de envio do Início só soma com `queues.sendDlq.backend==='bullmq'`.
+
+**Não regredir:** não voltar a ler DLQ para decidir "fila parada" em produção;
+não varrer `MessageLog` linha a linha nessa rota; reprocessar sempre por
+cliente (nunca global). Teste: `test/admin-filas.test.js`.
