@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto'
 import { DELIVERY_NETWORK } from '../../core/delivery/networks.js'
 import { toDestinationId } from './adapter.js'
 import { FORWARD_MODE } from '../../forwardingPolicy.js'
+import { QUOTAS } from '../../api/quotas.js'
 
 const NETWORK = DELIVERY_NETWORK.TELEGRAM
 
@@ -58,7 +59,7 @@ const GROUP_CHAT_TYPES = new Set(['group', 'supergroup'])
  * @param {(userId: string) => Promise<boolean>} deps.canUseMultiNetwork
  * @param {() => Promise<string|null>} deps.botUsername
  */
-export async function handleLinkUpdate(update, { db, adapter, canUseMultiNetwork, botUsername }) {
+export async function handleLinkUpdate(update, { db, adapter, canUseMultiNetwork, botUsername, groupsLimit = QUOTAS.groupsPerUser }) {
   const message = update?.message
   const chat = message?.chat
   if (!message || !chat || !GROUP_CHAT_TYPES.has(chat.type)) return { acao: 'ignorado' }
@@ -94,6 +95,10 @@ export async function handleLinkUpdate(update, { db, adapter, canUseMultiNetwork
     await db.group.update({ where: { id: existing.id }, data: { name } })
     return { acao: 'atualizado', userId: link.userId, groupId: existing.id }
   }
+  // Revisão crítica, item 11: o mesmo limite de grupos da conta que vale ao
+  // cadastrar pelo painel (QUOTAS.groupsPerUser).
+  const total = await db.group.count({ where: { userId: link.userId } })
+  if (total >= groupsLimit) return { acao: 'limite_de_grupos', userId: link.userId }
   const group = await db.group.create({
     data: {
       userId: link.userId,

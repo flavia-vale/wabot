@@ -15,7 +15,8 @@ test('sem medição recente: sem_medicao, nunca vermelho', () => {
 test('os quatro estados, com motivo leigo', () => {
   const cases = [
     [[s('ok', 10)], NETWORK_HEALTH.FUNCIONANDO],
-    [[s('ok', 60), s('limite', 30), s('ok', 5)], NETWORK_HEALTH.LIMITADO],
+    // Limite em DOIS grupos diferentes (um grupo só é normal — revisão crítica, item 13).
+    [[s('ok', 60), { ...s('limite', 30), chave: 'tg:-1' }, { ...s('limite', 20), chave: 'tg:-2' }, s('ok', 5)], NETWORK_HEALTH.LIMITADO],
     [[s('ok', 60), s('bloqueado', 5)], NETWORK_HEALTH.BLOQUEADO],
     [[s('indisponivel', 30), s('indisponivel', 20), s('indisponivel', 10)], NETWORK_HEALTH.INDISPONIVEL],
   ]
