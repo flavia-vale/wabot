@@ -1271,6 +1271,7 @@ export default function AdminPage() {
               {admin?.permissions?.includes('tech:read') && <Link href="/admin/operacao" className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 transition hover:bg-gray-100">Operação</Link>}
             </nav>
             <div className="flex items-center gap-2">
+              <Link href="/admin/hoje" className="rounded-xl border border-emerald-300 bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700">Hoje</Link>
               <Link href="/admin/erros" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">Erros</Link>
               <Link href="/admin/clientes" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">Clientes</Link>
               <Link href="/admin/funil" className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">Funil</Link>

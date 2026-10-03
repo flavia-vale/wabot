@@ -24,6 +24,12 @@ import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.
 import { isSessionLive, RECEPTION_BLIND_WINDOW_MS } from '../../domain/session/sessionLiveness.js'
 import { withPayingStatus } from '../../domain/admin/payingStatus.js'
 import { loadEverPaidUserIds, currentPayingWhere, formerPayingWhere, stalePayingWhere } from '../../domain/admin/payingLoader.js'
+import { resolvePayingStatus } from '../../domain/admin/payingStatus.js'
+import { classifyOutreachSegment } from '../../domain/admin/outreachSegments.js'
+import { buildInbox } from '../../domain/admin/inboxPriority.js'
+import { findPayingDown, findPayingBlind, STUCK_SENDING_MS } from '../../ops/adminOpsAlertPolicy.js'
+import { wasStoppedByUser } from '../../email/accountActivity.js'
+import { SUBSCRIPTION_ACTIVE_STATUS } from '../../domain/payments/subscriptionPolicy.js'
 import { sendAdminAlert } from '../../email/adminAlerts.js'
 import { resolveDashboardUrl } from '../../email/layout.js'
 import { createProbeTracker, buildProbeAlertVars, PROBE_ALERT_SLUG, PROBE_WINDOW_MS } from '../../domain/admin/adminProbePolicy.js'
@@ -3044,6 +3050,103 @@ export async function adminRoutes(app) {
   // Funil de ativação: cadastro → conectou → oferta publicada → começou o
   // pagamento → pagou, por semana de cadastro e por origem. Toda a montagem
   // fica no módulo puro `funnel.js`; aqui só carregamos e auditamos.
+  // Caixa de entrada "Hoje" (G1 da auditoria): uma linha por cliente, do mais
+  // caro ao mais barato, com a ação ao lado. Só leitura, tudo em lote
+  // (groupBy/in), teto de contas, zero processo novo.
+  app.get('/inbox', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const now = new Date()
+    const nowMs = now.getTime()
+    const INBOX_USER_LIMIT = 2000
+
+    const usuarios = await db.user.findMany({
+      where: { status: { notIn: ['banned', 'suspended'] } },
+      select: {
+        id: true, name: true, email: true, contactPhone: true, plan: true, status: true,
+        accessExpiresAt: true, createdAt: true,
+        waSession: { select: { phone: true, status: true, lifecycle: true, lastDisconnectCode: true, lastHeartbeatAt: true, updatedAt: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: INBOX_USER_LIMIT,
+    })
+    const ids = usuarios.map(u => u.id)
+    const seguro = (p, padrao) => p.catch(() => padrao)
+    const [envios, credenciais, assinaturas, cobrancas, pagamentos, eventos, everPaidIds, blindRows, stuckSending, runningList] = await Promise.all([
+      seguro(db.messageLog.groupBy({ by: ['userId'], where: { userId: { in: ids }, status: 'success' }, _count: { _all: true }, _max: { sentAt: true } }), []),
+      seguro(db.credential.groupBy({ by: ['userId'], where: { userId: { in: ids } }, _count: { _all: true } }), []),
+      seguro(db.subscription.findMany({ where: { userId: { in: ids }, status: SUBSCRIPTION_ACTIVE_STATUS }, select: { userId: true } }), []),
+      seguro(db.subscriptionCharge.groupBy({ by: ['userId'], where: { userId: { in: ids }, status: 'rejected' }, _max: { attemptedAt: true } }), []),
+      seguro(db.payment.groupBy({ by: ['userId'], where: { userId: { in: ids }, status: 'approved' }, _max: { createdAt: true } }), []),
+      seguro(db.waConnectionEvent.groupBy({ by: ['userId', 'type'], where: { userId: { in: ids }, type: { in: ['manual_stop_requested', 'connected', 'reconnect_success'] } }, _max: { occurredAt: true } }), []),
+      loadEverPaidUserIds(db, ids),
+      seguro(db.analyticsEvent.findMany({ where: { event: 'ops_wa_reception_blind', createdAt: { gte: new Date(nowMs - RECEPTION_BLIND_WINDOW_MS), lte: now } }, select: { userId: true, metadata: true } }), []),
+      seguro(db.messageLog.count({ where: { status: 'sending', sentAt: { lt: new Date(nowMs - STUCK_SENDING_MS) } } }), 0),
+      seguro(Promise.resolve(listRunningBots()), []),
+    ])
+    const porId = (linhas) => new Map(linhas.map(l => [l.userId, l]))
+    const mapEnvios = porId(envios)
+    const mapCred = porId(credenciais)
+    const mapCobranca = porId(cobrancas)
+    const mapPagto = porId(pagamentos)
+    const comAssinatura = new Set(assinaturas.map(a => a.userId))
+    const running = new Set(runningList)
+    const paradaPor = new Map()
+    const conectouEm = new Map()
+    for (const ev of eventos) {
+      const quando = ev._max?.occurredAt ?? null
+      if (!quando) continue
+      if (ev.type === 'manual_stop_requested') paradaPor.set(ev.userId, quando)
+      else {
+        const atual = conectouEm.get(ev.userId)
+        if (!atual || new Date(quando) > new Date(atual)) conectouEm.set(ev.userId, quando)
+      }
+    }
+
+    // Operacional (mesmas regras do aviso M4): só pagantes.
+    const pagantes = usuarios.filter(u => resolvePayingStatus({ everPaid: everPaidIds.has(u.id), accessExpiresAt: u.accessExpiresAt, now: nowMs }).isPaying)
+    const payingById = new Map(pagantes.map(u => [u.id, { name: u.name, email: u.email }]))
+    const caidos = new Map(findPayingDown(pagantes.filter(u => u.waSession && u.waSession.status !== 'connected'), nowMs).map(d => [d.user.id, d.downMs]))
+    const cegas = new Map(findPayingBlind(blindRows, payingById).map(b => [b.user.id, b.silentForMs]))
+
+    const podeVerTelefone = canSeePhone(req.admin.role)
+    const clientes = usuarios.map(u => {
+      const envio = mapEnvios.get(u.id)
+      const stoppedByUserAt = paradaPor.get(u.id) ?? null
+      const lastConnectedAt = conectouEm.get(u.id) ?? null
+      const paying = resolvePayingStatus({ everPaid: everPaidIds.has(u.id), accessExpiresAt: u.accessExpiresAt, now: nowMs })
+      const segmento = classifyOutreachSegment({
+        status: u.status, createdAt: u.createdAt, accessExpiresAt: u.accessExpiresAt,
+        everSent: Boolean(envio?._count?._all), lastSentAt: envio?._max?.sentAt ?? null,
+        hasCredential: Boolean(mapCred.get(u.id)?._count?._all),
+        waEverConnected: Boolean(lastConnectedAt || u.waSession?.phone),
+        waConnected: u.waSession?.status === 'connected', waSince: u.waSession?.updatedAt ?? null,
+        waStoppedByUser: wasStoppedByUser({ stoppedByUserAt, lastConnectedAt }),
+        subscriptionActive: comAssinatura.has(u.id),
+        lastRejectedChargeAt: mapCobranca.get(u.id)?._max?.attemptedAt ?? null,
+        lastApprovedPaymentAt: mapPagto.get(u.id)?._max?.createdAt ?? null,
+      }, now)
+      const ownership = u.waSession ? resolveSessionOwner({ status: u.waSession.status, lifecycle: u.waSession.lifecycle, lastDisconnectCode: u.waSession.lastDisconnectCode, lastHeartbeatAt: u.waSession.lastHeartbeatAt, workerRunning: running.has(u.id), now: nowMs }) : { canAdminRetry: false }
+      const telefoneBruto = u.contactPhone || u.waSession?.phone || ''
+      return {
+        id: u.id, nome: u.name, email: u.email,
+        telefone: podeVerTelefone ? telefoneBruto : maskPhone(telefoneBruto),
+        payingStatus: paying.status, everSent: Boolean(envio?._count?._all),
+        segmento,
+        operacional: caidos.has(u.id) ? 'robo-caido-agora' : cegas.has(u.id) ? 'cega-agora' : null,
+        detalheMs: caidos.get(u.id) ?? cegas.get(u.id) ?? null,
+        canAdminRetry: Boolean(ownership.canAdminRetry),
+      }
+    })
+
+    const inbox = buildInbox({ clientes, now })
+    await writeAdminAuditLog(req, { action: 'admin.inbox.read', resource: 'inbox', after: { agora: inbox.agora.length, semana: inbox.semana.length } })
+    return {
+      ...inbox,
+      servidor: { enviosPresos: Number(stuckSending || 0), presosDesdeMin: Math.round(STUCK_SENDING_MS / 60_000) },
+      limites: { contas: INBOX_USER_LIMIT, truncado: usuarios.length >= INBOX_USER_LIMIT },
+    }
+  })
+
   app.get('/funnel', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
     const result = await adminService.getActivationFunnel({ weeks: req.query?.weeks })
