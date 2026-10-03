@@ -200,3 +200,38 @@ Agora `describeInvalidCredentialFields('shopee')` recusa a chave curta (o
 Cadastro antigo curto continua `configured` (o robô não muda); só o save novo
 é barrado. Erro 10000 da Shopee com chave de tamanho normal **não** tem causa
 registrada — medir antes de supor. Teste: `test/credential-format-validation.test.js`.
+
+## Chave de loja vencida/recusada visível para a admin (M6 — 2026-10-03, não regredir)
+
+**Antes:** `src/credentialExpiry/sweep.js` descobria chave de loja vencida
+(ML/Amazon) ou recusada (Shopee) e avisava SÓ a cliente por e-mail. A admin não
+via nada.
+
+**Agora (sem sondagem nova, zero RAM):**
+- `src/domain/admin/credentialStatus.js` (puro): do último
+  `AnalyticsEvent credential_expiry_alert_sent` por (userId, loja) tira
+  `vencida` (ML/Amazon) / `recusada` (Shopee) / `sem-medicao`, e há quanto
+  tempo. **Não existe evento "tudo ok"**: sem aviso = "sem medição", nunca "ok".
+  Aviso com mais de 14 dias (2 ciclos do cooldown de 7 d) volta a "sem medição",
+  porque `Credential` não tem `updatedAt` e a cliente pode ter recadastrado.
+  "ok" só aparece vindo do botão "Testar chave".
+- Ficha (`/admin/clientes/[id]`): não existe aba "Lojas"; a seção **Chaves das
+  lojas** mora na aba **Técnico**, ao lado de "Lojas cadastradas"
+  (`history.chavesLojas`, calculado em `GET /customers/:id/history`).
+- Caixa `/admin/hoje`: motivo novo **`chave-de-loja`** em `inboxPriority.js`
+  (`GRAVIDADE` 2.5; pagante = 7.5 → "Agora"). Uma linha por cliente: robô
+  caído/sem receber (operacional) vence; entre o segmento comercial e a chave
+  ruim vence a maior gravidade (empate = segmento). Chip de filtro "Chave de
+  loja". `test/admin-credencial-loja.test.js` trava de propósito se o motivo
+  perder gravidade/texto/chip.
+- Botão **Testar chave** → `POST /customers/:id/credenciais/:platform/testar`
+  (`billing:read`, auditado `admin.credentials.probe`). Usa
+  `probeCredentialReadOnly` (novo, em `sweep.js`; `probePlatform` do sweep de
+  produção ficou intacta). **Só leitura**: sem cache, sem gravar
+  `credentialPatch`, sem `AnalyticsEvent`, sem e-mail. Falha/`busy` = `alive:
+  null` = "sem medição", nunca "vencida".
+
+**Pegadinha:** se a loja rotacionar o código na chamada (ML/Amazon), a rotação é
+descartada no teste manual (o sweep a persistiria). Por isso é uma conta por vez,
+com confirmação — nunca em lote. Hipótese não medida: rotação descartada
+encurtar a sessão da cliente; sem dado de incidência.

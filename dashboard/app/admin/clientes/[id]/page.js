@@ -322,7 +322,75 @@ function FinanceiroTab({ financeiro, userId, email, onChanged }) {
   )
 }
 
-function TecnicoTab({ tecnico }) {
+const CHAVE_STATUS_VISUAL = {
+  ok: { texto: 'Funcionando', classe: 'bg-emerald-100 text-emerald-700' },
+  vencida: { texto: 'Vencida', classe: 'bg-red-100 text-red-700' },
+  recusada: { texto: 'Recusada pela loja', classe: 'bg-red-100 text-red-700' },
+  'sem-medicao': { texto: 'Sem medição', classe: 'bg-slate-100 text-slate-600' },
+}
+
+function haQuanto(ms) {
+  if (!Number.isFinite(ms)) return ''
+  const dias = Math.floor(ms / 86_400_000)
+  if (dias >= 1) return `aviso há ${dias} d`
+  return `aviso há ${Math.max(1, Math.floor(ms / 3_600_000))} h`
+}
+
+// Chaves das lojas (M6): status vindo do último aviso da sondagem diária, e o
+// botão "Testar chave" que sonda UMA loja agora (só leitura, não grava nada).
+function ChavesLojas({ userId, chaves }) {
+  const [testes, setTestes] = useState({})
+  const [ocupada, setOcupada] = useState('')
+  const lista = asArray(chaves)
+  if (!lista.length) return null
+
+  async function testar(platform) {
+    if (!window.confirm('Testar a chave desta loja agora? É uma consulta de leitura à loja; não muda nada na conta da cliente.')) return
+    setOcupada(platform)
+    try {
+      const r = await api.adminTestarChaveLoja(userId, platform)
+      setTestes(t => ({ ...t, [platform]: r }))
+    } catch (err) {
+      setTestes(t => ({ ...t, [platform]: { erro: err?.message || 'Não consegui testar.' } }))
+    } finally {
+      setOcupada('')
+    }
+  }
+
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-bold text-slate-800">Chaves das lojas</h3>
+      <ul className="space-y-2">
+        {lista.map(chave => {
+          const teste = testes[chave.platform]
+          const efetivo = teste && !teste.erro ? teste.status : chave.status
+          const visual = CHAVE_STATUS_VISUAL[efetivo] ?? CHAVE_STATUS_VISUAL['sem-medicao']
+          return (
+            <li key={chave.platform} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+              <span className="font-bold text-slate-900">{chave.label}</span>
+              <span className={`rounded-full px-3 py-1 text-xs font-bold ${visual.classe}`}>{visual.texto}</span>
+              <span className="text-xs text-slate-500">
+                {teste?.erro ? teste.erro
+                  : teste ? (teste.alive === null ? 'Teste sem resposta da loja (não conta como vencida).' : `testada agora (${formatDateTime(teste.checkedAt)})`)
+                    : (haQuanto(chave.sinceMs) || 'a sondagem diária não achou problema registrado')}
+              </span>
+              <button
+                type="button"
+                disabled={ocupada === chave.platform}
+                onClick={() => testar(chave.platform)}
+                className="ml-auto rounded-xl border border-slate-200 px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                {ocupada === chave.platform ? 'Testando...' : 'Testar chave'}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+function TecnicoTab({ tecnico, userId, chavesLojas }) {
   const quedas = tecnico?.disconnects ?? {}
   return (
     <div className="space-y-5">
@@ -378,6 +446,8 @@ function TecnicoTab({ tecnico }) {
           />
         </div>
       </div>
+
+      <ChavesLojas userId={userId} chaves={chavesLojas} />
 
       {asArray(tecnico?.credentialHealth).length > 0 && (
         <div>
@@ -1118,7 +1188,7 @@ export default function AdminClienteHistoricoPage() {
             </nav>
             {tab === 'cadastro' && <CadastroTab cadastro={history.cadastro} />}
             {tab === 'financeiro' && <FinanceiroTab financeiro={history.financeiro} userId={history.id} email={history.cadastro?.email} onChanged={reload} />}
-            {tab === 'tecnico' && <TecnicoTab tecnico={history.tecnico} />}
+            {tab === 'tecnico' && <TecnicoTab tecnico={history.tecnico} userId={history.id} chavesLojas={history.chavesLojas} />}
             {tab === 'uso' && <UsoTab uso={history.uso} userId={history.id} onSaved={reload} />}
             {tab === 'robo' && <RoboTab userId={history.id} />}
             {tab === 'atendimento' && <AtendimentoTab history={history} onChanged={reload} />}

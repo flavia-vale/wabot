@@ -39,7 +39,7 @@ test('filtrarPorMotivo filtra, e chave vazia ou desconhecida mostra tudo', () =>
   assert.equal(filtrarPorMotivo(itens, 'xyz').length, 3)
   assert.equal(filtrarPorMotivo(undefined, 'robo').length, 0)
   assert.equal(filtroPorChave('xyz'), null)
-  assert.deepEqual(contarPorFiltro(itens), { robo: 1, cega: 1, cobranca: 1, vencendo: 0, 'sem-envio': 0 })
+  assert.deepEqual(contarPorFiltro(itens), { robo: 1, cega: 1, chave: 0, cobranca: 1, vencendo: 0, 'sem-envio': 0 })
 })
 
 test('a caixa Hoje lê ?motivo= e os cards do semáforo apontam para chaves que existem', () => {

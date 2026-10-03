@@ -43,6 +43,7 @@ export const AUDIT_LABELS = Object.freeze({
   'admin.finance.subscription_charges.list': 'consultou as cobranças de assinatura',
   'admin.funnel.read': 'consultou o funil de cadastro',
   'admin.inbox.read': 'abriu a caixa de prioridades',
+  'admin.credentials.probe': 'testou a chave de uma loja da cliente',
   'admin.legalTerms.update': 'editou os termos legais',
   'admin.legalTerms.view': 'abriu os termos legais',
   'admin.logs.list': 'consultou os logs de envio',
