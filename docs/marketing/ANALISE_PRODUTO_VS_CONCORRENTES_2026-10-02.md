@@ -66,11 +66,11 @@ Ordem: impacto comercial (quantos concorrentes vendem o item como diferencial).
 | 4 | "Garimpo só Shopee" / "O Afilira BUSCA a oferta sozinho, o Espelha não" | ficha, Features, `_comparisonContent.js` L1010 | Shopee + promoções Awin/Rakuten | Corrigir; L1010 é fato errado contra nós |
 | 5 | "A partir de quanto o robô publica sozinho: R$69 (Pro)"; Pro = "o plano do piloto automático" | L801, L1061, L895, L964, L1172 | Basic espelha sozinho desde R$39 | Igualar ao `pricing.md` |
 | 6 | Hero: "você revisa o que quiser antes"; pílula "Revisão humana" | `Hero.jsx:121`, `app/page.js:62` | A fila de revisão está **desligada** (`OFFER_AUTOMATION_REVIEW_ENABLED`); espelhamento sai direto | Liberar a fila (seção 3, item 1) **ou** tirar a frase |
-| 7 | Selo do PRO "Canais + Automação + **Anti-banimento**" | `Pricing.jsx:113` | Regra da casa: nunca prometer anti-ban; a própria ficha diz "nenhum software garante" | "Canais + Automação + Ritmo de envio" |
-| 8 | "Grupos, Canais e Comunidades" sem dizer que canais é PRO; "Comunidades" não existe na ficha | L189, L270, L849, L968, L1381, L1482 | Canais = PRO; comunidades não confirmado [H] | Marcar "(canais no PRO)"; tirar "Comunidades" até testar |
+| 7 | ~~Selo do PRO "Anti-banimento"~~ | `Pricing.jsx:113` | É o **nome oficial da tela** (spec 018, coberto por `test/anti-banimento-textos-atualizados.test.js`), não promessa | Mantido (revisto em 02/10) |
+| 8 | "Grupos, Canais e Comunidades" sem dizer que canais é PRO | L189, L270, L849, L968, L1381, L1482 | Canais = PRO; **Comunidades existe** (o robô lista grupos de comunidade via `linkedParent`, `src/bot-worker.js`) | Marcar "Canais no Pro"; Comunidades fica |
 | 9 | "Sem cobrança por conexão extra de WhatsApp" | L1070 | 1 número por conta (multi-número só lista de espera) | Remover |
 | 10 | "Menor preço do mercado", "Broadcast em massa", "24/7 sem limites" | L84, L193 | FluxoPromo R$37 e LucreShop R$29,90 são mais baratos; temos teto por hora/dia de propósito | Remover os três |
-| 11 | "Converte link de cupom em todas as 6 lojas" | ficha, `llms.txt:16`, Magalu | Conversão de link de cupom é **desligada por padrão** (`COUPON_LINK_CONVERT`, `couponPolicy.js:14`) | **[D]** conferir o `.env` de produção |
+| 11 | "Converte link de cupom em todas as 6 lojas" | ficha, `llms.txt:16`, Magalu | Desligada por padrão no código, mas **ligada em produção** (`COUPON_LINK_CONVERT=true`, conferido 02/10) | ✅ Promessa vale. Só falta a página do ML citar cupom (hoje diz "link de produto") |
 | 12 | "5 camadas" × "quatro camadas" | `_preservationDecisionPages.js` L126 × L130 | — | Igualar |
 | 13 | "Respondemos em minutos" × "até 1 dia útil" | `FAQ.jsx:92` × `marketing-content.js:65` | — | Ficar com "até 1 dia útil" |
 | 14 | "Configura em 4 minutos" × "Pronto em 5 minutos" | `Hero.jsx:147` × L84 | — | Um número só |
@@ -87,7 +87,7 @@ Ordem: impacto comercial (quantos concorrentes vendem o item como diferencial).
 |---|---|---|---|---|
 | 1 | **Revisar antes de publicar** (ofertas automáticas: guarda 5/10/20, aprova/remove em lote) | flags `OFFER_AUTOMATION_REVIEW_*` + lista de contas | Afilira, Achify | Validar em staging e ligar para todos os PRO. Resolve a promessa do Hero |
 | 2 | **Link rastreado `/r/`** (cliques por oferta) | `clickTrackingEnabled` sem tela + `SHORTLINK_BASE_URL` | Easyfy, LucreShop, Promium | É o B20. Primeiro passo de "qual grupo rende" |
-| 3 | **Conversão de link de cupom** | `COUPON_LINK_CONVERT` | — | [D] se já está ligado em prod |
+| 3 | ~~Conversão de link de cupom~~ | — | — | **Já ligada em produção** (02/10). Sai desta lista |
 | 4 | **Status do WhatsApp** como destino | flag desligada (B40/EG-22) | ProAfiliados, Afilira, Divulga Ninja | Validação dedicada |
 | 5 | **Instagram Stories** (espelhamento, filas e ofertas automáticas) | só plano Premium, que não está à venda | Divulga Ninja, IA Divulgadora, DivulgaLinks, LucreShop | Decisão de produto: zero busca (pesquisa 10/09); vender como "trazer gente para o grupo", não como motivo de troca |
 | 6 | Conexão do Mercado Livre por OAuth | rota sem tela | — | Avaliar contra B41 (credencial sem cookie) |
@@ -137,6 +137,18 @@ Contagem = concorrentes das 25 fichas + análises que anunciam o recurso.
 
 ---
 
+### Resultado (produção, 02/10/2026)
+
+| Recurso | Uso em produção | Leitura |
+|---|---|---|
+| Conversão de cupom | `COUPON_LINK_CONVERT=true` | Promessa "inclusive cupom" vale |
+| Awin | 1 conta | Sem caso real de cliente ainda [H: provável conta de teste] → divulgar como "novo" e buscar 1 piloto antes de pôr no título |
+| Rakuten | 1 conta | Idem |
+| Link Inteligente | 1 conta | Idem |
+| Boas-vindas | 10 grupos | Usado sem divulgação → vale citar |
+| Encaminhar sem link | 1 grupo | Quase ninguém sabe que existe |
+| Meus cupons | 6 contas | ~20% das ~29 pagantes usam → vale print/vídeo |
+
 ## 6. Ordem sugerida (sem código novo primeiro)
 
 1. Corrigir os **fatos errados contra nós** (2.2, 2.4, 2.5, 2.9, 2.10, 2.12–2.15) — só texto.
@@ -150,3 +162,8 @@ Contagem = concorrentes das 25 fichas + análises que anunciam o recurso.
 
 Páginas públicas que já estão no Google e mudarem de texto → entrar na leva 🔝 de
 reindexação em `ACOES_FLAVIA_2026-09-11.md` (só depois do deploy em `main`).
+
+
+---
+
+As correções da seção 2 foram aplicadas na branch `fix/textos-publicos-vs-produto` (02/10).

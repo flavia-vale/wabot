@@ -1,4 +1,5 @@
 import dbDefault from '../../db.js'
+import { splitTargetsByDeliveryNetwork, withDeliveryNetworkHandOff } from '../../deliveryOutbox/handOff.js'
 import { sanitizePriceCents } from '../../core/clientCouponPolicy.js'
 import { sendBroadcast, isRunning } from '../../manager.js'
 import { enforceChannelPlanGate, loadUserPlanSubject, resolveTargetJids, validateBroadcastText } from './broadcastTargets.js'
@@ -138,7 +139,6 @@ export async function broadcastRoutes(app, deps = {}) {
     if (idem.inFlight) return reply.code(409).send({ error: 'Requisição com a mesma Idempotency-Key ainda em processamento' })
 
     if (!ensureBroadcastRate(reply, userId)) { idem.release(); return }
-    if (!await isRunningImpl(userId)) { idem.release(); return reply.code(400).send({ error: 'Bot não está conectado' }) }
 
     let targetJids
     try {
@@ -150,14 +150,20 @@ export async function broadcastRoutes(app, deps = {}) {
     const gateError = enforceChannelPlanGate(targetJids, await loadUserPlanSubject(db, userId))
     if (gateError) { idem.release(); return reply.code(403).send(gateError) }
     if (!targetJids.length) { idem.release(); return reply.code(400).send({ error: 'Nenhum grupo/canal de destino configurado' }) }
+    // Feature 017 (revisão crítica, item 1): só exige o WhatsApp conectado
+    // quando há destino do WhatsApp. Grupo de outro aplicativo vai para a
+    // caixa de saída (withDeliveryNetworkHandOff), nunca para o robô.
+    const { whatsapp: whatsappJids, outros } = splitTargetsByDeliveryNetwork(targetJids)
+    if (whatsappJids.length && !await isRunningImpl(userId)) { idem.release(); return reply.code(400).send({ error: 'Bot não está conectado' }) }
 
     try {
-      const result = await sendBroadcastImpl(userId, text.trim(), targetJids, {
+      const result = await withDeliveryNetworkHandOff(sendBroadcastImpl)(userId, text.trim(), targetJids, {
         imageUrl: optionalUrl(imageUrl) ?? undefined,
         imageRefererUrl: optionalUrl(imageRefererUrl) ?? undefined,
         // Preço lido pelo Criar oferta: o robô usa para o "de X por Y" do cupom.
         couponPriceCents: sanitizePriceCents(req.body?.offer?.priceCents) ?? undefined,
-      })
+      }) ?? { queued: 0, rejected: 0, errors: [] }
+      if (outros.length) result.queued = Number(result.queued ?? 0) + outros.length
       idem.commit(result)
       return result
     } catch (err) {

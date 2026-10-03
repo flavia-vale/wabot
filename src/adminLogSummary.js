@@ -32,8 +32,10 @@ function bumpErrorMessageGroup(groups, log) {
     lastSeenAt: null,
     statusBreakdown: {},
   }
-  current.count += 1
-  current.statusBreakdown[status] = (current.statusBreakdown[status] || 0) + 1
+  // `count` vem de linhas já agrupadas no banco (groupBy); linha avulsa vale 1.
+  const weight = Number(log?.count) > 0 ? Number(log.count) : 1
+  current.count += weight
+  current.statusBreakdown[status] = (current.statusBreakdown[status] || 0) + weight
   if (sentAtIso && (!current.lastSeenAt || sentAtIso > current.lastSeenAt)) {
     current.lastSeenAt = sentAtIso
     current.sampleErrorMsg = key === errorMsg ? errorMsg : null

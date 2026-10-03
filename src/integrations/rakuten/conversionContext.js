@@ -15,6 +15,13 @@ import dbDefault from '../../db.js'
 import { RAKUTEN_ACCOUNT_STATUS } from './accountService.js'
 import { createRakutenStoreMatcher, isValidRakutenLinkId } from './storeMatcher.js'
 
+// Conta recusada (dados trocados na Rakuten, por exemplo) continua
+// convertendo por este tempo depois da última sync: o deep link é montado sem
+// credencial, e o `linkId` e as lojas guardadas continuam valendo. Sem isso,
+// trocar o segredo sem atualizar no painel apagava os links Rakuten de todas
+// as ofertas na hora (revisão 2026-10-03, R2).
+export const RAKUTEN_REFUSED_GRACE_MS = 7 * 24 * 60 * 60_000
+
 function parseDomains(json) {
   try {
     const list = JSON.parse(json || '[]')
@@ -26,9 +33,15 @@ function parseDomains(json) {
 
 export async function loadRakutenConversionContext(userId, deps = {}) {
   const db = deps.db ?? dbDefault
+  const now = deps.now ?? (() => new Date())
   if (!userId) return null
+  const graceSince = new Date(now().getTime() - RAKUTEN_REFUSED_GRACE_MS)
   const accounts = await db.rakutenAccount.findMany({
-    where: { userId, status: { not: RAKUTEN_ACCOUNT_STATUS.INVALID_CREDENTIAL }, linkId: { not: null } },
+    where: {
+      userId,
+      linkId: { not: null },
+      OR: [{ status: { not: RAKUTEN_ACCOUNT_STATUS.INVALID_CREDENTIAL } }, { lastSyncAt: { gte: graceSince } }],
+    },
     orderBy: { createdAt: 'asc' },
     select: { id: true, linkId: true },
   })

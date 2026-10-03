@@ -23,6 +23,15 @@ import { buildFeatureGateError, canUseAdvancedPreservation, canUseChannelButton,
 import { normalizeRelayFooter, RELAY_FOOTER_MAX_CHARS } from '../../core/relayFooter.js'
 import { resolveDestinationPreservation } from '../../core/preservationConfig.js'
 import { resolveSendWindow } from '../../core/sendWindow.js'
+import { DELIVERY_NETWORK, deliveryNetworkOfDestinationId, getDeliveryNetworkCapabilities, resolveDeliveryNetwork } from '../../core/delivery/networks.js'
+
+// Feature 017 (revisão crítica, item 2): estas rotas consultam o WhatsApp
+// pelo endereço do grupo. Grupo de outro aplicativo (`tg:`) nunca vira
+// consulta ao servidor do WhatsApp.
+const WHATSAPP_ONLY_GROUP_ERROR = 'Esta ação vale só para grupos e canais do WhatsApp.'
+function isOtherDeliveryNetworkGroup(group) {
+  return resolveDeliveryNetwork(group.deliveryNetwork) !== DELIVERY_NETWORK.WHATSAPP || deliveryNetworkOfDestinationId(group.waJid) !== DELIVERY_NETWORK.WHATSAPP
+}
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
 
@@ -110,7 +119,12 @@ export async function groupsRoutes(app, opts = {}) {
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { waJid: rawJid, name: rawName, role, kind: rawKind } = req.body ?? {}
+    const { waJid: rawJid, name: rawName, role, kind: rawKind, deliveryNetwork: rawDeliveryNetwork } = req.body ?? {}
+    // Feature 017: grupo de outro aplicativo (Telegram) entra só pelo link da
+    // tela Aplicativos — a cliente nunca digita identificador (FR-017).
+    if ((rawDeliveryNetwork !== undefined && resolveDeliveryNetwork(rawDeliveryNetwork) !== DELIVERY_NETWORK.WHATSAPP) || String(rawJid ?? '').startsWith('tg:')) {
+      return reply.code(400).send({ error: 'Grupos do Telegram são adicionados pela tela Aplicativos.' })
+    }
     const kind = (rawKind ?? JID_KIND.GROUP).toString()
     if (!ALLOWED_KINDS.has(kind)) return reply.code(400).send({ error: 'kind deve ser group ou channel' })
     const waJid = ensureJid(rawJid, kind === JID_KIND.CHANNEL ? JID_KIND.CHANNEL : JID_KIND.GROUP)
@@ -231,6 +245,16 @@ export async function groupsRoutes(app, opts = {}) {
   app.put('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
+
+    // Feature 017 (US3 cenário 5): o aplicativo de um destino não muda
+    // depois de criado; e opção que o aplicativo não aceita (botão "Ver
+    // canal") não é gravada — decidido pela capacidade, não pelo nome.
+    if (req.body?.deliveryNetwork !== undefined && resolveDeliveryNetwork(req.body.deliveryNetwork) !== resolveDeliveryNetwork(group.deliveryNetwork)) {
+      return reply.code(400).send({ error: 'O aplicativo de um grupo não pode ser trocado. Cadastre o grupo do outro aplicativo separadamente.' })
+    }
+    if (req.body?.channelButtonJid && !getDeliveryNetworkCapabilities(group.deliveryNetwork).acceptsButton) {
+      return reply.code(400).send({ error: 'Este aplicativo não mostra o botão "Ver canal".' })
+    }
 
     const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, watermarkText, watermarkColor, watermarkSize, watermarkPosition, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, relayFooterText, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
@@ -433,6 +457,7 @@ export async function groupsRoutes(app, opts = {}) {
 
   app.post('/:id/follow-now', { onRequest: [app.authenticate] }, async (req, reply) => {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (group && isOtherDeliveryNetworkGroup(group)) return reply.code(400).send({ error: WHATSAPP_ONLY_GROUP_ERROR })
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'follow-now só vale pra canais' })
     if (!(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
@@ -488,6 +513,7 @@ export async function groupsRoutes(app, opts = {}) {
 
   app.post('/:id/snapshot-now', { onRequest: [app.authenticate] }, async (req, reply) => {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (group && isOtherDeliveryNetworkGroup(group)) return reply.code(400).send({ error: WHATSAPP_ONLY_GROUP_ERROR })
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'snapshot só vale pra canais' })
     if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
@@ -507,6 +533,7 @@ export async function groupsRoutes(app, opts = {}) {
 
   app.post('/:id/recreate', { onRequest: [app.authenticate] }, async (req, reply) => {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (group && isOtherDeliveryNetworkGroup(group)) return reply.code(400).send({ error: WHATSAPP_ONLY_GROUP_ERROR })
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'recreate só vale pra canais' })
     const newJid = req.body?.newJid
@@ -542,6 +569,7 @@ export async function groupsRoutes(app, opts = {}) {
 
   app.get('/:id/health', { onRequest: [app.authenticate] }, async (req, reply) => {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (group && isOtherDeliveryNetworkGroup(group)) return reply.code(400).send({ error: WHATSAPP_ONLY_GROUP_ERROR })
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'health só vale pra canais' })
     return getChannelHealth(group.id)
@@ -552,6 +580,7 @@ export async function groupsRoutes(app, opts = {}) {
   // periódico decide quando degradar saúde se faltar ping pós-post.
   app.post('/:id/probe-ping', { onRequest: [app.authenticate] }, async (req, reply) => {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (group && isOtherDeliveryNetworkGroup(group)) return reply.code(400).send({ error: WHATSAPP_ONLY_GROUP_ERROR })
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'probe só vale pra canais' })
     const cfg = await db.botConfig.findUnique({ where: { userId: req.user.sub } })
@@ -569,6 +598,7 @@ export async function groupsRoutes(app, opts = {}) {
 
   app.post('/:id/risk-score/recompute', { onRequest: [app.authenticate] }, async (req, reply) => {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (group && isOtherDeliveryNetworkGroup(group)) return reply.code(400).send({ error: WHATSAPP_ONLY_GROUP_ERROR })
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'risk-score só vale pra canais' })
     const daysRaw = Number(req.query?.days)
@@ -580,6 +610,7 @@ export async function groupsRoutes(app, opts = {}) {
 
   app.post('/:id/refresh-admin', { onRequest: [app.authenticate] }, async (req, reply) => {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (group && isOtherDeliveryNetworkGroup(group)) return reply.code(400).send({ error: WHATSAPP_ONLY_GROUP_ERROR })
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'refresh-admin só vale pra canais' })
     if (!(await ensureChannelFeatureAllowed(req.user.sub, reply))) return

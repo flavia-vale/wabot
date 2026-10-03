@@ -562,3 +562,112 @@ test('F4: site próprio de grupo que leva a loja Awin é desembrulhado; sem cont
   const src = readFileSync(new URL('../src/core/customDomainLinkResolver.js', import.meta.url), 'utf8')
   assert.match(src, /const cacheKey = awin \? `awin\|\$\{candidateUrl\}` : candidateUrl/, 'cache separado: resultado com lojas Awin não vaza para outra cliente')
 })
+
+// ---------- R2/R3/R7: Awin lenta ou fora do ar não segura a fila ----------
+
+import {
+  AWIN_BREAKER_FAILURES,
+  AWIN_BREAKER_OPEN_MS,
+  AWIN_SHORT_FAIL_TTL_MS,
+  awinBreakerIsOpen,
+  resetAwinRuntimeState,
+  resolveAwinShortUrlCached,
+} from '../src/converters/awin.js'
+import { AwinAuthError, AwinHttpError } from '../src/integrations/awin/errors.js'
+
+function slowClient(ms) {
+  const calls = []
+  return {
+    calls,
+    generateLink: (token, publisherId, body) => {
+      calls.push(body)
+      return new Promise((resolve) => setTimeout(() => resolve({ shortUrl: 'https://tidd.ly/lento' }), ms).unref())
+    },
+  }
+}
+
+test('R2: Awin lenta → link longo em até 4 s; 3 falhas seguidas abrem o disjuntor (sem chamada por 5 min)', async () => {
+  resetAwinRuntimeState()
+  let clock = Date.now()
+  const client = slowClient(60_000)
+  const creds = context({ client, now: () => clock })
+  const started = Date.now()
+  const first = await convert('https://www.kabum.com.br/produto/1', { ...creds, generateTimeoutMs: 50 })
+  assert.ok(Date.now() - started < 1_000)
+  assert.match(first.url, /awin1\.com\/cread\.php/)
+  await convert('https://www.kabum.com.br/produto/2', { ...creds, generateTimeoutMs: 50 })
+  await convert('https://www.kabum.com.br/produto/3', { ...creds, generateTimeoutMs: 50 })
+  assert.equal(client.calls.length, AWIN_BREAKER_FAILURES)
+  assert.equal(awinBreakerIsOpen('acc-1', clock), true)
+  const blocked = await convert('https://www.kabum.com.br/produto/4', creds)
+  assert.match(blocked.url, /awin1\.com\/cread\.php\?awinmid=17729&awinaffid=2701264/)
+  assert.equal(client.calls.length, AWIN_BREAKER_FAILURES, 'disjuntor aberto: nenhuma chamada')
+  // Passados 5 min, tenta de novo; sucesso fecha o disjuntor.
+  clock += AWIN_BREAKER_OPEN_MS + 1
+  const ok = await convert('https://www.kabum.com.br/produto/5', { ...creds, client: fakeClient() })
+  assert.equal(ok.url, 'https://tidd.ly/abc')
+  assert.equal(awinBreakerIsOpen('acc-1', clock), false)
+  resetAwinRuntimeState()
+})
+
+test('R7: código recusado abre o disjuntor na hora; limite por minuto e 4xx de um link não abrem', async () => {
+  resetAwinRuntimeState()
+  await convert('https://www.kabum.com.br/produto/1', context({ client: fakeClient(new AwinRateLimitError(null)) }))
+  await convert('https://www.kabum.com.br/produto/2', context({ client: fakeClient(new AwinRateLimitError(null)) }))
+  await convert('https://www.kabum.com.br/produto/3', context({ client: fakeClient(new AwinRateLimitError(null)) }))
+  await convert('https://www.kabum.com.br/produto/4', context({ client: fakeClient(new AwinHttpError(400)) }))
+  await convert('https://www.kabum.com.br/produto/5', context({ client: fakeClient(new AwinHttpError(400)) }))
+  await convert('https://www.kabum.com.br/produto/6', context({ client: fakeClient(new AwinHttpError(400)) }))
+  assert.equal(awinBreakerIsOpen('acc-1'), false)
+  await convert('https://www.kabum.com.br/produto/7', context({ client: fakeClient(new AwinAuthError(401)) }))
+  assert.equal(awinBreakerIsOpen('acc-1'), true)
+  resetAwinRuntimeState()
+})
+
+test('R2: teto por mensagem — sem tempo sobrando sai o link longo sem chamar a Awin', async () => {
+  resetAwinRuntimeState()
+  const client = fakeClient()
+  const result = await convert('https://www.kabum.com.br/produto/1', context({ client }), { deadline: Date.now() - 1 })
+  assert.match(result.url, /awin1\.com\/cread\.php/)
+  assert.equal(client.calls.length, 0)
+  // Pela rota de sempre (convertLink) o teto chega ao conversor.
+  const viaIndex = await convertLink('awin', 'https://www.kabum.com.br/produto/2', { awin: context({ client }) }, { deadline: Date.now() - 1 })
+  assert.match(viaIndex.url, /awin1\.com\/cread\.php/)
+  assert.equal(client.calls.length, 0)
+})
+
+test('R2: tidd.ly que não abriu fica guardado como falha por 5 min (não gasta 3 s de novo)', async () => {
+  resetAwinRuntimeState()
+  let calls = 0
+  let clock = 1_000_000
+  const fetchFn = async () => { calls++; throw new Error('rede') }
+  assert.equal(await resolveAwinShortUrlCached('https://tidd.ly/falha', { fetchFn, now: () => clock }), null)
+  assert.equal(await resolveAwinShortUrlCached('https://tidd.ly/falha', { fetchFn, now: () => clock }), null)
+  assert.equal(calls, 1)
+  clock += AWIN_SHORT_FAIL_TTL_MS + 1
+  await resolveAwinShortUrlCached('https://tidd.ly/falha', { fetchFn, now: () => clock })
+  assert.equal(calls, 2)
+  resetAwinRuntimeState()
+})
+
+test('R3: corpo da resposta do tidd.ly é descartado; teto vale para todos os saltos juntos', async () => {
+  let cancelled = 0
+  const fetchFn = async (url) => ({
+    status: 301,
+    headers: { get: () => (url.includes('/a') ? 'https://tidd.ly/b' : 'https://www.awin1.com/cread.php?awinmid=17729&awinaffid=1') },
+    body: { cancel: async () => { cancelled++ } },
+  })
+  const target = await resolveAwinShortUrl('https://tidd.ly/a', { fetchFn })
+  assert.match(target, /awin1\.com/)
+  assert.equal(cancelled, 2)
+  const hang = (url, { signal }) => new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('abort'))))
+  const started = Date.now()
+  assert.equal(await resolveAwinShortUrl('https://tidd.ly/a', { fetchFn: hang, timeoutMs: 100 }), null)
+  assert.ok(Date.now() - started < 1_000)
+})
+
+test('bot-worker: conversão da Awin recebe o teto da mensagem', () => {
+  const src = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
+  assert.match(src, /const awinDeadline = Date\.now\(\) \+ AWIN_MESSAGE_BUDGET_MS/)
+  assert.match(src, /convertLink\(platform, url, cfg\.credentials, platform === 'awin' \? \{ deadline: awinDeadline \} : undefined\)/)
+})

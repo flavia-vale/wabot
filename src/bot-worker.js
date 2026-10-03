@@ -23,7 +23,7 @@ import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { resolveCustomDomainLinks, findCandidateLinks, allCandidatesFailedBecauseOfferEnded } from './core/customDomainLinkResolver.js'
 import { convertLink } from './converters/index.js'
-import { AWIN_NOT_JOINED_ERROR } from './converters/awin.js'
+import { AWIN_MESSAGE_BUDGET_MS, AWIN_NOT_JOINED_ERROR } from './converters/awin.js'
 import { awinOfferOptions, loadAwinConversionContext, refineAwinOptionsForText } from './integrations/awin/conversionContext.js'
 import { RAKUTEN_NOT_JOINED_ERROR } from './converters/rakuten.js'
 import { loadRakutenConversionContext, rakutenOfferOptions } from './integrations/rakuten/conversionContext.js'
@@ -109,7 +109,7 @@ import { getAdvancedPreservationAccess, isPreservationActive } from './billing/p
 // é o único ponto que fala com o socket do WhatsApp, movido para o adaptador
 // de WhatsApp com o corpo INALTERADO (test/delivery-whatsapp-send-inalterado.test.js).
 import { sendPreparedPayload } from './delivery/whatsapp/send.js'
-import { DELIVERY_NETWORK } from './core/delivery/networks.js'
+import { DELIVERY_NETWORK, deliveryNetworkOfDestinationId } from './core/delivery/networks.js'
 import { enqueueDeliveryOutbox } from './deliveryOutbox/enqueue.js'
 import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
@@ -128,7 +128,9 @@ import { parseEnumEnv, logModeSummary } from './core/envModes.js'
 import { buildRedisOptions } from './core/redisFactory.js'
 import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
-import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
+import { loadWorkerIdentity } from './core/workerIdentity.js'
+import { STANDBY_PROCESS_SLOT } from './domain/session/workerIdentity.js'
+import { recordWaConnectionEventSafe as recordWaConnectionEventSafeBase } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
 import { shouldIgnoreOwnDeviceDm, isChatQuarantinable, createRecentInboundIndex, createChatDropQuarantine } from './core/outOfScopeChatGuard.js'
 import { ensureDeviceSignaturePrefix } from './core/deviceIdentitySignature.js'
@@ -177,6 +179,16 @@ export async function createBotSessionRuntime({
   sharedLimits = {},
   ownerInstance = process.env.NODE_APP_INSTANCE ?? '0',
 } = {}) {
+// Vários números por conta (docs/rca/multi-numero.md): BOT_USER_ID é a CHAVE
+// do processo. Para a conta de sempre ela é o próprio userId e nada muda.
+// O processo de prontidão (<userId>~n2) só mantém o outro número conectado.
+const SESSION_IDENTITY = await loadWorkerIdentity(userId, { db })
+userId = SESSION_IDENTITY.userId
+const IS_STANDBY = SESSION_IDENTITY.role === 'standby'
+// Eventos de conexão contam a história do número QUE ENVIA (admin, funil,
+// alertas). A prontidão não entra neles.
+const recordWaConnectionEventSafe = payload => { if (!IS_STANDBY) recordWaConnectionEventSafeBase(payload) }
+const AUTH_KEY = SESSION_IDENTITY.authKey
 const withLimit = (semaphore, task) => semaphore?.run ? semaphore.run(task) : task()
 const fetchProductImage = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchProductImageBase(...args))
 const fetchImageBuffer = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchImageBufferBase(...args))
@@ -578,7 +590,7 @@ let shuttingDown = false
 // AUTH_DIR para sobreviver a restart do worker e ao `del` interno do Baileys.
 const WA_MAX_MSG_RETRY_COUNT = 5
 const msgRetryCounterCache = createDurableStuckMessageRetryCache({
-  file: `${getAuthInfoDir(userId)}/stuck-message-quarantine.json`,
+  file: `${getAuthInfoDir(AUTH_KEY)}/stuck-message-quarantine.json`,
   maxRetryCount: WA_MAX_MSG_RETRY_COUNT,
   logger,
 })
@@ -594,7 +606,7 @@ const WA_IGNORE_OWN_DEVICE_DMS = String(process.env.WA_IGNORE_OWN_DEVICE_DMS ?? 
 const WA_CHAT_DROP_QUARANTINE = String(process.env.WA_CHAT_DROP_QUARANTINE ?? '1').trim() !== '0'
 const recentInboundChats = createRecentInboundIndex({ max: 5000 })
 const chatDropQuarantine = createChatDropQuarantine({
-  file: `${getAuthInfoDir(userId)}/chat-drop-quarantine.json`,
+  file: `${getAuthInfoDir(AUTH_KEY)}/chat-drop-quarantine.json`,
   logger,
 })
 // RCA 2026-09 ("Aguardando mensagem" nos membros do grupo de destino): quem
@@ -604,7 +616,7 @@ const chatDropQuarantine = createChatDropQuarantine({
 // disco (src/core/sentMessageStore.js), escopo de módulo para sobreviver a
 // reconexões. Ver docs/rca/whatsapp-sessao.md.
 const sentMessageStore = createSentMessageStore({
-  dir: getSentMessagesDir(userId),
+  dir: getSentMessagesDir(AUTH_KEY),
   encode: (message) => proto.Message.encode(proto.Message.fromObject(message)).finish(),
   decode: (bytes) => proto.Message.decode(bytes),
   logger,
@@ -724,7 +736,37 @@ async function persistWorkerHeartbeat(state, { reconnectScheduled = false } = {}
   })
 }
 
+// WaSession = estado do processo ATIVO (o número que envia — é o que o produto
+// inteiro lê). WaExtraSession slot 2 = estado do processo de PRONTIDÃO, seja
+// qual for o número dele (o `phone` diz qual). Ver workerIdentity.js.
+const STANDBY_SESSION_FIELDS = ['phone', 'status', 'lifecycle', 'lastHeartbeatAt', 'lastDisconnectCode', 'blockNotice']
+
+async function persistStandbySessionPatch(data = {}) {
+  const patch = Object.fromEntries(Object.entries(data).filter(([key]) => STANDBY_SESSION_FIELDS.includes(key)))
+  const slot = STANDBY_PROCESS_SLOT
+  await db.waExtraSession.upsert({
+    where: { userId_slot: { userId, slot } },
+    update: patch,
+    create: { userId, slot, ...patch },
+  }).catch(err => logger.warn({ err: String(err?.message ?? err) }, 'Falha ao persistir estado do número de prontidão'))
+}
+
+// Prontidão conectou. Recusa o MESMO número do ativo (conectar duas vezes o
+// mesmo celular não dá reserva nenhuma e derruba os dois — 440).
+async function handleStandbyOpen({ phone }) {
+  const active = await db.waSession.findUnique({ where: { userId }, select: { phone: true } }).catch(() => null)
+  if (phone && active?.phone && active.phone === phone) {
+    logger.warn({ processKey: SESSION_IDENTITY.processKey }, 'Número de prontidão é o mesmo do número ativo; desligando a prontidão')
+    await persistStandbySessionPatch({ status: 'disconnected', lifecycle: 'stopped_by_user', phone, blockNotice: JSON.stringify({ reason: 'same_number' }) })
+    await shutdown(0)
+    return
+  }
+  await persistStandbySessionPatch({ status: 'connected', phone, lifecycle: 'ready', lastHeartbeatAt: new Date(), lastDisconnectCode: null, blockNotice: null })
+  logger.info({ processKey: SESSION_IDENTITY.processKey, authSlot: SESSION_IDENTITY.authSlot }, 'Número de prontidão conectado')
+}
+
 async function persistSessionPatch(data = {}) {
+  if (IS_STANDBY) return persistStandbySessionPatch(data)
   const fallbackData = {
     ...(data.status ? { status: data.status } : {}),
     ...(Object.prototype.hasOwnProperty.call(data, 'phone') ? { phone: data.phone ?? null } : {}),
@@ -783,7 +825,7 @@ function stopHeartbeatIpc() {
   heartbeatTimer = null
 }
 
-const AUTH_DIR = getAuthInfoDir(userId)
+const AUTH_DIR = getAuthInfoDir(AUTH_KEY)
 // A credencial atual NÃO é apagada ao iniciar o pareamento — vai para um
 // backup e volta se o pareamento falhar antes de o código chegar ao usuário.
 // Sem isso, um clique em "conectar" durante uma recusa do WhatsApp (405)
@@ -1185,6 +1227,11 @@ async function maybeSendTrialDecisionMessage() {
   }
 }
 
+// Último contexto Rakuten lido com sucesso (poucos KB): rede de segurança do
+// loadConfig quando a leitura falha (revisão 2026-10-03, R8).
+const RAKUTEN_CONTEXT_FALLBACK_MS = 10 * 60_000
+let lastGoodRakutenContext = null
+
 async function loadConfig() {
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -1231,11 +1278,19 @@ async function loadConfig() {
   }
   // Rakuten: mesmo caminho (lojas aprovadas + id dos links dela). Falhou →
   // segue sem Rakuten. docs/rca/afiliados-rakuten.md.
+  // Falha de leitura (ex.: banco ocupado) usa o último contexto bom por até
+  // 10 min, em vez de apagar os links Rakuten daquele minuto (revisão
+  // 2026-10-03, R8). Leitura que diz "sem conta/sem loja" (null) vale na hora.
   try {
     const rakuten = await loadRakutenConversionContext(userId, { db })
+    lastGoodRakutenContext = { value: rakuten, at: Date.now() }
     if (rakuten) credentials.rakuten = rakuten
   } catch (err) {
-    logger.warn({ err: err?.message }, 'Falha ao carregar contas Rakuten; links dessas lojas seguem sem conversão até a próxima carga')
+    const fallback = lastGoodRakutenContext && Date.now() - lastGoodRakutenContext.at <= RAKUTEN_CONTEXT_FALLBACK_MS
+      ? lastGoodRakutenContext.value
+      : null
+    if (fallback) credentials.rakuten = fallback
+    logger.warn({ err: err?.message, usouAnterior: Boolean(fallback) }, 'Falha ao carregar contas Rakuten; usando a última leitura boa (até 10 min) ou seguindo sem conversão')
   }
 
   Object.defineProperty(credentials, '__onCredentialPatch', {
@@ -1349,6 +1404,27 @@ async function checkScheduledMessages() {
       const state = { remaining: jids.length, hasError: false }
 
       for (const jid of jids) {
+        // Feature 017 (revisão crítica, item 1): destino de outro aplicativo
+        // vai para a caixa de saída (drenada na API), nunca para o socket.
+        const scheduledDeliveryNetwork = deliveryNetworkOfDestinationId(jid)
+        if (scheduledDeliveryNetwork !== DELIVERY_NETWORK.WHATSAPP) {
+          const handedOff = await enqueueDeliveryOutbox({
+            userId,
+            deliveryNetwork: scheduledDeliveryNetwork,
+            destinationId: jid,
+            sourceId: 'scheduled',
+            offer: {
+              texto: msg.text,
+              linkConvertido: '',
+              imagem: msg.imageUrl ? { url: msg.imageUrl } : null,
+              produto: { titulo: null, preco: null },
+              historico: { origem: 'scheduled', loja: 'scheduled' },
+            },
+          }).catch(() => null)
+          if (!handedOff) state.hasError = true
+          state.remaining--
+          continue
+        }
         let log
         try {
           log = await db.messageLog.create({
@@ -1423,10 +1499,12 @@ async function checkScheduledMessages() {
         }
       }
 
+      // Chega a zero aqui só quando nenhum envio do WhatsApp ficou pendente:
+      // ou todos falharam (hasError) ou todos foram para outro aplicativo.
       if (state.remaining === 0) {
         await db.scheduledMessage.update({
           where: { id: msg.id },
-          data: { status: 'failed', sentAt: new Date() },
+          data: { status: state.hasError ? 'failed' : 'sent', sentAt: new Date() },
         })
       }
     }
@@ -1437,13 +1515,14 @@ async function checkScheduledMessages() {
   }
 }
 
-const scheduledMessagesTimer = setInterval(checkScheduledMessages, 30_000)
+// Prontidão (número reserva) não envia nada: sem agendados, sem watchdogs de envio.
+const scheduledMessagesTimer = IS_STANDBY ? null : setInterval(checkScheduledMessages, 30_000)
 
 // Watchdog de MessageLog preso em 'sending' (safety net): roda a cada 5min e
 // reclassifica como erro recuperável as linhas paradas em 'sending' há mais que
 // o cutoff. unref() para não segurar o processo. Ver src/jobs/stuckSendLogs.js.
 const STUCK_SEND_LOG_SWEEP_MS = Math.max(60_000, Number(process.env.STUCK_SEND_LOG_SWEEP_MS || 5 * 60_000))
-const stuckSendLogsTimer = setInterval(() => {
+const stuckSendLogsTimer = IS_STANDBY ? null : setInterval(() => {
   recoverStuckSendLogs({ userId })
     .then(({ recovered }) => {
       if (recovered > 0) logger.warn({ recovered, cutoffMs: STUCK_SEND_LOG_CUTOFF_MS }, 'Watchdog: MessageLog preso em sending reclassificado como erro')
@@ -1530,7 +1609,7 @@ async function monitorSilenceWatchdog() {
 }
 
 // Marca única do produto (decisão 2026-09-23: "Espelha Grupos em tudo").
-const AD_TEXT = '💡 Bot gerenciado pelo Espelha Grupos — automatize seus grupos de afiliados'
+const AD_TEXT = '💡 Bot gerenciado pelo Espelha Grupos — automatize seus grupos de afiliados\nhttps://espelhagrupos.com.br'
 function envNumber(name, fallback) {
   if (process.env[name] === undefined) return fallback
   const value = Number(process.env[name])
@@ -1722,7 +1801,7 @@ const MONITOR_SILENCE_CHECK_INTERVAL_MS = Math.max(60_000, envNumber('MONITOR_SI
 const MONITOR_SILENCE_THRESHOLD_MS = Math.max(5 * 60_000, envNumber('MONITOR_SILENCE_THRESHOLD_MS', 30 * 60_000))
 const MONITOR_REFRESH_COOLDOWN_MS = Math.max(60_000, envNumber('MONITOR_REFRESH_COOLDOWN_MS', 60 * 60_000))
 
-const monitorSilenceTimer = setInterval(
+const monitorSilenceTimer = IS_STANDBY ? null : setInterval(
   () => {
     pruneTimestampMap(lastSendByDest)
     pruneTimestampMap(lastIncomingByMonitorJid)
@@ -1730,7 +1809,7 @@ const monitorSilenceTimer = setInterval(
   },
   MONITOR_SILENCE_CHECK_INTERVAL_MS,
 )
-monitorSilenceTimer.unref?.()
+monitorSilenceTimer?.unref?.()
 
 const WA_LIFECYCLE = Object.freeze({
   INITIALIZING: 'initializing',
@@ -2980,6 +3059,20 @@ async function processSendJob(job) {
       await finishSendJob(job, { ok: false, error: 'queue_cleared' })
       return
     }
+    // Feature 017 (revisão crítica, item 1): destino de OUTRO aplicativo
+    // (`tg:`) nunca é enviado pelo WhatsApp. Sem esta trava ele falhava aqui
+    // dentro com 3 tentativas e espera, segurando a fila serial e a vez dos
+    // outros grupos. Descarta na hora, sem tentar de novo e sem reservar vez.
+    // Destino do WhatsApp nunca entra neste ramo.
+    if (deliveryNetworkOfDestinationId(job.destJid) !== DELIVERY_NETWORK.WHATSAPP) {
+      logger.warn({ destJid: job.destJid, logId: job.logId, type: job.type }, 'Destino de outro aplicativo chegou à fila do WhatsApp; descartado sem envio')
+      await db.messageLog.update({
+        where: { id: job.logId },
+        data: { status: 'skipped', errorMsg: 'skip:destino_outro_aplicativo', sentAt: new Date() },
+      }).catch(() => {})
+      await finishSendJob(job, { ok: false, error: 'other_delivery_network' })
+      return
+    }
     await db.messageLog.update({
       where: { id: job.logId },
       // sentAt estampado ao ENTRAR em 'sending' para o watchdog de envios presos
@@ -3700,9 +3793,9 @@ async function startBot() {
 }
 
 async function startBotInner() {
-  if (!sendBackend) sendBackend = await createSendBackend()
+  if (!IS_STANDBY && !sendBackend) sendBackend = await createSendBackend()
   await getConfig()
-  if (!interruptedSendLogsMarked) {
+  if (!IS_STANDBY && !interruptedSendLogsMarked) {
     interruptedSendLogsMarked = true
     await markInterruptedSendLogs()
     await reprocessRestartFailures().catch(err => {
@@ -3999,6 +4092,9 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // durável de "esta conta já conectou alguma vez" (mesmo usado por
       // `waEverConnected` nos gatilhos de e-mail). Precisa vir antes, senão a
       // mensagem de boas-vindas do piloto reenviaria em toda reconexão.
+      if (IS_STANDBY) {
+        await handleStandbyOpen({ phone })
+      } else {
       const hadPhoneBeforeThisOpen = Boolean(
         (await db.waSession.findUnique({ where: { userId }, select: { phone: true } }).catch(() => null))?.phone,
       )
@@ -4019,6 +4115,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
       ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever no boot'))
       maybeSendSelfWelcomeMessage({ phone, sock, hadPhoneBefore: hadPhoneBeforeThisOpen }).catch(() => {})
+      }
     }
 
     if (connection === 'close') {
@@ -4918,6 +5015,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // core/conversionScheduler.js — não voltar a `Promise.all` sobre a lista
       // inteira. Ordem é preservada porque a substituição no texto casa por URL
       // original, não por índice em conversions[].
+      // Teto de tempo da Awin para a mensagem inteira (R2): vários links da
+      // Awin saem um de cada vez; passou do teto, o resto sai com link longo.
+      const awinDeadline = Date.now() + AWIN_MESSAGE_BUDGET_MS
       const linkResults = await convertPerPlatformSerially(links, async ({ platform, url }) => {
         if (!enabledPlatforms.has(platform)) {
           logger.info({ platform }, 'Plataforma desabilitada — pulando')
@@ -4945,7 +5045,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         }
 
         try {
-          const conversionResult = await convertLink(platform, url, cfg.credentials)
+          const conversionResult = await convertLink(platform, url, cfg.credentials, platform === 'awin' ? { deadline: awinDeadline } : undefined)
           if (!conversionResult) {
             await recordConversionIssue({ platform, url, jid, text, reason: `Conversor de ${credentialValidation.label} não retornou link convertido. Confira se as credenciais estão válidas.` })
             return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
@@ -5323,6 +5423,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               linkConvertido: primary.converted || primary.url || '',
               imagem: null,
               produto: { titulo: null, preco: null },
+              // Fatia 4: o histórico do outro aplicativo mostra a loja e o
+              // link de origem, e a caixa de saída aplica a MESMA janela
+              // anti-repetição deste destino (cupom: janela curta).
+              historico: { loja: primary.platform ?? null, linkOriginal: primary.url ?? null, origem: jid },
+              janelaRepeticaoMs: effectiveDedupWindowMs,
             },
           }).catch(err => logger.warn({ err: err?.message, destJid, deliveryNetwork: destDeliveryNetwork }, 'Falha ao enfileirar hand-off multicanal'))
           continue
@@ -5945,6 +6050,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     logger.info({ type, count: messages.length }, 'messages.upsert recebido')
     markUpsertReceived()
+    // Prontidão: o socket recebe (e o Baileys confirma), mas nada é espelhado.
+    if (IS_STANDBY) return
     connectionIntake = noteUpsert(connectionIntake, type, messages.length)
     if (type !== 'notify' && type !== 'append') return
     const cutoff = Date.now() - INCOMING_MAX_AGE_MS
@@ -6258,7 +6365,15 @@ async function shutdown(code = 0, { exit = registerProcessHandlers } = {}) {
 if (registerProcessHandlers) process.once('SIGTERM', () => { void shutdown(0) })
 if (registerProcessHandlers) process.once('SIGINT', () => { void shutdown(0) })
 
+// Prontidão só atende o ciclo de vida do socket; comando de negócio (envio,
+// broadcast, canais…) vai sempre para o processo ativo (chave = userId).
+const STANDBY_IPC_TYPES = new Set(['stop', 'requestPairingCode', 'listGroups', 'metrics'])
+
 const handleMessage = async msg => {
+  if (IS_STANDBY && msg?.type && !STANDBY_IPC_TYPES.has(msg.type)) {
+    if (msg.requestId) sendIpc({ type: msg.type, requestId: msg.requestId, data: null, error: 'Número de prontidão não executa este comando' })
+    return
+  }
   if (msg?.type === 'stop') {
     logger.info('Bot parando por solicitação do manager')
     await shutdown(0)
@@ -6397,6 +6512,28 @@ const handleMessage = async msg => {
     let queued = 0
     const errors = []
     for (const jid of msg.jids) {
+      // Feature 017 (revisão crítica, item 1): defesa em profundidade — a API
+      // já separa por aplicativo, mas destino de outro aplicativo que chegue
+      // aqui vai para a caixa de saída, nunca para o socket.
+      const broadcastDeliveryNetwork = deliveryNetworkOfDestinationId(jid)
+      if (broadcastDeliveryNetwork !== DELIVERY_NETWORK.WHATSAPP) {
+        const handedOff = await enqueueDeliveryOutbox({
+          userId,
+          deliveryNetwork: broadcastDeliveryNetwork,
+          destinationId: jid,
+          sourceId: broadcastSourceGroup(msg.options),
+          offer: {
+            texto: msg.text,
+            linkConvertido: '',
+            imagem: msg.options?.imageUrl ? { url: msg.options.imageUrl } : null,
+            produto: { titulo: null, preco: null },
+            historico: { origem: broadcastSourceGroup(msg.options), loja: 'broadcast' },
+          },
+        }).catch(() => null)
+        if (handedOff) queued++
+        else errors.push({ jid, error: 'error:delivery_outbox_unavailable' })
+        continue
+      }
       let log
       try {
         log = await db.messageLog.create({

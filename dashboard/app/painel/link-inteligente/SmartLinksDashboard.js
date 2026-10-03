@@ -1,5 +1,6 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
+import { DELIVERY_NETWORK, deliveryNetworkOfDestinationId } from '../../../../src/core/delivery/networks.js'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainel, usePainelHeader } from '../PainelShell'
@@ -165,7 +166,7 @@ function SmartLinksLive() {
   const load = useCallback(async () => {
     try {
       const [{ links, planActive }, groups] = await Promise.all([api.smartLinks(), api.groups()])
-      const postGroups = (Array.isArray(groups) ? groups : []).filter(g => g.role === 'post' && (g.kind ?? 'group') === 'group')
+      const postGroups = (Array.isArray(groups) ? groups : []).filter(g => g.role === 'post' && (g.kind ?? 'group') === 'group' && deliveryNetworkOfDestinationId(g.waJid) === DELIVERY_NETWORK.WHATSAPP)
       setState({ loading: false, error: null, links, postGroups, planActive: planActive !== false })
     } catch (err) {
       setState(s => ({ ...s, loading: false, error: err?.message || 'Não foi possível carregar os links.' }))

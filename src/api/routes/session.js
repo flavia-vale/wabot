@@ -12,6 +12,8 @@ import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
 import { resolveClientVisibleState, DEFAULT_CLIENT_GRACE_MS } from '../../core/clientVisibleSessionState.js'
 import { anchorTrialOnFirstConnection } from '../../domain/painel/trialAnchorApply.js'
 import { STANDARD_TRIAL_DAYS, requestPasswordResetForEmail } from './auth.js'
+import { trackAnalyticsEvent } from '../../analytics.js'
+import { SESSION_TELEMETRY_EVENT } from '../../domain/admin/sessionTelemetry.js'
 
 // Subprotocolos aceitos no handshake do WebSocket do QR. São TOKENS do HTTP
 // (RFC 6455 §4.1): não aceitam espaço. O nome vigente é 'espelhagrupos-auth';
@@ -125,6 +127,21 @@ export async function loadWaGroupsWithRecovery(userId, deps = {}) {
 
 const sessionService = appContainer.services.session
 
+// Revisão C6 (multi-servidor): `lifecycle='moving_node'` só é gravado por
+// scripts/mover-conta-no.mjs enquanto o login da conta é copiado para outro
+// servidor. Ligar o robô (ou pedir código, que LIMPA o login) no meio da cópia
+// estragaria a mudança. Nenhum fluxo de hoje grava esse valor: sem impacto.
+export const MOVING_NODE_LIFECYCLE = 'moving_node'
+const MOVING_NODE_REFUSAL = {
+  error: 'Sua conta está sendo transferida para outro servidor. Isso leva poucos minutos — tente de novo daqui a pouco.',
+  code: 'WA_SESSION_MOVING',
+  retryable: true,
+}
+async function isMovingNode(userId) {
+  const row = await db.waSession.findUnique({ where: { userId }, select: { lifecycle: true } }).catch(() => null)
+  return row?.lifecycle === MOVING_NODE_LIFECYCLE
+}
+
 export async function sessionRoutes(app) {
   app.post('/start', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
@@ -133,6 +150,7 @@ export async function sessionRoutes(app) {
     if (!validation.ok) return reply.code(validation.statusCode).send({ error: validation.error })
 
     const previousSession = await db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true } }).catch(() => null)
+    if (previousSession?.lifecycle === MOVING_NODE_LIFECYCLE) return reply.code(409).send(MOVING_NODE_REFUSAL)
     const running = Boolean(await isRunning(userId))
     if (running) {
       // Em modo remote, a API pode ver o worker como "rodando" enquanto o
@@ -362,6 +380,7 @@ function parseBlockNoticeForClient(raw) {
     const normalizedResult = normalizePairingPhone(phone)
     if (!normalizedResult.ok) return reply.code(400).send({ error: normalizedResult.message })
     const normalized = normalizedResult.phone
+    if (await isMovingNode(userId)) return reply.code(409).send(MOVING_NODE_REFUSAL)
     // O worker recicla o socket + limpa AUTH_DIR atomicamente ao receber a IPC
     // 'requestPairingCode', então só precisamos garantir que o processo worker
     // esteja vivo pra receber a mensagem.
@@ -439,16 +458,13 @@ function parseBlockNoticeForClient(raw) {
     const userId = req.user.sub
     const { stage = 'unknown', event = 'unknown', detail = null, elapsedSec = null } = req.body ?? {}
     req.log.info({ userId, stage, event, detail, elapsedSec }, 'Session telemetry')
-    await db.adminAuditLog.create({
-      data: {
-        actorUserId: userId,
-        targetUserId: userId,
-        action: 'session.telemetry',
-        resource: 'wa_session',
-        resourceId: userId,
-        after: JSON.stringify({ stage, event, detail, elapsedSec }),
-        reason: 'dashboard_session_observability',
-      },
+    // Telemetria de uso NÃO é auditoria: vai para AnalyticsEvent, nunca para
+    // AdminAuditLog (que guarda ação de admin por 180 dias). Medido em
+    // 2026-10-02: 75 % da tabela de auditoria era esta linha.
+    await trackAnalyticsEvent({
+      userId,
+      event: SESSION_TELEMETRY_EVENT,
+      metadata: { stage, event, detail, elapsedSec },
     }).catch(() => {})
     return reply.code(202).send({ ok: true })
   })

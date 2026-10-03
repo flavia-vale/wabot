@@ -148,6 +148,10 @@ export const ANALYTICS_EVENTS = new Set([
   // Flapping de socket (closes 500/428/408 repetidos) que disparou o cooldown
   // longo — fonte raiz do spam de "A sincronização foi concluída".
   'ops_wa_flap_cooldown',
+  // Feature 017 (multicanal): redução de formato e estado do robô único.
+  'ops_delivery_degraded',
+  'ops_delivery_network_down',
+  'ops_delivery_network_throttled',
   // badSession (500) repetido sem conexão estável → auth limpo p/ re-pareamento.
   'ops_wa_bad_session_reset',
   // Quedas periódicas de sessão estável (ex.: 500/428/408 a cada ~50min) que
@@ -181,6 +185,10 @@ export const ANALYTICS_EVENTS = new Set([
   'ops_wa_chat_drop_quarantine',
   'ops_wa_reception_blind',
   'ops_wa_reception_self_heal',
+  // Telemetria da tela Conexão WhatsApp do painel da cliente (etapa/evento/
+  // detalhe/segundos). Saiu de AdminAuditLog em 2026-10-02: era 75 % daquela
+  // tabela sem ser auditoria. Lida por GET /api/admin/session-telemetry.
+  'session_telemetry',
   // Piloto de reforço de ativação (2026-09-23): mensagem de boas-vindas pelo
   // próprio WhatsApp na 1ª conexão de conta do piloto (ver
   // src/core/selfWelcomeMessage.js). Cada evento é uma vez que o robô mandou —

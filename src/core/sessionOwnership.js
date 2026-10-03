@@ -37,7 +37,9 @@ const BLOCKED_CODES = new Set(['403'])
 const CLIENT_ACTION_EVENTS = new Set(['disconnect_terminal', 'auth_reset'])
 const STOP_EVENTS = new Set(['manual_stop_requested'])
 
-export const DEFAULT_HEARTBEAT_STALE_MS = 5 * 60_000
+import { HEARTBEAT_FRESH_MS } from '../domain/session/sessionLiveness.js'
+
+export const DEFAULT_HEARTBEAT_STALE_MS = HEARTBEAT_FRESH_MS
 
 export function resolveSessionOwner({
   status = 'disconnected',

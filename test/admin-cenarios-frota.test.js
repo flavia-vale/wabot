@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs'
 
 const adminRoute = readFileSync(new URL('../src/api/routes/admin.js', import.meta.url), 'utf8')
 const adminPage = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
-const onlinePage = readFileSync(new URL('../dashboard/app/admin/online/page.js', import.meta.url), 'utf8')
+const fichaPage = readFileSync(new URL('../dashboard/app/admin/clientes/[id]/page.js', import.meta.url), 'utf8')
 
 test('a rota expõe os cinco cenários da frota', () => {
   assert.match(adminRoute, /async function buildFleetScenarios/)
@@ -23,7 +23,7 @@ test('o cenário "sem receber" vem do sinal durável de recepção cega', () => 
   assert.match(adminRoute, /ops_wa_reception_blind/)
 })
 
-test('a aba online aceita filtro por cenário', () => {
+test('a rota online segue aceitando filtro por cenário', () => {
   assert.match(adminRoute, /scenarioUserIds/)
   assert.match(adminRoute, /if \(scenarioUserIds && !scenarioUserIds\.has\(row\.id\)\) return false/)
 })
@@ -33,18 +33,19 @@ test('os conjuntos de usuários por cenário NÃO vazam na resposta', () => {
   assert.match(adminRoute, /const \{ byScenario: _byScenario, blindDetailByUser: _blindDetailByUser, \.\.\.scenarioCounts \}/)
 })
 
-test('os cards de cenário estão na primeira tela e são clicáveis', () => {
+test('os cards de cenário estão na primeira tela e os acionáveis levam à caixa Hoje', () => {
   assert.match(adminPage, /Sem receber/)
   assert.match(adminPage, /Caindo demais/)
   assert.match(adminPage, /Cliente teve que agir/)
   assert.match(adminPage, /Fonte dessincronizada/)
   assert.doesNotMatch(adminPage, /Offline acumulado 24h/)
-  assert.match(adminPage, /function openScenario/)
+  assert.match(adminPage, /router\.push\('\/admin\/hoje\?motivo=robo'\)/)
+  assert.match(adminPage, /router\.push\('\/admin\/hoje\?motivo=cega'\)/)
 })
 
-test('o drill-down mostra a linha do tempo e separa quem voltou sozinho', () => {
-  assert.match(onlinePage, /Linha do tempo das quedas/)
-  assert.match(onlinePage, /voltou sozinho/)
-  assert.match(onlinePage, /o cliente teve que agir/)
-  assert.match(onlinePage, /Parado até o cliente agir/)
+test('a seção Robô da ficha mostra a linha do tempo e separa quem voltou sozinho', () => {
+  assert.match(fichaPage, /Linha do tempo das quedas/)
+  assert.match(fichaPage, /voltou sozinho/)
+  assert.match(fichaPage, /o cliente teve que agir/)
+  assert.match(fichaPage, /Parado até a cliente agir/)
 })

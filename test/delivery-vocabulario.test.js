@@ -96,11 +96,25 @@ const RESERVED_WORD_RES = [
   { re: /\bplataforma\b/i, label: 'plataforma' },
 ]
 
+// Única exceção: o cliente HTTP do Telegram precisa escrever o NOME DO CAMPO
+// do protocolo (`chat_id`) para conversar com ele. É fio, não tela — nada
+// deste arquivo chega à cliente. Só esse termo, só nesse arquivo.
+const PROTOCOL_FIELD_EXCEPTIONS = new Map([
+  [path.join('src', 'delivery', 'telegram', 'api.js'), /\bchat_id\b/g],
+])
+
+function withoutProtocolFields(file, source) {
+  for (const [suffix, re] of PROTOCOL_FIELD_EXCEPTIONS) {
+    if (file.endsWith(suffix)) return source.replace(re, ' ')
+  }
+  return source
+}
+
 test('nenhum arquivo novo desta feature usa jargão técnico que a cliente não pode ler', () => {
   const files = existingFiles(NEW_SURFACE_DIRS)
   assert.ok(files.length > 0, 'esperava encontrar arquivos novos desta feature para varrer')
   for (const file of files) {
-    const source = stripComments(readFileSync(file, 'utf8'))
+    const source = withoutProtocolFields(file, stripComments(readFileSync(file, 'utf8')))
     for (const re of TECH_JARGON_RES) {
       assert.doesNotMatch(source, re, `${path.relative(repoRoot, file)}: termo técnico banido encontrado no código (${re})`)
     }

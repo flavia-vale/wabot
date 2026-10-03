@@ -41,6 +41,14 @@ model User {
   createdAt              DateTime  @default(now())
 
   waSession             WaSession?
+  // Vários números por conta (docs/rca/multi-numero.md, Fase 1). O número 1
+  // continua sendo `waSession` (intocado); extras moram em WaExtraSession.
+  // `activeWaSlot` = qual número envia agora (1 = o principal); trocar é um
+  // único UPDATE com guarda, então nunca há dois números ativos.
+  waExtraSessions       WaExtraSession[]
+  extraNumbers          Int       @default(0)
+  activeWaSlot          Int       @default(1)
+  waSlotSwitchedAt      DateTime?
   waConnectionEvents    WaConnectionEvent[]
   groups                Group[]
   smartLinks            SmartLink[]
@@ -117,6 +125,29 @@ model WaSession {
 
   @@index([status, lastHeartbeatAt])
   @@index([nodeId])
+}
+
+// Números extras da conta (slot >= 2). Mesmos campos de estado de WaSession;
+// a chave do robô é `<userId>~n<slot>` (src/domain/session/sessionKey.js).
+// Tabela separada de propósito: WaSession.userId é @unique e a relação 1:1
+// User.waSession é usada em dezenas de lugares — o número 1 não muda nada.
+model WaExtraSession {
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slot               Int
+  phone              String?
+  status             String    @default("disconnected")
+  lifecycle          String    @default("idle")
+  nodeId             String?
+  lastHeartbeatAt    DateTime?
+  lastDisconnectCode String?
+  blockNotice        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([userId, slot])
+  @@index([status, lastHeartbeatAt])
 }
 
 // Histórico de qual conta conectou qual número de WhatsApp.
@@ -1700,6 +1731,21 @@ model DeliveryOutbox {
 // memória não sobreviveria a um restart da API). Populada só na Fatia 5
 // (Telegram como origem) — a tabela nasce nesta fatia para o schema já
 // acomodar a origem sem migração destrutiva futura.
+// Feature 017, Fatia 3: ligação da conta com um aplicativo de robô único.
+// `linkCode` vai no link "adicionar o robô ao grupo" (a cliente não copia
+// nada); `disabledAt` = aplicativo desligado pela cliente, nada apagado.
+model DeliveryNetworkLink {
+  id              String    @id @default(cuid())
+  userId          String
+  deliveryNetwork String
+  linkCode        String    @unique
+  disabledAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, deliveryNetwork])
+}
+
 model DeliveryInboxSeen {
   id              String   @id @default(cuid())
   deliveryNetwork String

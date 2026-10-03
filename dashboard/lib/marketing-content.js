@@ -233,7 +233,7 @@ export const DEFAULT_LANDING_PLANS = [
     period: '30 dias',
     desc: 'Espelhamento, conversão de links, criação de ofertas e agendamento.',
     cta: 'Assinar Basic',
-    features: ['Espelhamento de grupos', 'Conversão de links de 6 lojas (Shopee, Mercado Livre, Amazon, SHEIN, Magalu e AliExpress)', 'Card de oferta clicável', 'Mensagem reescrita do seu jeito', 'Envio imediato ou agendado', 'Relatórios com histórico completo'],
+    features: ['Espelhamento de grupos', 'Conversão de links de 6 lojas (Shopee, Mercado Livre, Amazon, SHEIN, Magalu e AliExpress)', 'Card de oferta clicável', 'Mensagem reescrita do seu jeito', 'Envio imediato ou agendado', 'Relatórios com histórico completo', 'Uma mensagem do Espelha Grupos a cada 50 envios no seu grupo (o Pro não tem)'],
   },
   {
     id: 'pro',

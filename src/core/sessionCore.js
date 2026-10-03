@@ -1,6 +1,7 @@
 /**
  * [PROTECTED_CORE]: Não modifique a lógica interna. Se precisar de novos comportamentos, use Decorators ou Extensões na camada externa.
  */
+import { listResumableStandbySessions } from './standbySessions.js'
 import { fork } from 'child_process'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
@@ -28,6 +29,11 @@ export async function resumePersistedBots(db, log = console) {
     where: buildResurrectionWhere({ includeReconnecting: resolveIncludeReconnecting() }),
     select: { userId: true, status: true, lifecycle: true },
   })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: resolveIncludeReconnecting() }))
+  // Número reserva (prontidão) volta junto — lista vazia com a flag desligada.
+  sessions.push(...await listResumableStandbySessions(db, { includeReconnecting: resolveIncludeReconnecting() }).catch(err => {
+    log.warn?.({ err: err?.message }, 'Falha ao listar números de prontidão para retomar')
+    return []
+  }))
   let started = 0; let skipped = 0
   for (const session of sessions) {
     if (bots.has(session.userId)) { skipped++; continue }
@@ -63,6 +69,7 @@ export function startSessionHealthMonitor(db, log = console) {
     where: buildResurrectionWhere({ includeReconnecting: resolveIncludeReconnecting() }),
     select: { userId: true, status: true, lifecycle: true },
   })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: resolveIncludeReconnecting() }))
+    persisted.push(...await listResumableStandbySessions(db, { includeReconnecting: resolveIncludeReconnecting() }).catch(() => []))
     for (const s of persisted) if (!bots.has(s.userId)) startBot(s.userId)
   }
 

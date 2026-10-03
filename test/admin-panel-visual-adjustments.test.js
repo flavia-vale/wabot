@@ -1,9 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 const adminPage = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
-const onlinePage = readFileSync(new URL('../dashboard/app/admin/online/page.js', import.meta.url), 'utf8')
 const customersPage = readFileSync(new URL('../dashboard/app/admin/clientes/page.js', import.meta.url), 'utf8')
 
 test('a visão de imagem das ofertas vive no Início, não numa página à parte', () => {
@@ -22,11 +21,11 @@ test('a página de automações some e o limite passa a ser campo do cliente', (
   assert.match(customerHistory, /adminAutomationQuotaUpdate/)
 })
 
-test('cards removidos não aparecem no início, na aba online nem na página online', () => {
+test('cards removidos não aparecem no início e a página online não existe mais', () => {
   for (const label of ['Acesso vencido', 'Precisam de QR novo', 'Offline acumulado 24h', 'WA desconectado']) {
     assert.doesNotMatch(adminPage, new RegExp(`label="${label}"`))
   }
-  assert.doesNotMatch(onlinePage, /label="Alertas desconectados"/)
+  assert.ok(!existsSync(new URL('../dashboard/app/admin/online/page.js', import.meta.url)), 'a página /admin/online foi apagada (G2)')
 })
 
 test('lista de clientes apresenta o vencimento em dias', () => {

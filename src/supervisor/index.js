@@ -12,7 +12,11 @@
  * Acoplamento com API é apenas via Redis. Reiniciar API não toca os workers.
  */
 
+import { accountIdFromSessionKey } from '../domain/session/sessionKey.js'
+import { listResumableStandbySessions } from '../core/standbySessions.js'
 import 'dotenv/config'
+import os from 'os'
+import fs from 'fs'
 import { Worker } from 'bullmq'
 import Redis from 'ioredis'
 
@@ -28,6 +32,7 @@ import { createReloadConfigHandler } from './commandHandlers.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
 import { createOwnerLease } from './ownerLease.js'
+import { buildNodeIdentity, decideNodeBoot } from './bootGuard.js'
 import { createRedisClock } from './redisClock.js'
 import { createShardProcessController } from './shardProcessController.js'
 import { createShardOwnershipCoordinator } from '../core/shardOwnershipCoordinator.js'
@@ -37,8 +42,10 @@ import {
   createNodeOwnershipCache,
   isNodeRoutingEnabled,
   isOwnerLeaseEnabled,
+  nodeIdWhere,
   ownsLegacyQueue,
   resolveSupervisorNodeId,
+  shouldActLocally,
 } from './nodeRouting.js'
 import {
   COMMAND,
@@ -56,6 +63,7 @@ import {
   commandQueueName,
   encodeEvent,
   heartbeatKey,
+  identityKey,
   isCommandStale,
   isKnownCommand,
   lastEventCacheTtlSeconds,
@@ -123,6 +131,11 @@ if (NODE_ROUTING) {
     logger.warn({ shardCount: SHARD_COUNT, nodeId: NODE_ID }, 'SUPERVISOR_NODE_ROUTING ligado: SHARD_COUNT/SHARD_INDEX são IGNORADOS para posse de sessão (vale WaSession.nodeId)')
   }
 }
+// Identidade desta máquina como nó (revisão C3). Só usada com roteamento.
+const NODE_IDENTITY = buildNodeIdentity({
+  hostname: os.hostname(),
+  machineId: (() => { try { return fs.readFileSync('/etc/machine-id', 'utf8') } catch { return '' } })(),
+})
 const SHARD_TAG = `shard-${SHARD_INDEX + 1}-of-${SHARD_COUNT}`
 // Chaves dos contadores por nó (o leitor soma por prefixo, então segue valendo).
 const COUNTER_TAG = NODE_ROUTING ? `${SHARD_TAG}:${NODE_ID}` : SHARD_TAG
@@ -153,8 +166,45 @@ if (!supervisorManagesSessions(SUPERVISOR_MODE)) {
   }
   process.once('SIGTERM', () => standbyShutdown('SIGTERM'))
   process.once('SIGINT', () => standbyShutdown('SIGINT'))
+} else if (NODE_ROUTING) {
+  // Revisão C3/C4: com roteamento, confere ANTES de criar os consumidores de
+  // fila se este processo pode mesmo ser o nó. Flag off: caminho de sempre.
+  void guardThenStartRemoteSupervisor()
 } else {
   startRemoteSupervisor()
+}
+
+async function guardThenStartRemoteSupervisor() {
+  let existing = null
+  const probe = new Redis(REDIS_URL, buildRedisOptions('supervisor-boot-guard', { lazyConnect: false, maxRetriesPerRequest: 3 }))
+  probe.on('error', () => {})
+  try {
+    existing = await probe.get(identityKey(NODE_ID))
+    if (existing && existing !== NODE_IDENTITY) {
+      // Pode ser a identidade de uma máquina que acabou de morrer: espera a
+      // chave vencer (mesmo TTL do heartbeat) antes de concluir colisão.
+      logger.warn({ nodeId: NODE_ID, existing, own: NODE_IDENTITY }, 'boot: outro servidor aparece como este nó — aguardando a chave vencer antes de decidir')
+      await new Promise(resolve => setTimeout(resolve, (SUPERVISOR_HEARTBEAT_TTL_SECONDS + 5) * 1000))
+      existing = await probe.get(identityKey(NODE_ID))
+    }
+  } catch (err) {
+    // Falha aberta: sem Redis o supervisor não funciona de qualquer forma, e o
+    // erro de conexão aparece logo adiante, no fluxo normal.
+    logger.warn({ err: err?.message }, 'boot: não consegui ler a identidade do nó — seguindo')
+    existing = null
+  } finally {
+    try { await probe.quit() } catch {}
+  }
+  const verdict = decideNodeBoot({ nodeId: NODE_ID, databaseUrl: process.env.DATABASE_URL, ownIdentity: NODE_IDENTITY, existingIdentity: existing })
+  if (verdict.ok) return startRemoteSupervisor()
+  // ESPERA (não sai: sair viraria loop de restart do pm2). Não liga robô, não
+  // consome fila, não escreve heartbeat — a API e o vigia veem o nó "fora".
+  const say = () => logger.fatal({ nodeId: NODE_ID, reason: verdict.reason, event: 'supervisor_boot_blocked' }, `bot-supervisor BLOQUEADO: ${verdict.message}`)
+  say()
+  const timer = setInterval(say, 60_000)
+  const stop = signal => { clearInterval(timer); logger.info({ signal }, 'bot-supervisor (bloqueado) encerrando'); process.exit(0) }
+  process.once('SIGTERM', () => stop('SIGTERM'))
+  process.once('SIGINT', () => stop('SIGINT'))
 }
 
 function startRemoteSupervisor() {
@@ -267,7 +317,21 @@ const nodeOwnership = createNodeOwnershipCache({
 const OWNER_LEASE = isOwnerLeaseEnabled(process.env)
 const ownerLease = OWNER_LEASE ? createOwnerLease({ redis: publisher, nodeId: NODE_ID, logger }) : null
 
-function belongsToThisShard(userId) {
+// Número reserva (docs/rca/multi-numero.md): com roteamento por nó, só retoma a
+// prontidão de conta cujo número ativo mora neste nó.
+async function listStandbyForThisNode() {
+  return listResumableStandbySessions(db, {
+    includeReconnecting: RESURRECT_RECONNECTING,
+    accountSessionWhere: NODE_ROUTING ? nodeIdWhere(NODE_ID) : null,
+  }).catch(err => {
+    logger.warn({ err: err?.message, shard: SHARD_TAG }, 'Falha ao listar números de prontidão para retomar')
+    return []
+  })
+}
+
+function belongsToThisShard(sessionKey) {
+  // Número reserva (<conta>~n2) mora no shard/nó da CONTA.
+  const userId = accountIdFromSessionKey(sessionKey) ?? sessionKey
   if (!NODE_ROUTING) return shouldHandleUserOnShard(userId, SHARD_COUNT, SHARD_INDEX)
   const cached = nodeOwnership.peek(userId)
   return cached === null ? true : cached === NODE_ID
@@ -358,7 +422,9 @@ async function startBotWithBridge(userId) {
 }
 
 function stopBotWithBridge(userId) {
-  if (!belongsToThisShard(userId)) {
+  // C1: com roteamento, robô que roda AQUI é parado mesmo se o banco disser
+  // que o dono é outro nó (é assim que se desfaz um "robô em dois servidores").
+  if (!shouldActLocally({ routing: NODE_ROUTING, owns: belongsToThisShard(userId), runningHere: sessionCore.isRunning(userId) })) {
     void noteSessionOwnerMismatch(userId, 'stopBot')
     return false
   }
@@ -379,7 +445,9 @@ const COMMAND_HANDLERS = {
     return startBotWithBridge(userId)
   },
   [COMMAND.STOP_BOT]: ({ userId }) => shardOwnedUsers.has(userId) ? pocShard.stop(userId) : stopBotWithBridge(userId),
-  [COMMAND.IS_RUNNING]: ({ userId }) => belongsToThisShard(userId) ? (shardOwnedUsers.has(userId) ? pocShard.isRunning(userId) : sessionCore.isRunning(userId)) : false,
+  // C1: com roteamento, responde a verdade LOCAL (robô ligado aqui = true,
+  // mesmo fora da posse) — senão "parou?" respondia "sim" com o robô vivo.
+  [COMMAND.IS_RUNNING]: ({ userId }) => shouldActLocally({ routing: NODE_ROUTING, owns: belongsToThisShard(userId), runningHere: sessionCore.isRunning(userId) }) ? (shardOwnedUsers.has(userId) ? pocShard.isRunning(userId) : sessionCore.isRunning(userId)) : false,
   [COMMAND.LIST_RUNNING_BOTS]: async () => {
     const dedicatedUsers = sessionCore.listRunningBots()
     const shardUsers = []
@@ -558,6 +626,9 @@ async function renewHeartbeat() {
       await publisher.set(bootedAtKey(NODE_ID), String(SUPERVISOR_BOOTED_AT_MS), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
       // Teto DESTE nó: a API lê daqui em vez de presumir o mesmo teto para todos.
       await publisher.set(capacityKey(NODE_ID), String(MAX_SESSIONS_PER_PROCESS), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
+      // Qual MÁQUINA é este nó (revisão C3): outro servidor com o mesmo nome
+      // vê isto no boot e fica em espera em vez de religar as mesmas contas.
+      await publisher.set(identityKey(NODE_ID), NODE_IDENTITY, 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
     }
     // Chaves legadas: sempre com a flag off; com ela on, só o 'n1' (a API ainda
     // em modo legado lê estas — dois nós não podem sobrescrever a mesma chave).
@@ -619,9 +690,12 @@ async function healthMonitorTick() {
       where: buildResumeWhere({ base: buildResurrectionWhere({ includeReconnecting: RESURRECT_RECONNECTING }), nodeId: NODE_ID, routing: NODE_ROUTING }),
       select: { userId: true, status: true, lifecycle: true, ownerInstance: true },
     })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: RESURRECT_RECONNECTING }))
+      .concat(await listStandbyForThisNode())
     for (const s of persisted) {
-      if (NODE_ROUTING) nodeOwnership.set(s.userId, NODE_ID) // o filtro do banco já provou a posse
-      if (!belongsToThisShard(s.userId)) continue
+      // Prontidão (<conta>~n2) segue o nó/shard da CONTA, nunca o hash da chave.
+      const shardKey = s.accountId ?? s.userId
+      if (NODE_ROUTING && !s.accountId) nodeOwnership.set(s.userId, NODE_ID) // o filtro do banco já provou a posse
+      if (!belongsToThisShard(shardKey)) continue
       if (String(s.lifecycle).startsWith('moving') || String(s.lifecycle).startsWith('restoring') || String(s.ownerInstance).startsWith('shard:')) continue
       if (sessionCore.isRunning(s.userId)) continue
       // Restart budget: sessão que morre repetidamente (auth_info corrompido,
@@ -705,12 +779,15 @@ async function boot() {
           where: buildResumeWhere({ base: buildResurrectionWhere({ includeReconnecting: RESURRECT_RECONNECTING }), nodeId: NODE_ID, routing: NODE_ROUTING }),
           select: { userId: true, status: true, lifecycle: true, ownerInstance: true },
         })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: RESURRECT_RECONNECTING }))
+          .concat(await listStandbyForThisNode())
       : []
     if (!AUTO_RESUME) logger.info({ shard: SHARD_TAG }, 'AUTO_START_WHATSAPP_SESSIONS=false — supervisor não faz auto-resume (só comandos manuais)')
     attempted = persisted.length
     for (const s of persisted) {
-      if (NODE_ROUTING) nodeOwnership.set(s.userId, NODE_ID) // o filtro do banco já provou a posse
-      if (!belongsToThisShard(s.userId)) continue
+      // Prontidão (<conta>~n2) segue o nó/shard da CONTA, nunca o hash da chave.
+      const shardKey = s.accountId ?? s.userId
+      if (NODE_ROUTING && !s.accountId) nodeOwnership.set(s.userId, NODE_ID) // o filtro do banco já provou a posse
+      if (!belongsToThisShard(shardKey)) continue
       if (String(s.lifecycle).startsWith('moving') || String(s.lifecycle).startsWith('restoring') || String(s.ownerInstance).startsWith('shard:')) continue
       try {
         if (await startBotWithBridge(s.userId)) started++
@@ -772,6 +849,7 @@ async function shutdown(signal) {
     try { await publisher.del(heartbeatKey(NODE_ID)) } catch {}
     try { await publisher.del(bootedAtKey(NODE_ID)) } catch {}
     try { await publisher.del(capacityKey(NODE_ID)) } catch {}
+    try { if ((await publisher.get(identityKey(NODE_ID))) === NODE_IDENTITY) await publisher.del(identityKey(NODE_ID)) } catch {}
     if (ownerLease) for (const userId of sessionCore.listRunningBots()) { try { await ownerLease.release(userId) } catch {} }
   }
   if (!NODE_ROUTING || ownsLegacyQueue(NODE_ID)) {

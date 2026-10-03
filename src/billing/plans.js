@@ -47,12 +47,26 @@ export function isTrialActive(userOrPlan = {}, now = new Date()) {
   return normalizePlan(plan) === PLAN_IDS.TRIAL && isAccessActive(accessExpiresAt, now)
 }
 
+function isPaidAccessCurrent(userOrPlan, now) {
+  if (typeof userOrPlan === 'string') return true
+  const raw = userOrPlan?.accessExpiresAt
+  if (raw === null || raw === undefined || raw === '') return true
+  const expiresAt = raw instanceof Date ? raw : new Date(raw)
+  if (Number.isNaN(expiresAt.getTime())) return true
+  return expiresAt.getTime() > (now instanceof Date ? now.getTime() : Number(now))
+}
+
 export function getPlanEntitlements(userOrPlan = {}, { now = new Date() } = {}) {
   const plan = typeof userOrPlan === 'string' ? userOrPlan : userOrPlan?.plan
   const normalizedPlan = normalizePlan(plan)
   const trialActive = typeof userOrPlan === 'string' ? false : isTrialActive(userOrPlan, now)
   const hasProLikeAccess = [PLAN_IDS.PRO, PLAN_IDS.PREMIUM].includes(normalizedPlan) || trialActive
   const hasPremiumAccess = normalizedPlan === PLAN_IDS.PREMIUM
+  // Feature 017 (revisão crítica, item 3): o multicanal roda na API (caixa de
+  // saída, filas), sem depender da sessão do WhatsApp — que é quem barra conta
+  // vencida hoje. Sem conferir a data, um Premium vencido continuava
+  // publicando no Telegram de graça. Sem data (liberação manual) = em dia.
+  const premiumAccessActive = hasPremiumAccess && isPaidAccessCurrent(userOrPlan, now)
 
   return {
     plan: normalizedPlan,
@@ -84,7 +98,7 @@ export function getPlanEntitlements(userOrPlan = {}, { now = new Date() } = {}) 
     // juntos (ver Fase 5 do plano desta feature); a decisão comercial final
     // é da dona do produto, registrada em
     // specs/017-multicanal-telegram-instagram/plan.md, "Questões em aberto".
-    canUseMultiNetwork: hasPremiumAccess,
+    canUseMultiNetwork: premiumAccessActive,
   }
 }
 
@@ -221,18 +235,20 @@ export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {
   const featureCode = String(feature || FEATURE_CODES.CHANNELS)
   if (featureCode === FEATURE_CODES.INSTAGRAM_STORIES) {
     return {
-      error: 'A publicação de Stories no Instagram estará disponível em um novo plano acima do Pro.',
+      error: 'A publicação de Stories no Instagram faz parte do plano Premium. Para liberar, escolha o Premium na tela Plano.',
       code: 'FEATURE_REQUIRES_PREMIUM',
       feature: FEATURE_CODES.INSTAGRAM_STORIES,
       requiredPlan: PLAN_IDS.PREMIUM,
+      upgradePath: '/painel/plano',
     }
   }
   if (featureCode === FEATURE_CODES.MULTI_NETWORK) {
     return {
-      error: 'O multicanal (WhatsApp + Telegram) estará disponível em um novo plano acima do Pro.',
+      error: 'Enviar suas ofertas também para o Telegram faz parte do plano Premium. Para liberar, escolha o Premium na tela Plano.',
       code: 'FEATURE_REQUIRES_PREMIUM',
       feature: FEATURE_CODES.MULTI_NETWORK,
       requiredPlan: PLAN_IDS.PREMIUM,
+      upgradePath: '/painel/plano',
     }
   }
 

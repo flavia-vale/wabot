@@ -402,6 +402,16 @@ export async function affiliateRoutes(app) {
       where: { id },
       data: { status: 'approved', approvedAt: new Date(), rejectedAt: null, adminNotes: null },
     })
+    // Q8 da auditoria (2026-10-02): aprovar afiliado muda quem recebe
+    // comissão — fica na trilha, como as outras escritas de dinheiro.
+    await writeAdminAuditLog(req, {
+      action: 'admin.affiliate.approve',
+      resource: 'affiliateProfile',
+      resourceId: id,
+      targetUserId: profile.user?.id ?? null,
+      before: { status: profile.status },
+      after: { status: 'approved' },
+    })
     // US5 (009-affiliate-improvements-r1): notificação fire-and-forget,
     // best-effort e no-op sem SMTP (nunca derruba a aprovação).
     notifyAffiliateApproved({ db, user: profile.user, logger: req.log }).catch(() => {})
@@ -420,6 +430,15 @@ export async function affiliateRoutes(app) {
     const updated = await db.affiliateProfile.update({
       where: { id },
       data: { status: 'rejected', rejectedAt: new Date(), approvedAt: null, adminNotes: adminNotes || null },
+    })
+    await writeAdminAuditLog(req, {
+      action: 'admin.affiliate.reject',
+      resource: 'affiliateProfile',
+      resourceId: id,
+      targetUserId: profile.user?.id ?? null,
+      before: { status: profile.status },
+      after: { status: 'rejected' },
+      reason: adminNotes || null,
     })
     // US5: notificação fire-and-forget, best-effort e no-op sem SMTP.
     notifyAffiliateRejected({ db, user: profile.user, adminNotes: adminNotes || null, logger: req.log }).catch(() => {})
@@ -634,6 +653,9 @@ export async function affiliateRoutes(app) {
       return reply.code(400).send({ error: 'payoutRequestsEnabled deve ser um booleano' })
     }
 
+    // Q8 da auditoria: regra de comissão muda dinheiro de todo afiliado —
+    // guarda o antes/depois.
+    const settingsBefore = await db.affiliateSettings.findUnique({ where: { id: 1 } }).catch(() => null)
     const updated = await db.affiliateSettings.upsert({
       where: { id: 1 },
       create: {
@@ -664,6 +686,13 @@ export async function affiliateRoutes(app) {
         ...(payoutRequestsEnabled !== undefined && { payoutRequestsEnabled }),
       },
     })
+    await writeAdminAuditLog(req, {
+      action: 'admin.affiliate.settings.update',
+      resource: 'affiliateSettings',
+      resourceId: '1',
+      before: settingsBefore,
+      after: updated,
+    })
     return updated
   })
 
@@ -688,7 +717,21 @@ export async function affiliateRoutes(app) {
       if (commissionPercentOverride !== undefined) data.commissionPercentOverride = commissionPercentOverride === null ? null : Number(commissionPercentOverride)
       if (commissionRecurringPercentOverride !== undefined) data.commissionRecurringPercentOverride = commissionRecurringPercentOverride === null ? null : Number(commissionRecurringPercentOverride)
 
+      const before = await db.affiliateProfile.findUnique({
+        where: { id },
+        select: { userId: true, commissionPercentOverride: true, commissionRecurringPercentOverride: true },
+      })
+      if (!before) return reply.code(404).send({ error: 'Afiliado não encontrado' })
       const profile = await db.affiliateProfile.update({ where: { id }, data })
+      // Q8 da auditoria: percentual especial de comissão é dinheiro — fica na trilha.
+      await writeAdminAuditLog(req, {
+        action: 'admin.affiliate.commission_override',
+        resource: 'affiliateProfile',
+        resourceId: id,
+        targetUserId: before.userId ?? null,
+        before: { commissionPercentOverride: before.commissionPercentOverride, commissionRecurringPercentOverride: before.commissionRecurringPercentOverride },
+        after: data,
+      })
       return { profile: { ...profile, pixKey: decryptCredential(profile.pixKey) } }
     } catch (err) {
       if (err.code === 'P2025') return reply.code(404).send({ error: 'Afiliado não encontrado' })

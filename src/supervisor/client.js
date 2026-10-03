@@ -7,6 +7,7 @@
  * erro apenas quando uma rota tentar de fato falar com o supervisor.
  */
 
+import { accountIdFromSessionKey, isExtraSessionKey } from '../domain/session/sessionKey.js'
 import { EventEmitter } from 'events'
 import logger from '../logger.js'
 import { buildRedisOptions } from '../core/redisFactory.js'
@@ -27,11 +28,14 @@ import {
   heartbeatKey,
   isValidNodeId,
   lastEventKey,
+  PLACEMENT_RESERVATION_TTL_SECONDS,
+  DUAL_OWNER_STATUS_KEY,
+  placementReservationKey,
   resolveRedisUrl,
 } from './protocol.js'
 import { isNodeRoutingEnabled, resolveKnownNodeIds } from './nodeRouting.js'
 import { createRedisClock } from './redisClock.js'
-import { findDualOwners, pickNodeForNewSession, resolveSessionNodeId, shouldPlaceSession } from './placement.js'
+import { findDualOwners, pickNodeForNewSession, resolveSessionNodeId, shouldPlaceSession, shouldReplaceUnpaired, withReservations } from './placement.js'
 
 // P2-2: pub/sub é versionado (decodeEvent rejeita versão incompatível). Antes
 // isso era um descarte SILENCIOSO — num rolling deploy com PROTOCOL_VERSION
@@ -77,6 +81,7 @@ function warnOnProtocolMismatch(raw) {
  * @property {()=>number} stopAllBots
  * @property {()=>Promise<boolean>} isSupervisorAlive
  * @property {()=>Promise<number|null>} getSupervisorBootedAtMs
+ * @property {()=>Promise<number|null>} getSupervisorHeartbeatAtMs
  * @property {()=>Promise<void>} close
  */
 
@@ -221,18 +226,67 @@ export function createSupervisorClient({
   async function resolveNodeId(userId) {
     const hit = nodeOfUser.get(userId)
     if (hit && hit.expiresAt > now()) return hit.nodeId
-    const row = await (await getDb()).waSession.findUnique({ where: { userId }, select: { nodeId: true } })
+    // Número reserva (<conta>~n2) mora no nó da CONTA (docs/rca/multi-numero.md).
+    const row = await (await getDb()).waSession.findUnique({ where: { userId: accountIdFromSessionKey(userId) ?? userId }, select: { nodeId: true } })
     const nodeId = resolveSessionNodeId(row)
     nodeOfUser.set(userId, { nodeId, expiresAt: now() + nodeCacheTtlMs })
     return nodeId
   }
 
+  // Revisão C5: API com a flag ligada + supervisor n1 no modo ANTIGO (desfazer
+  // na ordem errada, ou supervisor ainda sem a versão nova). O n1 antigo só
+  // escreve o heartbeat legado e só lê a fila legada: em vez de "servidor fora"
+  // para o painel inteiro, os comandos do n1 vão pela fila legada.
+  let lastLegacyFallbackWarnAt = 0
+  async function nodeLiveness(nodeId) {
+    if (!publisherCheck) {
+      try { await init() } catch { return { alive: false, legacy: false } }
+    }
+    try {
+      if (await publisherCheck.get(heartbeatKey(nodeId))) return { alive: true, legacy: false }
+      if (nodeId === DEFAULT_NODE_ID && await publisherCheck.get(SUPERVISOR_HEARTBEAT_KEY)) {
+        if (now() - lastLegacyFallbackWarnAt > 60_000) {
+          lastLegacyFallbackWarnAt = now()
+          logger.warn({ event: 'node_routing_legacy_fallback' }, 'node_routing_legacy_fallback: o supervisor n1 está no modo antigo — comandos do n1 indo pela fila legada (desligue SUPERVISOR_NODE_ROUTING na API ou religue o supervisor com a flag)')
+        }
+        return { alive: true, legacy: true }
+      }
+      return { alive: false, legacy: false }
+    } catch {
+      return { alive: false, legacy: false }
+    }
+  }
+
+  let legacyChannel = null
+  function getLegacyChannel() {
+    if (!legacyChannel) {
+      legacyChannel = (async () => {
+        await init()
+        const { Queue, QueueEvents } = deps
+        const connection = { url: redisUrl, maxRetriesPerRequest: null, enableReadyCheck: false }
+        const q = new Queue(COMMAND_QUEUE, { connection })
+        const qe = new QueueEvents(COMMAND_QUEUE, { connection })
+        await qe.waitUntilReady()
+        return { queue: q, queueEvents: qe }
+      })().catch(err => { legacyChannel = null; throw err })
+    }
+    return legacyChannel
+  }
+
   async function sendToNode(nodeId, name, payload, timeoutMs) {
     // Falha rápida: nó sem heartbeat = ninguém vai ler a fila. Sem isso cada
     // clique esperava o timeout cheio (5-45 s) e o job ficava parado na fila.
-    if (!(await isSupervisorAlive(nodeId))) {
+    const liveness = await nodeLiveness(nodeId)
+    if (liveness.legacy) {
+      const { queue: q, queueEvents: qe } = await getLegacyChannel()
+      return enqueue(q, qe, name, payload, timeoutMs)
+    }
+    if (!liveness.alive) {
       const err = new Error('O servidor dos seus robôs não está respondendo agora. Nossa equipe já foi avisada — tente de novo em alguns minutos.')
       err.code = 'WA_NODE_UNAVAILABLE'
+      // C10: indisponibilidade conhecida (503), não falha da API — o tratador de
+      // erros responde 503 com frase genérica e o classificador não a conta como incidente.
+      err.statusCode = 503
       err.nodeId = nodeId
       throw err
     }
@@ -246,8 +300,29 @@ export function createSupervisorClient({
       return enqueue(queue, queueEvents, name, payload, timeoutMs)
     }
     // Comando sem userId (ex.: métricas do shard POC) vai para o 'n1'.
-    const target = nodeId ?? (payload?.userId ? await resolveNodeId(payload.userId) : DEFAULT_NODE_ID)
-    return sendToNode(target, name, payload, timeoutMs)
+    if (nodeId || !payload?.userId) return sendToNode(nodeId ?? DEFAULT_NODE_ID, name, payload, timeoutMs)
+    // Revisão C8: logo depois de uma conta mudar de servidor, o cache (até 45 s)
+    // ainda aponta o antigo — que recusa ("Session owner mismatch") ou diz que
+    // não há robô para parar. Relê o banco e, se o dono mudou, tenta UMA vez no
+    // certo. Sem risco de duplicar: a recusa acontece ANTES de executar.
+    const first = await resolveNodeId(payload.userId)
+    const retryOnNewOwner = async (fallback) => {
+      nodeOfUser.delete(payload.userId)
+      const second = await resolveNodeId(payload.userId)
+      if (second === first) return fallback()
+      return sendToNode(second, name, payload, timeoutMs)
+    }
+    let result
+    try {
+      result = await sendToNode(first, name, payload, timeoutMs)
+    } catch (err) {
+      if (!/Session owner mismatch/.test(String(err?.message))) throw err
+      return retryOnNewOwner(() => { throw err })
+    }
+    if ((name === COMMAND.STOP_BOT || name === COMMAND.IS_RUNNING) && result === false) {
+      return retryOnNewOwner(() => result)
+    }
+    return result
   }
 
   // Lê o último valor cacheado de um evento (QR/STATUS) gravado pelo supervisor
@@ -273,11 +348,11 @@ export function createSupervisorClient({
     }
     try {
       if (nodeRouting) {
-        if (nodeId) return Boolean(await publisherCheck.get(heartbeatKey(nodeId)))
+        if (nodeId) return (await nodeLiveness(nodeId)).alive
         // Sem nodeId: vivo só se TODOS os nós conhecidos estão vivos — um nó
         // morto não pode ficar escondido atrás dos outros.
-        const flags = await Promise.all(nodeIds.map(id => publisherCheck.get(heartbeatKey(id))))
-        return flags.every(Boolean)
+        const flags = await Promise.all(nodeIds.map(id => nodeLiveness(id)))
+        return flags.every(f => f.alive)
       }
       const value = await publisherCheck.get(SUPERVISOR_HEARTBEAT_KEY)
       return Boolean(value)
@@ -330,18 +405,89 @@ export function createSupervisorClient({
     }
   }
 
+  // Momento (epoch ms) da ÚLTIMA batida do supervisor (o valor do heartbeat é
+  // `Date.now()` de quem renovou), ou null se a chave não existe (supervisor
+  // morto: o TTL de 30 s expirou). Com roteamento por nó: a batida mais ANTIGA,
+  // e qualquer nó sem chave devolve null (um nó morto não se esconde).
+  async function getSupervisorHeartbeatAtMs(nodeId = null) {
+    if (!publisherCheck) {
+      try { await init() } catch { return null }
+    }
+    const parse = value => {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+    }
+    try {
+      if (nodeRouting) {
+        if (nodeId) return parse(await publisherCheck.get(heartbeatKey(nodeId)))
+        const beats = (await Promise.all(nodeIds.map(id => publisherCheck.get(heartbeatKey(id))))).map(parse)
+        return beats.every(Boolean) ? Math.min(...beats) : null
+      }
+      return parse(await publisherCheck.get(SUPERVISOR_HEARTBEAT_KEY))
+    } catch {
+      return null
+    }
+  }
+
   // ---- Superfície compatível com src/core/sessionCore.js ----
 
   // Comandos fire-and-forget assíncronos: aguardam ack do supervisor.
   // Sessão nova (sem nodeId): escolhe o nó vivo com mais vagas e GRAVA o
   // nodeId ANTES de enviar o START_BOT — assim um segundo comando concorrente
   // já enxerga o dono. Devolve null quando nenhum nó pode receber.
+  async function measureNodes() {
+    const counts = await listRunningBotsByNode()
+    const capacities = await getNodeCapacities()
+    const reserved = {}
+    await Promise.all(nodeIds.map(async id => {
+      try { reserved[id] = Number(await publisherCheck?.get(placementReservationKey(id))) || 0 } catch { reserved[id] = 0 }
+    }))
+    const nodes = await Promise.all(nodeIds.map(async id => ({
+      nodeId: id,
+      alive: await isSupervisorAlive(id),
+      running: counts[id] ?? null,
+      // Teto publicado pelo próprio nó; sem chave NÃO se presume (nó nunca é escolhido).
+      max: capacities[id] ?? null,
+    })))
+    return withReservations(nodes, reserved)
+  }
+
+  // Reserva a vaga escolhida por 2 min (C9): cadastros simultâneos não caem
+  // todos no mesmo nó só porque a contagem ainda não mudou. Best-effort.
+  async function reservePlacement(nodeId) {
+    try {
+      const key = placementReservationKey(nodeId)
+      await publisherCheck.incr(key)
+      await publisherCheck.expire(key, PLACEMENT_RESERVATION_TTL_SECONDS)
+    } catch {}
+  }
+
   async function ensureNodePlacement(userId) {
+    // Número reserva nunca escolhe nó próprio: segue o nó da conta.
+    if (isExtraSessionKey(userId)) return resolveNodeId(userId)
     const database = await getDb()
     const row = await database.waSession.findUnique({ where: { userId }, select: { nodeId: true, phone: true, status: true, lifecycle: true } })
     // Regra única: nulo = 'n1'. Conta antiga (já pareada) NUNCA é recolocada.
     if (!shouldPlaceSession(row)) {
       const existing = resolveSessionNodeId(row)
+      // C9: conta nunca pareada presa a um nó fora do ar/lotado pode ir para outro.
+      if (nodeIds.length > 1 && row && !row.phone && row.status === 'disconnected') {
+        const nodes = await measureNodes()
+        const current = nodes.find(n => n.nodeId === existing)
+        if (shouldReplaceUnpaired({ row, node: current ?? { alive: false } })) {
+          const chosen = pickNodeForNewSession({ nodes: nodes.filter(n => n.nodeId !== existing) })
+          if (chosen) {
+            const r = await database.waSession.updateMany({ where: { userId, nodeId: row.nodeId }, data: { nodeId: chosen } })
+            if (r?.count) {
+              await reservePlacement(chosen)
+              logger.warn({ userId, from: existing, to: chosen, event: 'session_replaced_unpaired' }, 'conta nunca pareada trocou de servidor (o dela estava fora do ar ou lotado)')
+            }
+            const final = resolveSessionNodeId(await database.waSession.findUnique({ where: { userId }, select: { nodeId: true } }))
+            nodeOfUser.set(userId, { nodeId: final, expiresAt: now() + nodeCacheTtlMs })
+            return final
+          }
+        }
+      }
       nodeOfUser.set(userId, { nodeId: existing, expiresAt: now() + nodeCacheTtlMs })
       return existing
     }
@@ -349,16 +495,7 @@ export function createSupervisorClient({
     if (nodeIds.length === 1) {
       chosen = nodeIds[0] // um nó só: nada a decidir nem a medir
     } else {
-      const counts = await listRunningBotsByNode()
-      const capacities = await getNodeCapacities()
-      const nodes = await Promise.all(nodeIds.map(async id => ({
-        nodeId: id,
-        alive: await isSupervisorAlive(id),
-        running: counts[id] ?? null,
-        // Teto publicado pelo próprio nó; sem chave NÃO se presume (nó nunca é escolhido).
-        max: capacities[id] ?? null,
-      })))
-      chosen = pickNodeForNewSession({ nodes })
+      chosen = pickNodeForNewSession({ nodes: await measureNodes() })
     }
     if (!chosen) {
       logger.warn({ userId, nodeIds }, 'Nenhum nó do supervisor disponível para a sessão nova — start recusado')
@@ -377,6 +514,7 @@ export function createSupervisorClient({
       }
     }
     const final = resolveSessionNodeId(await database.waSession.findUnique({ where: { userId }, select: { nodeId: true } }))
+    if (nodeIds.length > 1 && final === chosen) await reservePlacement(final)
     nodeOfUser.set(userId, { nodeId: final, expiresAt: now() + nodeCacheTtlMs })
     return final
   }
@@ -387,8 +525,10 @@ export function createSupervisorClient({
     if (!nodeId) return false // sem nó disponível = recusa, classificada pela API
     return send(COMMAND.START_BOT, { userId }, { nodeId })
   }
-  const stopBot = userId => send(COMMAND.STOP_BOT, { userId })
-  const isRunning = userId => send(COMMAND.IS_RUNNING, { userId })
+  // `opts.nodeId` (só com roteamento): fala com um nó ESPECÍFICO em vez do dono
+  // no banco — usado pelo desfazer da mudança de servidor (revisão C6).
+  const stopBot = (userId, opts = {}) => send(COMMAND.STOP_BOT, { userId }, { nodeId: opts?.nodeId ?? null })
+  const isRunning = (userId, opts = {}) => send(COMMAND.IS_RUNNING, { userId }, { nodeId: opts?.nodeId ?? null })
   // Split-brain: o mesmo robô ligado em dois nós. É o único ponto que enxerga
   // os dois nós juntos, então a deduplicação por Set NÃO pode apagar o sinal.
   // Parar o robô do nó errado é opt-in (SUPERVISOR_DUAL_OWNER_AUTOSTOP=1).
@@ -410,6 +550,19 @@ export function createSupervisorClient({
     }
   }
 
+  // Revisão C11: varredura explícita (a API roda a cada 5 min, só com a flag).
+  // Grava o resultado no Redis para o vigia ler; nó sem resposta não conta.
+  async function checkDualOwners() {
+    const lists = await listRunningByNode()
+    const dual = findDualOwners(lists)
+    await reportDualOwners(lists)
+    try {
+      if (!publisherCheck) await init()
+      await publisherCheck.set(DUAL_OWNER_STATUS_KEY, JSON.stringify({ at: now(), count: dual.length, users: dual.slice(0, 10) }), 'EX', 900)
+    } catch {}
+    return dual
+  }
+
   // Fan-out aos nós VIVOS. Cada valor é a lista de userIds do nó, ou null se
   // aquele nó não respondeu. Nó morto (sem heartbeat) não entra: não roda robô.
   async function listRunningByNode() {
@@ -426,7 +579,17 @@ export function createSupervisorClient({
     return result
   }
   // Contagem por nó: { n1: 12, n2: null } (null = não medido; NUNCA 0).
+  // Revisão C13: com roteamento, /metrics, o aviso de vagas e a escolha de nó
+  // perguntam a TODOS os nós; um cache de 15 s evita uma rajada de comandos
+  // por raspagem. Só o resultado completo (sem nó "não medido") é guardado.
+  let byNodeCache = { at: 0, value: null }
   async function listRunningBotsByNode() {
+    if (nodeRouting && byNodeCache.value && now() - byNodeCache.at < 15_000) return { ...byNodeCache.value }
+    const value = await listRunningBotsByNodeFresh()
+    if (nodeRouting && Object.values(value).every(v => v !== null)) byNodeCache = { at: now(), value }
+    return value
+  }
+  async function listRunningBotsByNodeFresh() {
     if (!nodeRouting) {
       try {
         const list = await send(COMMAND.LIST_RUNNING_BOTS, {})
@@ -517,6 +680,9 @@ export function createSupervisorClient({
     try { await publisherCheck?.quit() } catch {}
     try { await queueEvents?.close() } catch {}
     try { await queue?.close() } catch {}
+    if (legacyChannel) {
+      try { const { queue: q, queueEvents: qe } = await legacyChannel; await qe?.close(); await q?.close() } catch {}
+    }
     for (const channel of nodeChannels.values()) {
       try {
         const { queue: q, queueEvents: qe } = await channel
@@ -534,8 +700,12 @@ export function createSupervisorClient({
     onQR, onStatus, getLastQR,
     resumePersistedBots, startSessionHealthMonitor, stopAllBots,
     // extras
-    isSupervisorAlive, getSupervisorBootedAtMs, getLastEvent, close, _events: events,
+    isSupervisorAlive, getSupervisorBootedAtMs, getSupervisorHeartbeatAtMs, getLastEvent, close, _events: events,
     moveSessionToShard, rollbackSessionFromShard, getShardMetrics,
     resolveNodeId, nodeIds, nodeRouting, getNodeCapacities,
+    forgetNode: userId => { nodeOfUser.delete(userId) },
+    checkDualOwners,
+    // Antes não era exportado: o contador do /metrics ficava sempre 0.
+    getDualOwnerTotal: () => dualOwnerTotal,
   })
 }

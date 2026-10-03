@@ -10,7 +10,7 @@ const adminRoute = readFileSync(new URL('../src/api/routes/admin.js', import.met
 const sessionRoute = readFileSync(new URL('../src/api/routes/session.js', import.meta.url), 'utf8')
 const dispatcher = readFileSync(new URL('../src/email/dispatcher.js', import.meta.url), 'utf8')
 const policy = readFileSync(new URL('../src/emailTriggers/lifecyclePolicy.js', import.meta.url), 'utf8')
-const onlinePage = readFileSync(new URL('../dashboard/app/admin/online/page.js', import.meta.url), 'utf8')
+const fichaPage = readFileSync(new URL('../dashboard/app/admin/clientes/[id]/page.js', import.meta.url), 'utf8')
 const adminPage = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
 
 test('a rota classifica quem resolve cada desconexão', () => {
@@ -65,16 +65,16 @@ test('mas o aviso tem teto: conta parada há meses não é perseguida', () => {
   assert.match(policy, /horasDesconectado <= WHATSAPP_DESCONECTADO_MAX_HORAS/)
 })
 
-test('a tela mostra quem resolve e oferece o clique só onde ajuda', () => {
-  assert.match(onlinePage, /OWNER_META/)
-  assert.match(onlinePage, /user\.canAdminRetry && \(/)
-  assert.match(onlinePage, /Tentar reconectar/)
+test('a ficha mostra por que caiu e oferece o clique só onde ajuda', () => {
+  assert.match(fichaPage, /detail\?\.canAdminRetry && \(/)
+  assert.match(fichaPage, /Tentar reconectar/)
+  assert.match(fichaPage, /disconnectReason/)
 })
 
 test('a primeira tela destaca apenas o cenário acionável de parada', () => {
   assert.match(adminPage, /Paradas sem ninguém tentando/)
   assert.doesNotMatch(adminPage, /label="Precisam de QR novo"/)
-  assert.match(adminPage, /openScenario\('parado'\)/)
+  assert.match(adminPage, /hoje\?motivo=robo/)
 })
 
 // Causa raiz das "paradas" (RCA 2026-08-26): acesso vencido faz o próprio
@@ -96,22 +96,16 @@ test('a classificação recebe a data de acesso nas duas visões', () => {
   assert.match(adminRoute, /accessExpiresAt: session\.user\?\.accessExpiresAt \?\? null/)
 })
 
-// O admin tem DUAS telas de "online": a aba dentro do painel principal
-// (dashboard/app/admin/page.js) e a página própria (/admin/online). A primeira
-// rodada só cobriu a página própria, e por isso "quem resolve" e o botão não
-// apareciam para quem usa a aba. As duas precisam andar juntas.
-test('a ABA online do painel principal também mostra quem resolve', () => {
-  assert.match(adminPage, /OWNER_META/)
-  assert.match(adminPage, /<th className="px-3 py-2">Quem resolve<\/th>/)
+// G2: as telas "online" (aba do Início e página própria) foram apagadas. O que
+// elas faziam mora na ficha do cliente (seção Robô) e na caixa Hoje.
+test('o Início não tem mais lista online nem o botão de reconectar', () => {
+  assert.doesNotMatch(adminPage, /OWNER_META/)
+  assert.doesNotMatch(adminPage, /function reconectarCliente/)
 })
 
-test('a ABA online do painel principal também tem o botão de reconectar', () => {
-  assert.match(adminPage, /user\?\.canAdminRetry && \(/)
-  assert.match(adminPage, /function reconectarCliente\(userId\)/)
-  assert.match(adminPage, /adminOnlineReconnect/)
-})
-
-test('a ABA online do painel principal também mostra a linha do tempo', () => {
-  assert.match(adminPage, /Linha do tempo das quedas/)
-  assert.match(adminPage, /detail\.offlineEpisodes/)
+test('a seção Robô da ficha tem o botão de reconectar e a linha do tempo', () => {
+  assert.match(fichaPage, /function RoboTab/)
+  assert.match(fichaPage, /adminOnlineReconnect/)
+  assert.match(fichaPage, /Linha do tempo das quedas/)
+  assert.match(fichaPage, /detail\?\.offlineEpisodes/)
 })

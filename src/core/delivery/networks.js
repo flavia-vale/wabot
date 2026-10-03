@@ -50,9 +50,9 @@ export function __resetDeliveryNetworkRegistryForTests() {
   registry.clear()
 }
 
-// Declaração de capacidades por rede (FR-007, data-model.md §4.1). Nesta
-// fatia só o WhatsApp tem entrada real — Telegram entra na Fatia 3 e
-// Instagram permanece "declarado e indisponível" (FR-034) até a fase 2.
+// Declaração de capacidades por rede (FR-007, data-model.md §4.1). O
+// Instagram não tem entrada: o Stories dele segue o caminho próprio em
+// src/instagram/ (decisão T001, 2026-10-02).
 // `capabilities` é estático e puro: nenhuma chamada externa, é isso que
 // permite a tela decidir o que oferecer sem nenhuma rede (FR-008).
 export const CAPABILITIES = Object.freeze({
@@ -71,7 +71,35 @@ export const CAPABILITIES = Object.freeze({
     canReadSource: true,
     rateLimits: null,
   }),
+  // Fatia 3 (T044/T065). Limites de ritmo: estimativas PÚBLICAS da
+  // documentação do Telegram (~30 mensagens/s no robô inteiro, ~20 por
+  // minuto por grupo) — não são medição própria; calibrar em homologação (Q6).
+  [DELIVERY_NETWORK.TELEGRAM]: Object.freeze({
+    id: DELIVERY_NETWORK.TELEGRAM,
+    available: true,
+    displayName: 'Telegram',
+    acceptsText: true,
+    acceptsImage: true,
+    requiresImage: false,
+    acceptsButton: false,
+    acceptsClickableCard: false,
+    acceptsVideo: true,
+    acceptsWatermark: true,
+    singleDestination: false,
+    canReadSource: true,
+    rateLimits: Object.freeze({
+      globalPerSecond: 25,
+      perDestinationPerMinute: 18,
+    }),
+  }),
 })
+
+// Teto de entregas por conta em cada passada da caixa de saída (rodízio —
+// uma conta em volume alto não toma a vez das outras, FR-039).
+export function resolveFairSharePerUser(env = process.env) {
+  const n = Number.parseInt(String(env?.DELIVERY_FAIR_SHARE_PER_USER ?? ''), 10)
+  return Number.isFinite(n) && n > 0 ? n : 5
+}
 
 export function getDeliveryNetworkCapabilities(id) {
   const normalized = resolveDeliveryNetwork(id)
@@ -102,4 +130,90 @@ export function isDeliveryNetworkEnabled(id, env = process.env) {
   const normalized = resolveDeliveryNetwork(id)
   if (normalized === DELIVERY_NETWORK.WHATSAPP) return true
   return parseEnabledDeliveryNetworks(env).has(normalized)
+}
+
+// Nome de cada aplicativo como a cliente lê na tela. Diferente de
+// CAPABILITIES (que só declara rede que ENTREGA por este caminho), aqui entra
+// toda rede conhecida — o histórico precisa dar nome a qualquer linha, e o
+// nulo/desconhecido de linha antiga lê como WhatsApp (FR-027), nunca
+// "desconhecido".
+const DISPLAY_NAMES = Object.freeze({
+  [DELIVERY_NETWORK.WHATSAPP]: 'WhatsApp',
+  [DELIVERY_NETWORK.TELEGRAM]: 'Telegram',
+  [DELIVERY_NETWORK.INSTAGRAM]: 'Instagram',
+})
+
+export function deliveryNetworkDisplayName(value) {
+  return DISPLAY_NAMES[resolveDeliveryNetwork(value)]
+}
+
+// Situação de cada aplicativo na lista que a cliente vê (FR-034/US9):
+// - `disponivel`: entrega por este caminho e está ligado no servidor;
+// - `em_breve`: ainda não entrega (rede declarada, interruptor desligado ou
+//   capacidade ainda não declarada) — aparece, mas não pode ser escolhido;
+// - `tela_propria`: o Instagram Stories já funciona por um caminho próprio
+//   (src/instagram/, decisão T001 de 2026-10-02: fica como está). Aparece
+//   para a cliente saber que existe, mas é configurado na tela dele.
+// O direito de plano NUNCA tira um aplicativo da lista — só decide se ele
+// pode ser usado (`liberadoNoPlano`), para a cliente ver que o recurso existe.
+export const DELIVERY_NETWORK_STATUS = Object.freeze({
+  DISPONIVEL: 'disponivel',
+  EM_BREVE: 'em_breve',
+  TELA_PROPRIA: 'tela_propria',
+})
+
+const SEPARATE_PATH_NETWORKS = new Set([DELIVERY_NETWORK.INSTAGRAM])
+
+export function listDeliveryNetworksForAccount({ allowMultiNetwork = false, env = process.env } = {}) {
+  return Object.values(DELIVERY_NETWORK).map((id) => {
+    const caps = CAPABILITIES[id] ?? null
+    let status = DELIVERY_NETWORK_STATUS.EM_BREVE
+    if (SEPARATE_PATH_NETWORKS.has(id)) status = DELIVERY_NETWORK_STATUS.TELA_PROPRIA
+    else if (caps?.available && isDeliveryNetworkEnabled(id, env)) status = DELIVERY_NETWORK_STATUS.DISPONIVEL
+    const isWhatsapp = id === DELIVERY_NETWORK.WHATSAPP
+    return {
+      id,
+      displayName: DISPLAY_NAMES[id],
+      status,
+      selecionavel: status === DELIVERY_NETWORK_STATUS.DISPONIVEL && (isWhatsapp || allowMultiNetwork),
+      liberadoNoPlano: isWhatsapp || allowMultiNetwork,
+      capacidades: caps
+        ? {
+            aceitaBotao: caps.acceptsButton,
+            exigeImagem: caps.requiresImage,
+            aceitaVideo: caps.acceptsVideo,
+            aceitaMarcaDagua: caps.acceptsWatermark,
+            destinoUnico: caps.singleDestination,
+            leOrigem: caps.canReadSource,
+          }
+        : null,
+    }
+  })
+}
+
+// Prefixo do identificador de destino/origem de cada aplicativo que não é
+// WhatsApp (R10). Endereço do WhatsApp nunca começa assim, então a decisão
+// "por qual aplicativo sai" vem do próprio identificador gravado.
+const DESTINATION_PREFIXES = Object.freeze([
+  [DELIVERY_NETWORK.TELEGRAM, 'tg:'],
+])
+
+export function deliveryNetworkOfDestinationId(destinationId) {
+  const value = String(destinationId ?? '')
+  for (const [network, prefix] of DESTINATION_PREFIXES) {
+    if (value.startsWith(prefix)) return network
+  }
+  return DELIVERY_NETWORK.WHATSAPP
+}
+
+// Identificador canônico de um destino de outro aplicativo. Rotas antigas
+// passavam todo destino pelo normalizador do WhatsApp, que acrescentava
+// "@g.us" ("tg:-100" virava "tg:-100@g.us"). Para não perder nada já salvo
+// em filas e ofertas automáticas, qualquer sufixo "@..." é removido aqui.
+// Endereço do WhatsApp volta exatamente como veio.
+export function canonicalDestinationId(destinationId) {
+  const value = String(destinationId ?? '').trim()
+  if (deliveryNetworkOfDestinationId(value) === DELIVERY_NETWORK.WHATSAPP) return destinationId
+  const at = value.indexOf('@')
+  return at === -1 ? value : value.slice(0, at)
 }

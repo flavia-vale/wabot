@@ -27,18 +27,37 @@ import {
 const SUPPORT_PAYMENT_HELP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Estou com dificuldade no pagamento do Espelha Grupos, pode me ajudar?')}`
 
 const PAID_PLAN_IDS = ['basic', 'pro']
-const PLAN_LABELS = { trial: 'Trial', basic: 'Basic', pro: 'Pro' }
+const PLAN_LABELS = { trial: 'Trial', basic: 'Basic', pro: 'Pro', premium: 'Premium' }
 
 // Listas de recursos: fonte única em lib/planFeatures.js (a mesma da página de
 // preços). Divisão Basic/PRO de 2026-09-23 — o PRO é verde + roxo.
 const PLAN_PRESENTATION = {
   basic: { eyebrow: 'Para começar', features: BASIC_FEATURE_LIST },
   pro: { eyebrow: 'Mais completo', featured: true, features: PRO_FEATURE_LIST },
+  premium: {
+    eyebrow: 'Para ir além do WhatsApp',
+    featured: true,
+    features: [
+      'Tudo do plano Pro',
+      'Enviar suas ofertas também para o Telegram',
+      'Publicar ofertas nos Stories do Instagram',
+    ],
+  },
+}
+
+const PREMIUM_PLAN_CARD = {
+  id: 'premium',
+  name: 'Plano Premium',
+  price: 'R$99',
+  period: '/ 30 dias',
+  description: 'Tudo do Pro, mais Telegram e Stories do Instagram para suas ofertas chegarem em mais lugares.',
+  features: [],
 }
 
 const FALLBACK_PLAN_CARDS = DEFAULT_LANDING_PLANS
   .filter((plan) => PAID_PLAN_IDS.includes(plan.id))
   .map((plan) => ({ id: plan.id, name: `Plano ${plan.name}`, price: plan.price, period: plan.period, description: plan.desc, features: plan.features }))
+  .concat(PREMIUM_PLAN_CARD)
 
 function formatDate(value) {
   if (!value) return null
@@ -56,6 +75,7 @@ function formatCurrency(value) {
 function mergePlanCards(dynamicPlans = []) {
   const byId = new Map((dynamicPlans ?? []).map((plan) => [plan.id, plan]))
   return FALLBACK_PLAN_CARDS.map((fb) => {
+    if (fb.id === 'premium') return fb
     const dyn = byId.get(fb.id)
     return {
       ...fb,
@@ -291,9 +311,9 @@ export default function PlanoPage() {
       <section>
         <div style={{ marginBottom: 22 }}>
           <div className="pnl-card-title" style={{ marginBottom: 6 }}>{overview?.isActive ? 'Renove ou troque seu plano' : 'Escolha seu plano'}</div>
-          <p className="pnl-card-note">Dois planos simples, sem fidelidade. Pague por Pix ou cartão; a renovação automática é opcional e você desliga quando quiser.</p>
+          <p className="pnl-card-note">Três planos simples, sem fidelidade. Pague por Pix ou cartão; a renovação automática é opcional e você desliga quando quiser.</p>
         </div>
-        <div className="grid items-stretch gap-5 md:grid-cols-2">
+        <div className="grid items-stretch gap-5 md:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan) => {
             const presentation = PLAN_PRESENTATION[plan.id] ?? PLAN_PRESENTATION.basic
             const precoPorOferta = precosPorOferta[plan.id]
@@ -304,7 +324,7 @@ export default function PlanoPage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <p className={`text-xs font-black uppercase tracking-[0.18em] ${presentation.featured ? 'text-[#4B34A8]' : 'text-emerald-700'}`}>{presentation.eyebrow}</p>
-                  {presentation.featured && <span className="rounded-full bg-[#ECE7FA] px-3 py-1 text-xs font-bold text-[#4B34A8]">Mais escolhido</span>}
+                  {presentation.featured && <span className="rounded-full bg-[#ECE7FA] px-3 py-1 text-xs font-bold text-[#4B34A8]">{plan.id === 'premium' ? 'Mais recursos' : 'Mais escolhido'}</span>}
                 </div>
                 <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">{plan.id.toUpperCase()}</h2>
                 <div className="mt-2 flex items-end gap-1">

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const adminPageSource = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+// O card de staging saiu do Início e mora na página Operação (G2 da auditoria).
+const adminPageSource = readFileSync(new URL('../dashboard/app/admin/operacao/page.js', import.meta.url), 'utf8')
 const apiSource = readFileSync(new URL('../dashboard/lib/api.js', import.meta.url), 'utf8')
 const boundarySource = readFileSync(new URL('../dashboard/components/SectionErrorBoundary.js', import.meta.url), 'utf8')
 

@@ -1,4 +1,5 @@
 import dbDefault from '../../db.js'
+import { DELIVERY_NETWORK, deliveryNetworkOfDestinationId } from '../../core/delivery/networks.js'
 import { groupInviteCode as _groupInviteCode } from '../../manager.js'
 import { captureMemberSamplesForUser } from '../../jobs/groupMemberSamples.js'
 import { buildFeatureGateError, canUseSmartLinks, FEATURE_CODES } from '../../billing/plans.js'
@@ -35,6 +36,11 @@ export async function smartLinksRoutes(app, options = {}) {
 
   // O robô precisa ser admin: o WhatsApp só entrega o convite para admin.
   async function fetchInvite(userId, waJid) {
+    // Feature 017 (revisão crítica, item 2): grupo de outro aplicativo nunca
+    // vira consulta ao servidor do WhatsApp (o endereço `tg:` é inválido lá).
+    if (deliveryNetworkOfDestinationId(waJid) !== DELIVERY_NETWORK.WHATSAPP) {
+      return { error: 'O Link Inteligente funciona só com grupos do WhatsApp.', status: 400 }
+    }
     try {
       const data = await groupInviteCode(userId, waJid)
       const code = typeof data === 'string' ? data : data?.code

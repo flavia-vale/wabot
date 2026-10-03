@@ -27,7 +27,8 @@ test('só marca quem está conectada', () => {
 })
 
 const admin = readFileSync(new URL('../src/api/routes/admin.js', import.meta.url), 'utf8')
-const page = readFileSync(new URL('../dashboard/app/admin/online/page.js', import.meta.url), 'utf8')
+const hojePage = readFileSync(new URL('../dashboard/app/admin/hoje/page.js', import.meta.url), 'utf8')
+const filtros = readFileSync(new URL('../dashboard/lib/admin/inboxFiltros.js', import.meta.url), 'utf8')
 
 test('lista e card usam a MESMA fonte (buildFleetScenarios), sem IPC com robôs', () => {
   assert.match(admin, /const blindDetailByUser = summarizeReceptionBlindRows\(blindRows\)/)
@@ -35,10 +36,8 @@ test('lista e card usam a MESMA fonte (buildFleetScenarios), sem IPC com robôs'
   assert.match(admin, /blindDetailByUser: _blindDetailByUser, \.\.\.scenarioCounts/, 'o Map não pode vazar para o JSON de contagens')
 })
 
-test('a tabela da aba Online tem a coluna e fala em linguagem leiga', () => {
-  assert.match(page, /<th className="px-3 py-3">Recebendo<\/th>/)
-  assert.match(page, /<ReceptionCell blind=\{user\.receptionBlind\} \/>/)
-  assert.match(page, /sem receber/)
-  const celula = page.slice(page.indexOf('function ReceptionCell'), page.indexOf('function OnlineCard'))
-  assert.doesNotMatch(celula.replace(/blind[.=]|\{ blind \}|blind\./g, ''), />[^<]*(blind|ops_wa|upsert)/i, 'texto visível sem jargão')
+test('a caixa Hoje filtra "Sem receber" em linguagem leiga (a coluna Recebendo da aba Online saiu)', () => {
+  assert.match(filtros, /rotulo: 'Sem receber', motivos: \['cega-agora'\]/)
+  assert.match(hojePage, /FILTROS_MOTIVO/)
+  assert.doesNotMatch(filtros.replace(/'cega-agora'/g, ''), />[^<]*(blind|ops_wa|upsert)/i, 'texto visível sem jargão')
 })

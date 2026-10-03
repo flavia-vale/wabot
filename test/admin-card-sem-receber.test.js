@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const read = (rel) => readFileSync(join(__dirname, '..', rel), 'utf8')
 const adminRoute = read('src/api/routes/admin.js')
+const liveness = read('src/domain/session/sessionLiveness.js')
 const adminPage = read('dashboard/app/admin/page.js')
 const cardHelp = read('dashboard/lib/admin/cardHelp.js')
 const botWorker = read('src/bot-worker.js')
@@ -18,7 +19,7 @@ const botWorker = read('src/bot-worker.js')
 // próprias, cobertas aqui.
 
 test('a janela do admin é maior que o throttle com que o worker emite o sinal', () => {
-  const janela = adminRoute.match(/ADMIN_RECEPTION_BLIND_WINDOW_MS \|\| ([^)]+)\)/)
+  const janela = liveness.match(/ADMIN_RECEPTION_BLIND_WINDOW_MS \|\| ([^)]+)\)/)
   const throttle = botWorker.match(/WA_RECEPTION_SIGNAL_THROTTLE_MS \|\| ([^)]+)\)/)
   assert.ok(janela, 'default da janela do admin não encontrado')
   assert.ok(throttle, 'default do throttle do worker não encontrado')

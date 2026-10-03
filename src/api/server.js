@@ -47,7 +47,8 @@ import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
 import { BOTS_STALE_MS, decideBotsReadiness } from '../ops/botsReadiness.js'
-import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, listRunningBots, listRunningBotsByNode, getNodeCapacities, getSupervisorNodesSnapshot, getDualOwnerTotal, SUPERVISOR_MODE } from '../manager.js'
+import { buildHealthPayload, withTimeout } from '../ops/healthPayload.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, getSupervisorHeartbeatAtMs, listRunningBots, listRunningBotsByNode, getNodeCapacities, getSupervisorNodesSnapshot, getDualOwnerTotal, checkDualOwners, SUPERVISOR_MODE } from '../manager.js'
 import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
 import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/staleWorkerCodeGuard.js'
 import { getCodeChangedAtMs } from '../ops/codeVersion.js'
@@ -59,7 +60,11 @@ import { runCredentialExpirySweep } from '../credentialExpiry/sweep.js'
 import { isNodeRoutingEnabled, resolveKnownNodeIds } from '../supervisor/nodeRouting.js'
 import { nodesWithoutHeartbeat } from '../supervisor/preflight.js'
 import { runSessionCapacityAlertSweep } from '../ops/sessionCapacityAlertSweep.js'
+import { runAdminOpsAlertSweep } from '../ops/adminOpsAlertSweep.js'
 import { sendMail, isEmailConfigured } from '../email/mailer.js'
+import * as sessionManager from '../manager.js'
+import { createNumberFailoverSweep } from '../jobs/numberFailover.js'
+import { notifyNumberSwitched } from '../emailTriggers/events.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
 import { emailPrefsRoutes } from './routes/emailPrefs.js'
 import { shopeeSalesRoutes } from './routes/shopeeSales.js'
@@ -77,6 +82,8 @@ import { storyAssetRoutes } from './routes/storyAssets.js'
 import { createStoryAssetStorageFromEnv } from '../instagram/storage/localStoryAssetStorage.js'
 import { startStoryAssetCleanup } from '../instagram/storage/storyAssetService.js'
 import { instagramRoutes } from './routes/instagram.js'
+import { deliveryNetworksRoutes } from './routes/deliveryNetworks.js'
+import { startTelegramDelivery } from '../delivery/telegram/runtime.js'
 import { TRUSTED_PROXIES } from './trustedProxies.js'
 import { createSessionVersionCache, isLoginToken } from '../auth/sessionVersion.js'
 import { installEgressGuard } from './egressGuard.js'
@@ -176,6 +183,9 @@ async function verifyDatabase() {
 const MESSAGE_LOG_RETENTION_DAYS = process.env.LOG_RETENTION_DAYS === undefined ? 90 : Number(process.env.LOG_RETENTION_DAYS)
 const WEBHOOK_RETENTION_DAYS = process.env.WEBHOOK_RETENTION_DAYS === undefined ? 30 : Number(process.env.WEBHOOK_RETENTION_DAYS)
 const ADMIN_AUDIT_RETENTION_DAYS = process.env.ADMIN_AUDIT_RETENTION_DAYS === undefined ? 180 : Number(process.env.ADMIN_AUDIT_RETENTION_DAYS)
+// Telemetria da tela Conexão WhatsApp (AnalyticsEvent `session_telemetry`):
+// ~1.500 linhas/semana em prod; sem poda, AnalyticsEvent cresce para sempre.
+const SESSION_TELEMETRY_RETENTION_DAYS = process.env.SESSION_TELEMETRY_RETENTION_DAYS === undefined ? 90 : Number(process.env.SESSION_TELEMETRY_RETENTION_DAYS)
 const LOG_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 async function cleanupByRetentionDays(model, dateField, retentionDays, logLabel) {
@@ -195,6 +205,14 @@ async function cleanupOldLogs() {
   await cleanupByRetentionDays(db.adminAuditLog, 'createdAt', ADMIN_AUDIT_RETENTION_DAYS, 'Admin audit logs').catch(err => {
     app.log.error({ err: err.message }, 'Falha na limpeza automática de admin audit logs')
   })
+  if (Number.isFinite(SESSION_TELEMETRY_RETENTION_DAYS) && SESSION_TELEMETRY_RETENTION_DAYS > 0) {
+    const cutoff = new Date(Date.now() - SESSION_TELEMETRY_RETENTION_DAYS * 24 * 60 * 60 * 1000)
+    await db.analyticsEvent.deleteMany({ where: { event: 'session_telemetry', createdAt: { lt: cutoff } } }).then((result) => {
+      if (result.count > 0) app.log.info({ deleted: result.count, cutoff }, 'Telemetria de sessão removida por retenção automática')
+    }).catch(err => {
+      app.log.error({ err: err.message }, 'Falha na limpeza automática da telemetria de sessão')
+    })
+  }
   await pruneClickTracking({ db }).then(({ clicks, links }) => {
     if (clicks > 0 || links > 0) app.log.info({ clicks, links }, 'Cliques e links curtos removidos por retenção automática')
   }).catch(err => {
@@ -324,6 +342,37 @@ async function runNodeRoutingGuardTick() {
     app.log.warn({ err: err.message }, 'guarda do roteamento por nó: falha ao checar')
   }
 }
+// Revisão C11: varredura do "mesmo robô em 2 servidores" (dois sockets na mesma
+// credencial = conta caindo em loop e risco de bloqueio). Só com a flag de
+// roteamento. Detectou: log de erro + e-mail interno (cooldown 1 h). O resultado
+// também fica no Redis para o vigia. Nunca derruba nada sozinha.
+const DUAL_OWNER_SWEEP_INTERVAL_MS = Math.max(Number(process.env.DUAL_OWNER_SWEEP_INTERVAL_MS) || 5 * 60_000, 60_000)
+async function runDualOwnerSweepTick() {
+  try {
+    const dual = await checkDualOwners()
+    if (!dual?.length) return
+    sendAdminAlert({
+      db,
+      slug: 'admin_servidor_vigia',
+      key: 'dual_owner',
+      cooldownHours: 1,
+      vars: {
+        resumo: `🔴 ${dual.length} robô(s) ligado(s) em dois servidores ao mesmo tempo`,
+        detalhe: dual.map(d => `- conta ${d.userId}: ${d.nodes.join(' e ')}`).join('\n') + '\n\nO mesmo WhatsApp em dois servidores derruba a conta em loop. Pare o robô do servidor que NÃO é o dono (SUPERVISOR_DUAL_OWNER_AUTOSTOP=1 faz isso sozinho).',
+        quando: new Date().toISOString(),
+      },
+      logger: app.log,
+    }).catch(() => {})
+  } catch (err) {
+    app.log.warn({ err: err.message }, 'varredura de robô em dois servidores: falha ao checar')
+  }
+}
+function startDualOwnerSweep() {
+  if (SUPERVISOR_MODE !== 'remote' || !isNodeRoutingEnabled()) return
+  const timer = setInterval(runDualOwnerSweepTick, DUAL_OWNER_SWEEP_INTERVAL_MS)
+  timer.unref?.()
+}
+
 function startNodeRoutingGuard() {
   if (SUPERVISOR_MODE !== 'remote' || !isNodeRoutingEnabled()) return
   void runNodeRoutingGuardTick()
@@ -331,8 +380,39 @@ function startNodeRoutingGuard() {
   timer.unref?.()
 }
 
+// Avisos operacionais para a dona (pagante fora do ar, conectada sem receber,
+// envio preso). Mesmo timer do aviso de vagas: nenhum timer novo.
+//   ADMIN_OPS_ALERT_ENABLED         — 'false' desliga.
+//   ADMIN_OPS_ALERT_COOLDOWN_HOURS  — silêncio por situação (default 12h).
+async function runAdminOpsAlertTick() {
+  try {
+    const summary = await runAdminOpsAlertSweep({ db, logger: app.log })
+    if (summary.sent > 0) app.log.warn({ ...summary }, 'avisos operacionais da dona: passada concluída')
+  } catch (err) {
+    app.log.error({ err: err.message }, 'avisos operacionais da dona: passada falhou')
+  }
+}
+
+// Vários números por conta (docs/rca/multi-numero.md): troca automática para o
+// número reserva. Passada de 1 min, in-process; MULTI_NUMBER_ENABLED desligado
+// = nem consulta o banco.
+const runNumberFailoverTick = createNumberFailoverSweep({
+  db,
+  manager: sessionManager,
+  logger: app.log,
+  notify: ({ user }) => (isEmailConfigured() ? notifyNumberSwitched({ db, sendMail, user, logger: app.log }) : Promise.resolve()),
+})
+function startNumberFailoverSweep() {
+  const timer = setInterval(() => {
+    runNumberFailoverTick()
+      .then(summary => { if (summary?.switched > 0) app.log.warn({ ...summary }, 'troca automática de número: passada concluída') })
+      .catch(err => app.log.error({ err: err.message }, 'troca automática de número: passada falhou'))
+  }, 60_000)
+  timer.unref?.()
+}
+
 function startSessionCapacityAlertSweep() {
-  const timer = setInterval(runSessionCapacityAlertTick, CAPACITY_ALERT_SWEEP_INTERVAL_MS)
+  const timer = setInterval(() => { void runSessionCapacityAlertTick(); void runAdminOpsAlertTick() }, CAPACITY_ALERT_SWEEP_INTERVAL_MS)
   timer.unref?.()
 }
 
@@ -672,6 +752,7 @@ app.register(adminEmailsRoutes, { prefix: '/api/admin/emails' })
 app.register(publicRoutes, { prefix: '/api/public' })
 app.register(storyAssetRoutes, { prefix: '/api/public', storage: storyAssetStorage })
 app.register(instagramRoutes, { prefix: '/api/instagram', storage: storyAssetStorage })
+app.register(deliveryNetworksRoutes, { prefix: '/api/delivery-networks' })
 app.register(preservationRoutes, { prefix: '/api/preservation' })
 app.register(offerAutomationRoutes, { prefix: '/api/offer-automations' })
 app.register(offerAutomationReviewRoutes, { prefix: '/api/offer-automations' })
@@ -682,8 +763,18 @@ app.register(leadNurtureRoutes, { prefix: '/api/lead-nurture' })
 app.register(emailPrefsRoutes, { prefix: '/api/emails' })
 app.register(shopeeSalesRoutes, { prefix: '/api/shopee-sales' })
 
-// Liveness: processo está de pé
-app.get('/health', () => ({ ok: true }))
+// Liveness: processo está de pé. Em `remote` informa também o supervisor
+// (`supervisor: { alive, lastHeartbeatAt }`), mas o status HTTP é SEMPRE 200:
+// o smoke test do deploy bate aqui e supervisor fora do ar não pode derrubá-lo.
+// Quem decide 503 é `/ready/bots`. Ver docs/rca/deploy-e-infra.md.
+app.get('/health', async () => {
+  if (SUPERVISOR_MODE !== 'remote') return buildHealthPayload({ mode: SUPERVISOR_MODE })
+  const sinal = await withTimeout(
+    Promise.all([isSupervisorAlive(), getSupervisorHeartbeatAtMs()]).then(([alive, at]) => ({ alive, at })),
+    1500,
+  ).catch(() => null)
+  return buildHealthPayload({ mode: SUPERVISOR_MODE, supervisorAlive: sinal?.alive ?? null, heartbeatAtMs: sinal?.at ?? null })
+})
 
 // Prometheus scrape endpoint. Fora do rate limit global (allowlist), então
 // precisa de proteção própria: METRICS_TOKEN exige Authorization: Bearer;
@@ -895,7 +986,9 @@ startActivityCacheCleanup()
 startLeadNurtureSweep()
 startCredentialExpirySweep()
 startSessionCapacityAlertSweep()
+startNumberFailoverSweep()
 startNodeRoutingGuard()
+startDualOwnerSweep()
 startEmailQueueJob()
 startLifecycleEmailSweep()
 startWeeklySummarySweep()
@@ -906,6 +999,10 @@ startOfferQueueCron()
 startAwinSyncScheduler({ logger: app.log })
 startRakutenSyncScheduler({ logger: app.log })
 startGroupMemberSamplesSweep()
+// Feature 017 (multicanal): robô do Telegram dentro da API (leitor único +
+// caixa de saída). Não liga nada sem DELIVERY_NETWORKS_ENABLED incluir
+// telegram e sem o segredo do robô no .env. Exige `api` com instances: 1.
+startTelegramDelivery({ db })
 const stopDlqMaintenance = startDlqMaintenanceJob({ db })
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildRenderedOfferTemplatePreview, summarizeAutomationTemplateUsage } from '../dashboard/lib/offerTemplatePreview.js'
+import { buildRenderedOfferTemplatePreview, summarizeAutomationTemplateUsage, MISSING_COUPON_LINK_NOTICE, MISSING_GROUP_LINK_NOTICE } from '../dashboard/lib/offerTemplatePreview.js'
 import { PRESET_TEMPLATE_BODIES } from '../dashboard/lib/mobileTemplateStore.js'
 
 const POOL = {
@@ -33,6 +33,30 @@ test('prévia respeita remoção de placeholders globais do template', () => {
   assert.doesNotMatch(preview, /CTA DE TESTE/)
   assert.doesNotMatch(preview, /AVISO DE TESTE/)
   assert.match(preview, /Kit 3 Organizadores/)
+})
+
+test('prévia sem link de cupom/grupo salvo avisa para preencher em vez de mostrar link de exemplo', () => {
+  const template = { key: 'noiva', body: '👉🏻 {link}\n🎟️ Resgate os cupons aqui: {{cupomLink}}\n👥 Grupo: {{grupoLink}}' }
+  const preview = buildRenderedOfferTemplatePreview({ template, couponLink: '', groupInviteLink: '  ' })
+
+  assert.ok(preview.includes(MISSING_COUPON_LINK_NOTICE))
+  assert.ok(preview.includes(MISSING_GROUP_LINK_NOTICE))
+  assert.match(MISSING_COUPON_LINK_NOTICE, /final da página/)
+  assert.doesNotMatch(preview, /espelhagrupos\.com\.br\/cupons/)
+  assert.doesNotMatch(preview, /chat\.whatsapp\.com\/seu-grupo/)
+})
+
+test('prévia com link de cupom/grupo salvo mostra o link da cliente', () => {
+  const template = { key: 'noiva', body: '🎟️ Resgate os cupons aqui: {{cupomLink}}\n👥 Grupo: {{grupoLink}}' }
+  const preview = buildRenderedOfferTemplatePreview({
+    template,
+    couponLink: 'https://minhaloja.com/cupons',
+    groupInviteLink: 'https://chat.whatsapp.com/abc',
+  })
+
+  assert.match(preview, /Resgate os cupons aqui: https:\/\/minhaloja\.com\/cupons/)
+  assert.match(preview, /Grupo: https:\/\/chat\.whatsapp\.com\/abc/)
+  assert.ok(!preview.includes(MISSING_COUPON_LINK_NOTICE))
 })
 
 test('sumariza uso de templates por automações ativas e pausadas', () => {

@@ -708,6 +708,31 @@ Como resolver, em menos de dois minutos:
 [[botao:Abrir minhas credenciais|{{link_lojas}}]]`,
   },
   {
+    slug: 'rakuten_dados_recusados',
+    name: 'Rakuten parou de aceitar os dados de acesso',
+    description: 'Sai quando a conta Rakuten da cliente passa a ser recusada (SID, Client ID ou Client Secret trocados ou vencidos). A conversão de links da Rakuten continua por 7 dias com o que já estava guardado; as promoções param de atualizar. Revisão 2026-10-03 (R9).',
+    group: 'saude',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 7,
+    variables: [
+      { name: 'link_credenciais', description: 'Endereço da tela de credenciais', example: 'https://espelhagrupos.com.br/painel/ids-afiliada' },
+    ],
+    title: 'A Rakuten parou de aceitar seus dados',
+    subject: 'A Rakuten parou de aceitar seus dados de acesso',
+    body: `{{saudacao}} A Rakuten parou de aceitar os dados de acesso que você cadastrou. Isso costuma acontecer quando o Client Secret é trocado no portal da Rakuten.
+
+O que muda agora: as promoções da Rakuten param de atualizar. Os links das lojas da Rakuten continuam sendo convertidos por mais 7 dias com o que já estava guardado; depois disso, param.
+
+Como resolver, em menos de dois minutos:
+
+1. Entre no portal de desenvolvedores da Rakuten e copie o Client ID e o Client Secret.
+2. Aqui no nosso painel, abra "Minhas credenciais" e escolha a Rakuten.
+3. Clique em Editar, cole os dois e salve. A gente testa na hora e te diz se ficou certo.
+
+[[botao:Abrir minhas credenciais|{{link_credenciais}}]]`,
+  },
+  {
     slug: 'nao_conseguiu_conectar_sem_vaga',
     name: 'Não conseguiu conectar (servidor estava lotado)',
     description:
@@ -792,6 +817,29 @@ Para resolver agora:
 [[botao:Adicionar um grupo ao link|{{link_painel}}]]
 
 Assim que o grupo novo entrar, o link volta a mandar as pessoas para ele.`,
+  },
+  {
+    slug: 'whatsapp_reserva_assumiu',
+    name: 'Número reserva assumiu os envios',
+    description: 'Sai quando o número principal cai ou é bloqueado e o número reserva passa a enviar (vários números por conta).',
+    group: 'saude',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [{ name: 'link_whatsapp', description: 'Endereço da tela de conexão', example: 'https://espelhagrupos.com.br/painel/whatsapp' }],
+    title: 'Seu número reserva assumiu',
+    subject: 'O número reserva assumiu os envios do robô',
+    body: `{{saudacao}} O WhatsApp principal do robô caiu, e o número reserva assumiu os envios para não deixar seus grupos parados.
+
+Ele só consegue enviar nos grupos em que também está. Confira no painel se algum grupo ficou de fora.
+
+1. Abra o painel na tela do WhatsApp.
+2. Veja quais grupos estão sem o número reserva e adicione ele.
+3. Quando o número principal voltar, use "Voltar para o número 1".
+
+[[botao:Ver meus números|{{link_whatsapp}}]]
+
+Se precisar de ajuda, me chama no {{whatsapp_suporte}}.`,
   },
   {
     slug: 'whatsapp_desconectado',
@@ -1511,6 +1559,36 @@ O que dá para fazer: desligar o staging enquanto não estiver validando, ou aum
 [[botao:Ver a capacidade do servidor|{{link_capacidade}}]]`,
   },
   {
+    // Q10 da auditoria (2026-10-02): uma conta trial sondou /api/admin/* por
+    // script (80 chamadas em 6 min). O 403 segurou, a auditoria gravou, mas
+    // ninguém foi avisado. Este chega na hora, uma vez por conta a cada 24 h.
+    slug: 'admin_sondagem_admin',
+    name: '[Interno] Alguém está testando as rotas do admin',
+    description: 'Avisa a administradora quando uma conta logada toma muitas negativas seguidas nas rotas internas do admin — sinal de alguém testando o sistema por script. As chamadas já foram barradas.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'resumo', description: 'Quem tentou, quantas vezes e em quanto tempo', example: 'conta@exemplo.com tentou 20 vezes rotas internas do admin em 10 minutos' },
+      { name: 'conta', description: 'E-mail da conta', example: 'conta@exemplo.com' },
+      { name: 'ip', description: 'Endereço de onde vieram as chamadas', example: '2804:...' },
+      { name: 'link_clientes', description: 'Lista de clientes já filtrada por essa conta', example: 'https://espelhagrupos.com.br/admin/clientes?search=conta%40exemplo.com' },
+    ],
+    title: 'Alguém está testando as rotas do admin',
+    subject: '[BOTinho] {{resumo}}',
+    body: `{{resumo}}.
+
+Todas as chamadas foram **barradas** (a conta não tem papel admin) e, a partir de agora, ela recebe "muitas tentativas" até a janela esvaziar. Nada vazou.
+
+Conta: **{{conta}}** · de onde: {{ip}}
+
+O que dá para fazer: abrir a conta na lista de clientes e, se for abuso, bloquear.
+
+[[botao:Ver a conta|{{link_clientes}}]]`,
+  },
+  {
     // Vigia do servidor (scripts/vigia.mjs via vigia_cron.sh). RCA 2026-10-01:
     // o pm2 perdeu o bot-supervisor e os robôs de todas as clientes ficaram
     // parados ~20 min até alguém olhar por acaso. Aviso que só mora no log
@@ -1537,6 +1615,37 @@ Medido em {{quando}}.
 {{detalhe}}
 
 Para religar com segurança: \`cd ~/wabot && scripts/religar-producao.sh\` (só mostra o que faria; \`APLICAR=1\` aplica). Roteiro: docs/ops/runbook-pm2-sumiu.md.`,
+  },
+  {
+    // M4 da auditoria do painel admin (2026-10-02): pagante fora do ar, conectada
+    // sem receber e envio preso eram sinais que só apareciam com o painel
+    // aberto na hora certa. Um modelo só; cada situação avisa separado (cooldown
+    // por assunto).
+    slug: 'admin_operacao_atencao',
+    name: '[Interno] Algo na operação precisa de atenção',
+    description: 'Avisa a administradora quando há cliente pagante com o WhatsApp fora do ar há mais de 2 h, pagante conectada sem receber há mais de 3 h, ou envios presos em "enviando".',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'resumo', description: 'Frase curta do que aconteceu', example: '2 cliente(s) pagante(s) com o WhatsApp fora do ar há mais de 2 h' },
+      { name: 'lista', description: 'Quem/quantos são (até 10)', example: '- Ana (ana@exemplo.com) — fora há 3 h (ninguem)' },
+      { name: 'acao', description: 'O que fazer agora', example: 'Abra Admin → Online e use Reconectar.' },
+      { name: 'link_cobrancas', description: 'Link do painel de administração', example: 'https://espelhagrupos.com.br/admin' },
+    ],
+    title: '{{resumo}}',
+    subject: '[Operação] {{resumo}}',
+    body: `{{resumo}}.
+
+{{lista}}
+
+O que fazer: {{acao}}
+
+[[botao:Abrir o painel|{{link_cobrancas}}/online]]
+
+Este aviso sai no máximo uma vez a cada 12 horas para cada situação.`,
   },
   {
     slug: 'admin_cobranca_recusada',
@@ -1691,6 +1800,40 @@ Isto é só um aviso para você conferir. Nada foi bloqueado e a conta nova est�
 Nome repetido acontece, e a mesma pessoa pode ter recadastrado por ter perdido a senha ou errado o e-mail. Vale olhar o histórico das duas contas antes de decidir qualquer coisa.
 
 Este aviso sai no máximo uma vez por dia para cada cadastro.`,
+  },
+  {
+    slug: 'admin_robo_aplicativo_parado',
+    name: '[Interno] O robô do Telegram parou para todo mundo',
+    description: 'Feature 017: avisa a administradora quando o robô único de um aplicativo (Telegram) fica fora do ar, é bloqueado ou passa a ser limitado no ritmo. Vale para todas as contas ao mesmo tempo; o WhatsApp não é afetado.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'aplicativo', description: 'Qual aplicativo', example: 'Telegram' },
+      { name: 'estado', description: 'O estado novo do robô', example: 'fora do ar' },
+      { name: 'motivo', description: 'O que isso significa, em uma frase', example: 'O aplicativo não está respondendo. As ofertas ficam guardadas e saem quando ele voltar.' },
+      { name: 'desde', description: 'Desde quando', example: '02/10/2026 18:20' },
+      { name: 'link_cobrancas', description: 'Link do painel de administração', example: 'https://espelhagrupos.com.br/admin' },
+    ],
+    title: 'O robô do Telegram precisa de atenção',
+    subject: '[Espelha Grupos] O robô do Telegram precisa de atenção',
+    body: `O robô do {{aplicativo}} mudou de estado e isso vale para TODAS as clientes que usam o {{aplicativo}}.
+
+[[lista]]
+Estado: {{estado}}
+O que significa: {{motivo}}
+Desde: {{desde}}
+[[/lista]]
+
+O WhatsApp de todas as contas continua funcionando normalmente.
+
+Se o estado for "bloqueado", o robô foi recusado inteiro (chave inválida ou robô banido): é preciso criar um robô novo, trocar o segredo no .env da API e reiniciar a API com pm2 delete + start. As clientes só precisam adicionar o robô novo aos grupos delas. O passo a passo está em docs/rca/multicanal.md.
+
+[[botao:Abrir o painel de operação|{{link_cobrancas}}]]
+
+Este aviso sai no máximo uma vez por dia para cada estado.`,
   },
   {
     slug: 'admin_pagamento_com_falha',

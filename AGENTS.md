@@ -196,6 +196,7 @@ arquivo (nova versão), não editar tela a tela.
 | SEO, marketing, páginas públicas, dados de mercado, marca | `docs/rca/seo-marketing.md` |
 | Instagram Stories | `docs/rca/instagram.md` |
 | plano Basic × PRO, cadeados do painel, menu, Minha conta | `docs/rca/planos-basic-pro.md` |
+| Telegram / multicanal (aplicativos, robô único, caixa de saída, Premium) | `docs/rca/multicanal.md` |
 | membros dos grupos, painel Membros, rodízio de convites (Link Inteligente) | `docs/rca/grupos-membros.md` |
 | vários números por conta, número reserva, rodízio de envio entre números, lista de espera | `docs/rca/multi-numero.md` |
 | Awin (contas, sync de promoções, promoções nas ofertas automáticas, conversão de links) | `docs/rca/afiliados-awin.md` |
@@ -222,6 +223,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | Cliente diz "hoje nenhum disparo foi feito" / espelhamento parado | `src/bot-worker.js`, `src/core/destinationRouting.js` | `diag-sem-disparos.mjs <email> [--horas N \| --hoje]` (varre conta, sessão, origens/destinos, saúde do canal, MessageLog e bot.log; imprime veredito) | espelhamento |
 | Espelhou para grupo errado / não espelhou / duplicou | `src/core/destinationRouting.js`, `src/core/incomingFreshness.js` | `diag-mirror-duplicates.mjs`, `diag-oferta-descartada.mjs` | espelhamento |
 | Fila não envia / envio atrasado / fila parada | `processSendJob` em `src/bot-worker.js`, `src/core/queueExpiry.js` | `diag-fila-grupo.mjs`, `diag-fila-parada.mjs` | envio-e-filas |
+| Painel admin: envios presos em "enviando" / "Trabalhos parados" zerado em produção (fila em memória, sem DLQ) | `src/domain/admin/stuckSendQueue.js`, `GET /api/admin/filas` em `src/api/routes/admin.js`, tela `/admin/operacao#filas` | botão Reprocessar na tela (por cliente); `diag-fila-parada.mjs` | envio-e-filas |
 | Só **um grupo de destino** recebe; os outros presos em "Esperando o intervalo entre destinos" | `src/core/destinationSpacing.js` (senha de vez `spacingTicket`) | `diag-sem-disparos.mjs <email> --hoje` (`postsHoje` por destino) | envio-e-filas |
 | Ofertas automáticas: só acessório, não envia | `src/offerAutomation/dispatcher.js`, `src/offerAutomation/searchListType.js` | `diag-busca-shopee.mjs`, `diag-offer-review.mjs` | ofertas-automaticas-e-criar-oferta |
 | Membro do grupo vê oferta como "Aguardando mensagem" | `src/core/sentMessageStore.js`, `getMessage` no `makeWASocket` de `src/bot-worker.js` | `grep -c "retry-receipt:" bot.log` | whatsapp-sessao |

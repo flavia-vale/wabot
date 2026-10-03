@@ -1,6 +1,7 @@
 import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey, buildOfferCandidateLimit, resolveShopeeOfferPrice } from './shopeeOffers.js'
 import { resolveSearchListType } from './searchListType.js'
 import { sendBroadcast, isRunning } from '../manager.js'
+import { needsWhatsappSession, withDeliveryNetworkHandOff } from '../deliveryOutbox/handOff.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
 import { applyVariation, resolveCopyVariationPoolJson } from '../core/copyVariation.js'
@@ -165,9 +166,22 @@ export function materializeAutomationOffer(automation, offer, botConfig) {
 }
 
 
+// Cupom da promoção Rakuten vai em `{descrição}`. Modelo sem essa variável
+// (ex.: "Automático clássico") fazia o código do cupom sumir da mensagem:
+// aqui ele volta, antes da linha do link. Só para a origem Rakuten
+// (revisão 2026-10-03, R14).
+export function ensureRakutenCouponLine(text, offer = {}) {
+  const body = String(text || '')
+  const line = String(offer.description || '').trim()
+  if (offer.source !== 'rakuten' || !line || body.includes(line)) return body
+  const linkIndex = body.search(/^\s*(?:👉|🛒).*https?:\/\//m)
+  if (linkIndex >= 0) return `${body.slice(0, linkIndex).trimEnd()}\n\n${line}\n\n${body.slice(linkIndex)}`
+  return `${body.trimEnd()}\n\n${line}`
+}
+
 export function formatOfferMessage(offer, keyword, templateBody = null) {
   if (templateBody) {
-    return buildMobileOfferText({
+    const text = buildMobileOfferText({
       product: automationOfferProduct(offer),
       link: offer.offerLink,
       template: DEFAULT_AUTOMATION_TEMPLATE_KEY,
@@ -177,6 +191,7 @@ export function formatOfferMessage(offer, keyword, templateBody = null) {
       // sempre — com cupom, ou apagado quando a automação não usa cupons.
       keepCouponToken: true,
     })
+    return offer.source === 'rakuten' ? ensureRakutenCouponLine(text, offer) : text
   }
 
   if (isPromotionSource(offer.source)) {
@@ -268,7 +283,7 @@ export async function resolveOffers({ automation, sentItemIds, creds, fetchOffer
 }
 
 export async function runAutomation(automation, {
-  sendBroadcastFn = sendBroadcast,
+  sendBroadcastFn: rawSendBroadcastFn = sendBroadcast,
   isRunningFn = isRunning,
   fetchOffersFn = defaultFetchOffers,
   dbOverride,
@@ -278,6 +293,9 @@ export async function runAutomation(automation, {
   now = () => new Date(),
 } = {}) {
   const dbInstance = dbOverride ?? db
+  // Feature 017: destino de outro aplicativo (Telegram) vai para a caixa de
+  // saída e não depende da sessão do WhatsApp.
+  const sendBroadcastFn = withDeliveryNetworkHandOff(rawSendBroadcastFn)
   const source = automationSource(automation)
   if (!source) return { skipped: 'invalid_source' }
 
@@ -287,7 +305,9 @@ export async function runAutomation(automation, {
   // rodando" a cada tick do cron, floodando log e gastando CPU/IO à toa.
   // (Promoção Awin/Rakuten não tem preço para o card do Story — fora da v1.)
   const instagramDestinations = isPromotionSource(source) ? [] : (automation.instagramDestinations ?? []).map(link => link.destination ?? link).filter(destination => destination?.id && destination.enabled !== false)
-  const whatsappAvailable = automation.destGroupJid ? await isRunningFn(automation.userId) : false
+  const whatsappAvailable = automation.destGroupJid
+    ? (needsWhatsappSession([automation.destGroupJid]) ? await isRunningFn(automation.userId) : true)
+    : false
   if (!whatsappAvailable && !instagramDestinations.length) return { skipped: 'bot_not_running' }
 
   let sentItemIds
@@ -316,6 +336,7 @@ export async function runAutomation(automation, {
   } else if (source === 'rakuten') {
     // Link e logo já vêm do sync: nada a buscar na hora do envio.
     const loaded = await loadRakutenOffers({ db: dbInstance, automation, sentItemIds, now: now(), limit: automation.offersPerSend })
+    if (Array.isArray(loaded.sentItemIds)) sentItemIds = loaded.sentItemIds
     if (loaded.skipped) return { skipped: loaded.skipped }
     ;({ offers, rawCount } = loaded)
     if (!offers.length) return { skipped: 'all_offers_filtered' }

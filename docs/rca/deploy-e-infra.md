@@ -999,3 +999,18 @@ só com `api`, `api-staging` e `visual-staging`; `/ready` respondendo 200.
   `scripts/janela.sh` (janela de manutenção: deploy não entra, vigia não avisa).
 - Log do pm2 com nome fixo por app (`ecosystem.config.cjs`) — acabou o acúmulo
   de logs órfãos a cada `delete`+`start`.
+
+## `/health` mostra o supervisor (item 5 da auditoria do admin, 2026-10-03)
+
+Antes: `GET /health` devolvia `{ ok: true }` sem olhar nada, então "API viva,
+supervisor morto" parecia saudável. Agora, só em `BOT_SUPERVISOR_MODE=remote`,
+devolve também `supervisor: { alive, lastHeartbeatAt }` (heartbeat do Redis que
+o supervisor renova a cada 10 s, TTL 30 s; com nós, a batida mais antiga; `alive:
+null` = não deu para saber). Corpo em `src/ops/healthPayload.js`; leitura em
+`getSupervisorHeartbeatAtMs` (`src/supervisor/client.js`/`src/manager.js`),
+com teto de 1,5 s para o Redis lento não pendurar o `/health`.
+
+**Não regredir:** o status HTTP do `/health` é SEMPRE 200 e `ok` segue `true` —
+o smoke test do deploy (`GET :3004/health`) não pode falhar por causa do
+supervisor. Quem devolve 503 é `/ready/bots`. Guarda:
+`test/health-supervisor.test.js`. Zero RAM (um GET no Redis por chamada).

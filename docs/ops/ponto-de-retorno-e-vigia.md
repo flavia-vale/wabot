@@ -1,6 +1,44 @@
 # Ponto de retorno e vigia do ambiente
 
-## Ponto de retorno desta liberação (develop → main, 2026-10-01)
+## Liberação develop → main de 2026-10-03
+
+- **Branch de retorno:** `ponto-retorno/2026-10-03-antes-do-merge-main`
+- **Commit exato (main antes do merge):** `45ca2b2f471687e36d5843abace81db76d5ebcd3`
+- **O que entra:** 136 commits; 3 migrations (todas só ACRESCENTAM: tabela
+  `DeliveryNetworkLink`, tabela `WaExtraSession` + 3 colunas com default em `User`,
+  e textos de `LpPlan`); mudança no patch do Baileys e em `src/core/`/`src/supervisor/`.
+- **Sessões vão reconectar uma vez:** o patch do Baileys e o código dos robôs
+  mudaram, então o deploy reinicia os robôs (detecção automática do
+  `deploy_safe_dashboard.sh`). Esperado: todas reconectam em poucos minutos.
+- **Rollback testado (2026-10-03):** banco com as 3 migrations novas + código
+  antigo → `prisma migrate deploy` responde "No pending migrations" e passa.
+  Não precisa (nem deve) restaurar o banco para voltar o código.
+
+### Antes de mergear
+```bash
+cd ~/wabot && BACKUP=1 scripts/ponto_retorno.sh          # retrato + backup (banco, auth_info, .env)
+git -C ~/wabot fetch origin develop && \
+  git -C ~/wabot show origin/develop:scripts/vigia-subida.mjs > /tmp/vigia-subida.mjs && \
+  cd ~/wabot && node /tmp/vigia-subida.mjs marco            # quem estava conectado/espelhando
+```
+
+### Depois do merge (o deploy leva alguns minutos)
+```bash
+cd ~/wabot && node scripts/vigia-subida.mjs acompanhar     # lê a cada 2 min por 60 min, compara com o marco
+cd ~/wabot && node scripts/vigia-subida.mjs agora          # uma leitura só (+2 h, +12 h)
+```
+Compara com o marco: processos pm2 (fora do ar / em loop), API `/ready` e
+`/ready/bots`, painel, sessões que estavam conectadas e não voltaram (com
+e-mail), ritmo do espelhamento e dos outros envios, contas que espelhavam e
+pararam, taxa de erro e fila presa. Primeiros 15 min = carência (reconexão)
+→ queda vira 🟡, não 🔴. Somente leitura; um `node` de ~100–150 MB enquanto roda.
+
+### Como voltar
+`scripts/voltar_ao_ponto.sh ponto-retorno/2026-10-03-antes-do-merge-main` (seco) →
+`APLICAR=1 …` (agora também refaz o build do painel) → os `pm2 restart` que ele
+imprime, **incluindo `bot-supervisor`** (o código dos robôs mudou nesta liberação).
+
+## Ponto de retorno da liberação develop → main de 2026-10-01
 
 - **Branch de retorno:** `ponto-retorno/2026-10-01-antes-do-merge-main`
 - **Commit exato (main antes do merge):** `29daf0f49a0df3d6905c395dc4f46d637e48248e`

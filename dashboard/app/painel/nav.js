@@ -100,6 +100,11 @@ export const NAV_GROUPS = [
         icon: i(<><rect x="5" y="2" width="14" height="20" rx="2.5" /><line x1="12" y1="18" x2="12" y2="18" /></>),
       },
       {
+        label: 'Aplicativos',
+        href: '/painel/aplicativos',
+        icon: i(<><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><path d="M17.5 14v7" /><path d="M14 17.5h7" /></>),
+      },
+      {
         label: 'Anti-banimento',
         href: '/painel/anti-banimento',
         pro: true,
