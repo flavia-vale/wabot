@@ -160,6 +160,7 @@ export default function Page() {
               <h2>Continue lendo</h2>
               <ul>
                 <li><Link href="/quanto-ganha-afiliado-shopee" className="font-bold text-emerald-700 hover:text-emerald-800">Quanto ganha um afiliado Shopee</Link> — a tabela de comissão e como fazer a conta.</li>
+                <li><Link href="/ferramentas/calculadora-comissao-afiliado-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Calculadora de comissão de afiliado</Link> — a conta antes de a venda acontecer, com os seus números.</li>
                 <li><Link href="/blog/quanto-custa-bot-para-whatsapp-afiliados" className="font-bold text-emerald-700 hover:text-emerald-800">Quanto custa um bot para WhatsApp de afiliados</Link> — o outro lado da conta.</li>
                 <li><Link href="/precos" className="font-bold text-emerald-700 hover:text-emerald-800">Preços e teste grátis de 7 dias</Link> — o que entra em cada plano.</li>
               </ul>

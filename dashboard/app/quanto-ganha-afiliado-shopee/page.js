@@ -215,6 +215,8 @@ export default function Page() {
                 <li><Link href="/blog/como-ser-afiliado-shopee-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Como ser afiliado Shopee: 5 passos e comissão de 3%</Link> — o cadastro passo a passo e as regras do programa.</li>
                 <li><Link href="/shopee-afiliados-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Divulgar Shopee no WhatsApp sem copiar e colar</Link> — o que muda na prática depois do cadastro.</li>
                 <li><Link href="/programa-de-afiliados" className="font-bold text-emerald-700 hover:text-emerald-800">Shopee, Amazon ou Mercado Livre: qual programa escolher</Link> — comissão e prazo de atribuição dos três lado a lado.</li>
+                <li><Link href="/ferramentas/calculadora-comissao-afiliado-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Calculadora de comissão de afiliado</Link> — faça a conta com os seus próprios números.</li>
+                <li><Link href="/blog/shopee-suspendeu-afiliado-o-que-fazer" className="font-bold text-emerald-700 hover:text-emerald-800">Shopee suspendeu sua conta de afiliada: o que fazer</Link> — regras do programa e próximos passos.</li>
               </ul>
             </section>
           </div>

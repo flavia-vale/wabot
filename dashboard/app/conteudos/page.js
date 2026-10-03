@@ -214,12 +214,12 @@ const nichePages = [
   },
   {
     href: '/shopee-afiliados-whatsapp',
-    title: 'Shopee Afiliados: divulgar no WhatsApp',
+    title: 'Shopee Afiliados no WhatsApp: 7 dias grátis',
     description: 'Para quem já é afiliada Shopee e quer publicar as ofertas sem copiar e colar.',
   },
   {
     href: '/mercado-livre-afiliados-whatsapp',
-    title: 'Afiliado Mercado Livre: divulgar no WhatsApp',
+    title: 'Afiliado Mercado Livre no WhatsApp: 7 dias grátis',
     description: 'Para quem já é afiliada do Mercado Livre e quer publicar sem copiar e colar.',
   },
   {
@@ -229,12 +229,12 @@ const nichePages = [
   },
   {
     href: '/shein-afiliados-whatsapp',
-    title: 'SHEIN Afiliados: divulgar no WhatsApp',
+    title: 'SHEIN Afiliados no WhatsApp: 7 dias grátis',
     description: 'Para quem já é afiliada SHEIN e quer publicar com o link curto da própria loja.',
   },
   {
     href: '/magalu-afiliados-whatsapp',
-    title: 'Divulgador Magalu: publicar no WhatsApp',
+    title: 'Divulgador Magalu no WhatsApp: 7 dias grátis',
     description: 'Para quem já divulga Magalu, onde o código vale inclusive em cupom e campanha.',
   },
 ]

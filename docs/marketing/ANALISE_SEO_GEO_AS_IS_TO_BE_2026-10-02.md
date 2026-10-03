@@ -342,6 +342,6 @@ de IA citando Awin/Rakuten na pergunta de marca.
 |---|---|---|---|
 | 1 — GEO: fatos e marca | `feat/seo-geo-f1-fatos-lojas-awin-rakuten` | PR aberta (03/10) | `STORES_FACT_PT` (6 lojas + Awin/Rakuten) em definição da marca, ficha técnica, `llms.txt`, `pricing.md`, home, `/quem-somos`, `/precos`, hub de automação, FAQ público e plano Basic (migration DML guardada); `/quem-somos` vira página-resposta "O que é o Espelha Grupos"; `/melhores-bots-para-afiliados-whatsapp` ganha os 6 critérios respondidos (Sub-ID por grupo = não) e a tabela dos 8 bots; leva 🔝 de reindexação em `ACOES_FLAVIA`. Guarda: `test/fato-lojas-awin-rakuten.test.js` |
 | 2 — SEO: rede, Link Inteligente, títulos | — | pendente | — |
-| 3 — Vocabulário de entrada | — | pendente | — |
+| 3 — Vocabulário de entrada | `feat/seo-geo-f3-vocabulario-entrada` | PR aberta (03/10) | Título da home "Bot de afiliados para WhatsApp: 7 dias grátis \| Espelha Grupos" ("sem cartão" não coube nos 70 do Bing; fica no corpo); hub `/automacao-whatsapp-afiliados` com H1 e 1º parágrafo "automação para afiliados Shopee no automático" e as PAA "Como automatizar afiliado Shopee?" e "Qual IA divulga links de afiliados?" como H2 (também no FAQPage); "7 dias grátis" no título de Shopee, Mercado Livre, SHEIN e Magalu (Amazon já tinha) |
 | 4 — `/alternativas/*` (títulos dos 3 maiores) | — | pendente | — |
 | 5 — Vídeo | — | pendente | — |
