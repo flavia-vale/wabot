@@ -78,7 +78,7 @@ test('envia foto com legenda quando cabe; texto com o link quando não está no 
   const api = fakeApi()
   const adapter = createTelegramAdapter({ api, db: null })
   const r = await adapter.send({ texto: '*Fone* por R$ 10', linkConvertido: 'https://s.shopee.com.br/x', imagem: { url: 'https://img/x.jpg' } }, 'tg:-1001')
-  assert.deepEqual(r, { ok: true, messageId: '2' })
+  assert.deepEqual(r, { ok: true, messageId: '2', reducoes: [] })
   assert.equal(api.calls[0].m, 'sendPhoto')
   assert.match(api.calls[0].caption, /<b>Fone<\/b> por R\$ 10\n\nhttps:\/\/s\.shopee\.com\.br\/x/)
 })

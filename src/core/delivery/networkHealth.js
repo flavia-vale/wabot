@@ -8,6 +8,7 @@ export const NETWORK_HEALTH = Object.freeze({
   LIMITADO: 'limitado',
   BLOQUEADO: 'bloqueado',
   INDISPONIVEL: 'indisponivel',
+  CONFLITO: 'conflito',
   SEM_MEDICAO: 'sem_medicao',
 })
 
@@ -16,6 +17,7 @@ export const HEALTH_SIGNAL = Object.freeze({
   LIMITE: 'limite',
   BLOQUEADO: 'bloqueado',
   INDISPONIVEL: 'indisponivel',
+  CONFLITO: 'conflito',
 })
 
 const MOTIVOS = Object.freeze({
@@ -24,6 +26,7 @@ const MOTIVOS = Object.freeze({
   bloqueado: 'O aplicativo recusou o robô inteiro (chave inválida ou robô bloqueado). Ninguém recebe até a troca do robô.',
   indisponivel: 'O aplicativo não está respondendo. As ofertas ficam guardadas e saem quando ele voltar.',
   sem_medicao: 'Ainda não houve envio recente para medir.',
+  conflito: 'Outro servidor está lendo o mesmo robô (por exemplo, staging e produção com o mesmo robô). Ninguém consegue ligar grupo novo até isso ser resolvido.',
 })
 
 export function computeNetworkHealth(signals = [], { now = Date.now(), windowMs = 10 * 60_000, unavailableStreak = 3 } = {}) {
@@ -39,6 +42,12 @@ export function computeNetworkHealth(signals = [], { now = Date.now(), windowMs 
     return new Date(Number(since))
   }
 
+  // Conflito de leitura (409) é persistente por natureza: vale enquanto
+  // aparecer na janela, mesmo com envios dando certo no meio.
+  const conflicts = recent.filter((s) => s.kind === HEALTH_SIGNAL.CONFLITO)
+  if (conflicts.length >= 2 && now - Number(conflicts[conflicts.length - 1].at) <= 5 * 60_000) {
+    return { estado: NETWORK_HEALTH.CONFLITO, motivo: MOTIVOS.conflito, desde: new Date(Number(conflicts[0].at)) }
+  }
   if (last.kind === HEALTH_SIGNAL.BLOQUEADO) {
     return { estado: NETWORK_HEALTH.BLOQUEADO, motivo: MOTIVOS.bloqueado, desde: sinceOf(HEALTH_SIGNAL.BLOQUEADO) }
   }
@@ -74,7 +83,7 @@ export function createHealthRecorder({ max = 200 } = {}) {
   }
 }
 
-const BAD_STATES = new Set([NETWORK_HEALTH.LIMITADO, NETWORK_HEALTH.BLOQUEADO, NETWORK_HEALTH.INDISPONIVEL])
+const BAD_STATES = new Set([NETWORK_HEALTH.LIMITADO, NETWORK_HEALTH.BLOQUEADO, NETWORK_HEALTH.INDISPONIVEL, NETWORK_HEALTH.CONFLITO])
 
 // Decide o que avisar numa mudança de estado (T081/T083). Só a TRANSIÇÃO para
 // um estado ruim avisa — ficar no mesmo estado não repete o aviso (o cooldown
@@ -94,5 +103,6 @@ export const NETWORK_HEALTH_LABEL = Object.freeze({
   limitado: 'limitado no ritmo',
   bloqueado: 'bloqueado',
   indisponivel: 'fora do ar',
+  conflito: 'em conflito com outro servidor',
   sem_medicao: 'sem medição',
 })

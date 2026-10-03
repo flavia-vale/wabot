@@ -62,6 +62,9 @@ export function createTelegramApi({ secret, fetchImpl = globalThis.fetch, timeou
 
   return {
     getMe: () => call('getMe'),
+    // Leitura por consulta contínua não convive com aviso (webhook) ligado no
+    // mesmo robô: o Telegram responde 409 para sempre. Desligar é inofensivo.
+    deleteWebhook: () => call('deleteWebhook', { drop_pending_updates: false }),
     getChat: (chatId) => call('getChat', { chat_id: chatId }),
     getChatMember: (chatId, userId) => call('getChatMember', { chat_id: chatId, user_id: userId }),
     // Long poll: o tempo de espera do Telegram (timeoutSec) precisa caber
