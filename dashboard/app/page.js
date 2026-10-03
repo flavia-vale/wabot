@@ -24,7 +24,7 @@ import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 // "Descrição Meta muito longa"). PRODUCT_DEFINITION (283 chars) é o texto certo
 // para o corpo da página — não para a meta, que os motores cortam em 150-160.
 const HOME_META_DESCRIPTION =
-  'O Espelha Grupos converte o link de afiliado de 6 lojas (Shopee, Amazon, Mercado Livre e mais) e publica as ofertas em grupos e canais do WhatsApp.'
+  'O Espelha Grupos converte o link de afiliado de 6 lojas e das lojas da Awin e da Rakuten (KaBuM, Netshoes) e publica as ofertas nos grupos do WhatsApp.'
 
 export const metadata = {
   // `absolute` porque o título da home já termina na marca — sem isso o template

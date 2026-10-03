@@ -10,6 +10,7 @@
 // (o resume religa como estava, com o número ativo de antes).
 import { buildSessionKey } from '../domain/session/sessionKey.js'
 import { otherSlot, standbyProcessKey, STANDBY_PROCESS_SLOT } from '../domain/session/workerIdentity.js'
+import { MOVING_NODE_LIFECYCLE } from '../supervisor/accountMove.js'
 
 const SWITCHING = 'switching'
 
@@ -39,6 +40,11 @@ export async function switchActiveNumber({
   const from = expectedActiveSlot
   const to = otherSlot(from)
   const cutoff = new Date(now.getTime() - minIntervalMs)
+
+  // Revisão V1 (multi-servidor): conta mudando de servidor não troca de número —
+  // a troca religaria os dois processos no servidor antigo durante a cópia do login.
+  const session = await db.waSession.findUnique({ where: { userId }, select: { lifecycle: true } })
+  if (session?.lifecycle === MOVING_NODE_LIFECYCLE) return { switched: false, reason: 'moving_node' }
 
   // (1) Reivindica: só passa quem ainda vê o mesmo número ativo e fora do intervalo.
   const claim = await db.user.updateMany({

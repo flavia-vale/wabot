@@ -47,6 +47,8 @@ export function decideFailover({
   minSwitchIntervalMs = DEFAULT_MIN_SWITCH_INTERVAL_MS,
   standbyFreshMs = DEFAULT_STANDBY_FRESH_MS,
 } = {}) {
+  // Revisão V1 (multi-servidor): conta mudando de servidor (parada de propósito).
+  if (active?.lifecycle === 'moving_node') return { promote: false, reason: 'moving_node' }
   const blind = isActiveBlind(active, now)
   if (!active || (active.status === 'connected' && !blind)) return { promote: false, reason: 'active_ok' }
   if (!standby || standby.status !== 'connected') return { promote: false, reason: 'no_standby' }

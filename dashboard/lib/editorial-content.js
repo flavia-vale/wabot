@@ -46,7 +46,7 @@ export const EDITORIAL_DATES = {
   // 3 rotas abaixo já tinham data em resolveLastModified() no seo-registry,
   // só faltava aqui. Reaproveita a MESMA data já em uso no registry para não
   // inventar dado novo.
-  '/precos': { publishedAt: '2026-08-05', updatedAt: '2026-09-29' },
+  '/precos': { publishedAt: '2026-08-05', updatedAt: '2026-10-03' },
   '/parceiro-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/termos-parceria-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/programa-de-afiliados': { publishedAt: '2026-07-31', updatedAt: '2026-09-27' },
@@ -124,7 +124,7 @@ export const EDITORIAL_DATES = {
   '/alternativas/bot-para-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-09-29' },
   '/espelha-grupos-vs-planilha-manual': { publishedAt: '2026-05-15', updatedAt: '2026-09-19' },
   '/espelha-grupos-vs-ferramentas-genericas-automacao': { publishedAt: '2026-05-15', updatedAt: '2026-09-19' },
-  '/melhores-bots-para-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-27' },
+  '/melhores-bots-para-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-10-03' },
   '/glossario': { publishedAt: '2026-05-15', updatedAt: '2026-09-24' },
   '/estudos-de-caso': { publishedAt: '2026-05-15', updatedAt: '2026-09-24' },
   '/confiabilidade-sessao-whatsapp': { publishedAt: '2026-07-15', updatedAt: '2026-07-15' },
@@ -148,16 +148,16 @@ export const EDITORIAL_DATES = {
   // updatedAt é a última mudança de CONTEÚDO verificável (commit, rótulo
   // "Última atualização" da própria página ou comentário datado do registro).
   // Sem evidência, fica a data que o sitemap já publicava (2026-05-15).
-  '/': { publishedAt: '2026-05-15', updatedAt: '2026-09-29' },
+  '/': { publishedAt: '2026-05-15', updatedAt: '2026-10-03' },
   '/llms.txt': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
   '/pricing.md': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
   '/termos': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
   '/privacidade': { publishedAt: '2026-05-05', updatedAt: '2026-05-05' },
-  '/quem-somos': { publishedAt: '2026-05-15', updatedAt: '2026-09-29' },
+  '/quem-somos': { publishedAt: '2026-05-15', updatedAt: '2026-10-03' },
   '/suporte': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/espelhar-grupos-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-02' },
   '/bot-ofertas-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-08-19' },
-  '/automacao-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-10-01' },
+  '/automacao-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-10-03' },
   // LPs de dor: o bloco de recursos (Features.jsx) passou a dizer 6 lojas em 18/09.
   '/bot-ofertas-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
   '/automatizar-divulgacao-em-grupos-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },

@@ -1,4 +1,5 @@
 import { Icon } from './Icon';
+import { AWIN_STORE_EXAMPLES, RAKUTEN_STORE_EXAMPLES, STORES_FACT_PT } from '@/lib/marketing-content';
 
 const s = {
   head: { textAlign: 'center', marginBottom: 64 },
@@ -150,8 +151,8 @@ export function Features() {
 
           <div style={s.card(5)} className="landing-feature-card landing-feature-card-secondary">
             <div style={s.iconBox}><Icon name="link" size={22} /></div>
-            <div style={s.cardTitle}>6 lojas com conversão de link</div>
-            <p style={s.cardBody}>Suporta as principais plataformas que mais convertem no público brasileiro.</p>
+            <div style={s.cardTitle}>6 lojas + Awin e Rakuten</div>
+            <p style={s.cardBody}>{STORES_FACT_PT}.</p>
             <div style={s.storeRow}>
               <span style={s.store}>Shopee</span>
               <span style={s.store}>Mercado Livre</span>
@@ -159,6 +160,9 @@ export function Features() {
               <span style={s.store}>Magalu</span>
               <span style={s.store}>SHEIN</span>
               <span style={s.store}>AliExpress</span>
+              {[...AWIN_STORE_EXAMPLES, ...RAKUTEN_STORE_EXAMPLES].map((loja) => (
+                <span key={loja} style={s.store}>{loja}</span>
+              ))}
             </div>
           </div>
 
