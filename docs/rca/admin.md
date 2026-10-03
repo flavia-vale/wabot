@@ -580,12 +580,24 @@ DLQ continua nas rotas `/send-dlq/:userId` já existentes (Operação → Filas)
 Custo: 6 consultas pequenas por clique em "Verificar agora", zero processo
 novo, zero RAM.
 
-## Polling do admin: ≥ 60 s, só aba visível, leitura sem auditoria (Q1b, 2026-10-03)
+## Operação → Auditoria, "quem fez o quê" (item 9 / M8, 2026-10-03)
 
-**O que era:** `teste-shard` consultava a cada 5 s; `GET /api/admin/online` gravava
-`AdminAuditLog` (`admin.online.read`) a cada chamada (100 linhas/7 d em prod).
-**Onde mora:** `dashboard/app/admin/teste-shard/page.js` (60 s + `visibilityState`);
-`GET /online` em `src/api/routes/admin.js` sem auditoria de leitura.
-**Não regredir:** `test/admin-polling.test.js` varre `dashboard/app/admin/**` e
-falha com `setInterval` < 60 s ou sem `visibilityState`. Polling novo nunca
-audita cada leitura (só escrita). Zero RAM nova.
+**Era:** `AdminAuditLog` era gravado em toda ação do painel e nunca lido; só
+SQL na VPS mostrava quem fez o quê.
+
+**Agora:**
+
+| Peça | Onde mora |
+|---|---|
+| Dicionário de ações em frase leiga (`admin.user.block` → "bloqueou a conta"), query/where/paginação e linhas redigidas, PURO | `src/domain/admin/auditLabels.js` |
+| Rota `GET /api/admin/audit?days=30&action=&actor=&target=&page=&take=` (`admin:read` + só papel `owner`/`admin`, `take` ≤ 200, payload por `src/adminRedaction.js`, leitura NÃO auditada) | `src/api/routes/admin.js` |
+| Seção "Auditoria" em Operação (componente próprio, some para outros papéis; links para a ficha) | `dashboard/components/AuditoriaSection.js` |
+| Guarda | `test/admin-auditoria-tela.test.js` |
+
+**Não regredir:** ação nova `action: 'admin.…'` exige rótulo em `AUDIT_LABELS`
+(o teste varre `src/` e falha); a rota de leitura nunca chama
+`writeAdminAuditLog` (viraria ruído na própria trilha); `take` nunca passa de
+200; `before`/`after` só saem por `redactAdminPayload`; a seção fica em
+componente próprio (teto de linhas da Operação em `admin-inicio-enxuto`).
+Custo: 1 `count` + 1 `findMany` paginado por consulta (índices em `createdAt`,
+`action`), zero processo novo, zero RAM.

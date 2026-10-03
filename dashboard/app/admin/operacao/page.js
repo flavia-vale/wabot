@@ -9,6 +9,7 @@ import SectionErrorBoundary from '@/components/SectionErrorBoundary'
 import { HelpDot } from '@/components/HelpDot'
 import { CARD_HELP } from '@/lib/admin/cardHelp'
 import FilasSection from '@/components/FilasSection'
+import AuditoriaSection from '@/components/AuditoriaSection'
 
 // Página "Operação" (G2 da auditoria do painel, 2026-10-02). Junta o que era a
 // aba oculta "Observabilidade (técnico)", o card de staging e a aba
@@ -835,6 +836,10 @@ export default function OperacaoPage() {
 
         <SectionErrorBoundary label="Filas (envios presos)">
           <FilasSection admin={admin} />
+        </SectionErrorBoundary>
+
+        <SectionErrorBoundary label="Auditoria (quem fez o quê)">
+          <AuditoriaSection admin={admin} />
         </SectionErrorBoundary>
 
         <SectionErrorBoundary label="Staging (liga/desliga)">
