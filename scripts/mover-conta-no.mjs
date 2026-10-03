@@ -14,6 +14,9 @@
 // roda o rsync); (3) TROCAR o servidor no banco e religar, com volta
 // automática se não religar. As decisões moram em src/supervisor/accountMove.js.
 //
+// CONTA COM NÚMERO RESERVA (revisão V1): os dois processos (<conta> e
+// <conta>~n2) param, conferem, copiam (as DUAS pastas de login) e religam juntos.
+//
 // Só funciona com SUPERVISOR_NODE_ROUTING ligado e BOT_SUPERVISOR_MODE=remote
 // no .env do ambiente. NÃO é usado por nenhum fluxo automático.
 
@@ -22,7 +25,8 @@ import db from '../src/db.js'
 import { getAuthInfoDir } from '../src/paths.js'
 import { createSupervisorClient } from '../src/supervisor/client.js'
 import { isNodeRoutingEnabled } from '../src/supervisor/nodeRouting.js'
-import { MOVING_NODE_LIFECYCLE, buildRsyncCommand, planAccountMove } from '../src/supervisor/accountMove.js'
+import { MOVING_NODE_LIFECYCLE, accountAuthKeys, accountProcessKeys, buildRsyncCommand, planAccountMove, shouldCarryStandby } from '../src/supervisor/accountMove.js'
+import { standbyProcessKey, STANDBY_PROCESS_SLOT } from '../src/domain/session/workerIdentity.js'
 
 const arg = name => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=')
 const flag = name => process.argv.includes(`--${name}`)
@@ -58,31 +62,52 @@ try {
   const user = await db.user.findFirst({ where: { email }, select: { id: true } })
   if (!user) { console.error(`${email}: conta não encontrada`); process.exit(1) }
   const row = await db.waSession.findUnique({ where: { userId: user.id }, select: { nodeId: true, status: true, lifecycle: true } })
+  // Revisão V1: número reserva (prontidão, <conta>~n2) muda junto com a conta.
+  const reserva = await db.waExtraSession.findUnique({ where: { userId_slot: { userId: user.id, slot: STANDBY_PROCESS_SLOT } }, select: { status: true, lifecycle: true } }).catch(() => null)
+  const reservaKey = standbyProcessKey(user.id)
+  const reservaLigada = fase === 'trocar' ? false : await client.isRunning(reservaKey).catch(() => true)
+  const levaReserva = shouldCarryStandby({ extraRow: reserva, running: reservaLigada })
+  const chaves = accountProcessKeys({ userId: user.id, carryStandby: levaReserva })
   const nos = await medirNos()
-  const plano = planAccountMove({ userId: user.id, targetNode: para, sessionRow: row, nodes: nos, resuming: fase === 'trocar' })
-  const authDir = getAuthInfoDir(user.id)
+  const plano = planAccountMove({ userId: user.id, targetNode: para, sessionRow: row, nodes: nos, resuming: fase === 'trocar', slots: chaves.length })
+  if (reserva?.lifecycle === 'switching') plano.errors.push('A conta está trocando de número (reserva) agora. Espere terminar antes de mover.')
+  plano.ok = plano.errors.length === 0
 
   console.log(`Conta ${email}: servidor atual "${plano.sourceNode}" → "${para}"`)
+  if (reserva) console.log(`Número reserva: ${levaReserva ? 'muda JUNTO (para, copia e religa com o principal)' : 'parado — só o login é copiado'}`)
   for (const w of plano.warnings) console.log(`⚠️  ${w}`)
   for (const e of plano.errors) console.log(`❌ ${e}`)
   if (!plano.ok) { console.log('\nNÃO é seguro mover agora.'); process.exit(1) }
 
-  console.log(`\nCopiar o login (rodar no servidor "${para}", DEPOIS de parar):\n  ${buildRsyncCommand({ authDir, sourceHost: arg('host-origem') })}`)
+  const copias = accountAuthKeys({ userId: user.id, hasStandbyLogin: Boolean(reserva) })
+    .map(key => buildRsyncCommand({ authDir: getAuthInfoDir(key), sourceHost: arg('host-origem') }))
+  console.log(`\nCopiar o login (rodar no servidor "${para}", DEPOIS de parar${copias.length > 1 ? '; as DUAS linhas' : ''}):\n${copias.map(c => `  ${c}`).join('\n')}`)
   if (!aplicar) { console.log('\n(simulação) nada foi alterado. Use --aplicar --fase=parar para começar.'); process.exit(0) }
 
-  const rodando = async () => {
+  // Algum processo da conta ligado (no nó do banco, ou num nó explícito)?
+  const algumLigado = async (opts) => {
     client.forgetNode(user.id)
-    return client.isRunning(user.id).catch(() => true)
+    const r = await Promise.all(chaves.map(k => client.isRunning(k, opts).catch(() => true)))
+    return r.some(Boolean)
   }
+  const marcarReserva = data => levaReserva
+    ? db.waExtraSession.updateMany({ where: { userId: user.id, slot: STANDBY_PROCESS_SLOT }, data })
+    : Promise.resolve()
 
   if (fase === 'parar') {
     // 'moving_node' (revisão C6): o supervisor não ressuscita, e a rota de ligar
     // / pedir código recusa com mensagem clara enquanto o login é copiado.
-    await db.waSession.updateMany({ where: { userId: user.id }, data: { status: 'disconnected', lifecycle: MOVING_NODE_LIFECYCLE } })
-    await client.stopBot(user.id).catch(err => console.log(`aviso: stopBot falhou (${err.message}); conferindo se parou`))
-    const parou = await esperar(async () => !(await rodando()))
+    // V1: a reserva também — senão a troca automática religava tudo na origem.
+    const mudando = { status: 'disconnected', lifecycle: MOVING_NODE_LIFECYCLE }
+    await db.waSession.updateMany({ where: { userId: user.id }, data: mudando })
+    await marcarReserva(mudando)
+    for (const k of [...chaves].reverse()) await client.stopBot(k).catch(err => console.log(`aviso: stopBot ${k} falhou (${err.message}); conferindo se parou`))
+    const parou = await esperar(async () => !(await algumLigado()))
     if (!parou) { console.error('❌ O robô NÃO parou na origem. Não copie nada. Investigue antes de seguir.'); process.exit(1) }
-    console.log('✅ Robô parado na origem. Agora rode o rsync acima no servidor de destino e depois a fase "trocar".')
+    // O processo que sai pode gravar o próprio estado por cima: regrava a marca.
+    await db.waSession.updateMany({ where: { userId: user.id }, data: mudando })
+    await marcarReserva(mudando)
+    console.log(`✅ ${chaves.length > 1 ? 'Os dois números estão parados' : 'Robô parado'} na origem. Agora rode o rsync acima no servidor de destino e depois a fase "trocar".`)
   } else {
     if (!flag('auth-copiado')) { console.error('Confirme com --auth-copiado que o rsync foi feito e conferido.'); process.exit(2) }
     // Servidor de origem: o gravado no banco; numa RETOMADA (o banco já diz o
@@ -90,7 +115,7 @@ try {
     const antes = row?.nodeId === para ? (arg('origem') && arg('origem') !== 'n1' ? arg('origem') : null) : (row?.nodeId ?? null)
     const origem = antes ?? 'n1'
     if (row?.lifecycle !== MOVING_NODE_LIFECYCLE) { console.error('❌ A conta não está marcada como "em mudança". Rode a fase "parar" antes.'); process.exit(1) }
-    if (await client.isRunning(user.id, { nodeId: origem }).catch(() => true)) { console.error(`❌ O robô está ligado na origem (${origem}). Rode a fase "parar" antes.`); process.exit(1) }
+    if (await algumLigado({ nodeId: origem })) { console.error(`❌ Algum número da conta está ligado na origem (${origem}). Rode a fase "parar" antes.`); process.exit(1) }
     // Retomada: se uma execução anterior já gravou o destino, não regrava.
     if (row?.nodeId !== para) await db.waSession.updateMany({ where: { userId: user.id }, data: { nodeId: para } })
     client.forgetNode(user.id)
@@ -98,14 +123,22 @@ try {
       && await esperar(async () => client.isRunning(user.id, { nodeId: para }).catch(() => false))
     if (ligou) {
       console.log(`✅ Conta religada em "${para}". Confira o painel e os logs (nodeId=${para}). A origem guarda a pasta antiga: NÃO religue por lá.`)
+      if (levaReserva) {
+        // Mesmo estado que o botão "ligar reserva" grava; se não subir agora, o
+        // supervisor do destino religa sozinho (status 'connecting' é ressuscitável).
+        await marcarReserva({ status: 'connecting', lifecycle: 'authenticating' })
+        const reservaOk = await client.startBot(reservaKey).then(Boolean).catch(() => false)
+          && await esperar(async () => client.isRunning(reservaKey, { nodeId: para }).catch(() => false))
+        console.log(reservaOk ? `✅ Número reserva religado em "${para}".` : `⚠️  Número reserva ainda não subiu em "${para}"; o supervisor tenta de novo sozinho. Confira em alguns minutos.`)
+      }
     } else {
       // Desfazer COMPLETO (revisão C6): 1) garantir que NADA ficou ligado no
       // destino; 2) voltar o servidor; 3) religar na origem. Sem o (1), uma
       // subida lenta no destino + religar na origem = robô em dois servidores.
       console.error('❌ Não religou no destino. Desfazendo: parando no destino, voltando e religando na origem.')
       codigo = 1
-      await client.stopBot(user.id, { nodeId: para }).catch(() => {})
-      const destinoParou = await esperar(async () => !(await client.isRunning(user.id, { nodeId: para }).catch(() => true)))
+      for (const k of [...chaves].reverse()) await client.stopBot(k, { nodeId: para }).catch(() => {})
+      const destinoParou = await esperar(async () => !(await algumLigado({ nodeId: para })))
       if (!destinoParou) {
         console.error(`❌ NÃO consegui confirmar que o destino (${para}) parou. A conta fica marcada "em mudança" (não religa sozinha). Investigue antes de rodar de novo.`)
       } else {
@@ -114,6 +147,13 @@ try {
         const voltou = await client.startBot(user.id).then(Boolean).catch(() => false)
           && await esperar(async () => client.isRunning(user.id).catch(() => false))
         console.error(voltou ? `↩️  Conta religada na origem (${origem}).` : `❌ Não religou na origem (${origem}). Religue pelo painel ou pelo admin.`)
+        // Reserva só religa com o principal de pé (sozinha ela não envia nada).
+        if (levaReserva && voltou) {
+          await marcarReserva({ status: 'connecting', lifecycle: 'authenticating' })
+          await client.startBot(reservaKey).catch(() => {})
+        } else if (levaReserva) {
+          console.error('Número reserva continua parado: religue pelo painel depois do principal.')
+        }
       }
     }
   }

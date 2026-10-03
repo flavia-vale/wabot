@@ -175,5 +175,22 @@ Flag desligada = comportamento idêntico (testes em `test/multi-supervisor-revis
 | C12 | vigia no servidor 2 exigiria api/dashboard | exige só o supervisor lá; pré-check de rede (latência, senha, TLS) já existia |
 | C13 | /metrics e aviso de vagas perguntavam a todos os nós a cada vez | cache de 15 s |
 
+### Revisão multi-número (2026-10-03) — conta com número reserva
+
+Conta com número reserva tem 2 processos (`<conta>` = ativo, `<conta>~n2` =
+prontidão), cada um com sua pasta de login, e os dois moram no servidor da
+CONTA. Testes em `test/multi-supervisor-multinumero.test.js`. Flag desligada =
+igual a antes. Telegram não entra aqui: roda dentro da `api` (só no servidor 1).
+
+| Item | Problema | Correção |
+|---|---|---|
+| V1 | `mover-conta-no.mjs` só parava/copiava o número 1: a reserva seguia ligada na origem e a pasta `<conta>~n2` não ia (o ativo usa ela quando `activeWaSlot=2`); a troca automática podia religar tudo na origem durante a cópia; o cache de nó do `~n2` não era esquecido | para/confere/religa os 2 processos, imprime rsync das 2 pastas, marca a reserva `moving_node`; troca automática/manual e "ligar reserva" recusam durante a mudança; cache de nó por conta |
+| V2 | supervisor checava o dono do `~n2` pela chave errada (sem linha no banco → "n1") | posse sempre pela conta (`nodeOwnerKey`) |
+| V3 | cada número é um robô (~0,35 GB), mas mover pedia 1 vaga e "ligar reserva" ignorava vagas prometidas (contagem com cache de 15 s) | mover pede 2 vagas com reserva ligada; "ligar reserva" soma as vagas prometidas e segura 1 por 2 min |
+
+Fora desta revisão (não muda nada hoje): arquivos do rodízio de envio
+(`send-spool`) de jobs ainda na fila não são copiados — com
+`MULTI_NUMBER_ROTATION_RELAY` ligado, mover com a fila vazia.
+
 **Desfazer a ativação SEMPRE na ordem: API primeiro, supervisor depois** (o C5
 segura o erro inverso, mas a ordem certa evita depender dele).

@@ -133,8 +133,9 @@ test('C6: retomada do "trocar" só com a conta marcada moving_node', () => {
 test('C6: script marca moving_node, desfaz parando o destino e religando a origem', () => {
   const s = read('scripts/mover-conta-no.mjs')
   assert.match(s, /lifecycle: MOVING_NODE_LIFECYCLE/)
-  assert.match(s, /client\.stopBot\(user\.id, \{ nodeId: para \}\)/)
-  assert.ok(s.indexOf('client.stopBot(user.id, { nodeId: para })') < s.indexOf("data: { nodeId: antes"), 'para o destino ANTES de voltar o servidor')
+  // V1: para TODOS os processos da conta no destino (principal + reserva).
+  assert.match(s, /client\.stopBot\(k, \{ nodeId: para \}\)/)
+  assert.ok(s.indexOf('client.stopBot(k, { nodeId: para })') < s.indexOf("data: { nodeId: antes"), 'para o destino ANTES de voltar o servidor')
 })
 test('C6: ligar e pedir código recusam durante a mudança (valor que nenhum fluxo de hoje grava)', () => {
   const s = read('src/api/routes/session.js')
