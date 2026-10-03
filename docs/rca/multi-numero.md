@@ -32,7 +32,7 @@ receita de quem já paga duas contas.
 |---|---|---|
 | **0. Validar** ✅ em andamento | Lista de espera no painel (`/painel/whatsapp`, com robô conectado) + `scripts/diag-multi-numero-demanda.mjs` | ≥5 contas PRO na lista, ou ≥10% dos PROs (com ao menos 3) |
 | 1. Número reserva ✅ implementado (ver "Fase 1 — como ficou") | 2º número assume se o 1º cair ou for banido | Quem usa reserva cancela menos que quem não usa |
-| 2. Rodízio (plano técnico abaixo) | Envios alternados entre os números presentes em cada grupo, com teto por número | Menos bans por número, vazão igual ou maior |
+| 2. Rodízio ✅ implementado (ver "Fase 2 — como ficou") | Envios alternados entre os números presentes em cada grupo, com teto por número | Menos bans por número, vazão igual ou maior |
 | 3. Plano Escala | Até 5 números, descanso automático, saúde por número, proxy opcional | Receita média do PRO +20% |
 
 ## Fase 0 — como funciona
@@ -439,3 +439,85 @@ um número cair, o outro assume tudo.
 ### Fora da Fase 2
 
 Mais de 2 números, proxy por número, plano Escala (Fase 3).
+
+## Fase 2 — como ficou (implementado em 2026-10-03, flavia-vale/wabot#2199)
+
+Tudo atrás de flags **desligadas**. A dona do produto pediu para implementar
+antes dos portões: eles viraram **checagens obrigatórias antes de LIGAR**
+(ver "Portões antes de codar" acima — continuam valendo, agora como
+"antes de ligar").
+
+| Peça | Onde |
+|---|---|
+| Qual número enviou (`MessageLog.senderSlot`) e recepção no heartbeat (`WaSession.receptionState`) | `src/bot-worker.js` (só com `MULTI_NUMBER_ENABLED`) |
+| Troca por "conectado mas cego" (motivo `blind`) | `isActiveBlind` em `src/domain/session/failoverPolicy.js` |
+| Em quais grupos cada número está | `WaGroupMembership`, `syncGroupMembership` no robô, `src/domain/session/groupMembership.js` |
+| Dono de cada grupo e escolha do remetente (puro) | `src/domain/session/senderRouting.js` |
+| Plano do rodízio com banco (só no ativo) | `src/core/rotationRouter.js`, tabela `DestinationSender` |
+| Fila do outro número e devolução | `createBullmqProducer` em `src/sendQueueBackend.js`; `routeToOtherNumber` no robô |
+| Espelhamento no rodízio (2b) | `src/core/sendSpool.js`, `routeMirrorToOtherNumber` no robô |
+| API | `GET/POST /api/multi-number/rotation` |
+| Painel | `dashboard/components/RotationCard.js` (dentro do bloco da reserva) |
+| Diagnóstico | `scripts/diag-rodizio.mjs` |
+
+**Envs novas** (todas opcionais):
+
+| Env | Padrão | O que faz |
+|---|---|---|
+| `MULTI_NUMBER_ROTATION_ENABLED` | desligado | liga o rodízio no servidor (a conta ainda precisa ligar no painel) |
+| `MULTI_NUMBER_ROTATION_RELAY` | desligado | inclui o espelhamento no rodízio (2b) |
+| `MULTI_NUMBER_SENDER_HOURLY_CAP` | sem teto | envios/hora por número antes de transbordar para o outro |
+| `SEND_SPOOL_DIR` | `<BOT_LOG_DIR>/send-spool` | pasta do spool do 2b |
+
+### Diferenças em relação ao plano
+
+- **Teto por número é preferência, não bloqueio:** passou do teto, o grupo
+  transborda para o outro número se ele estiver no grupo; senão segue pelo
+  dono. O limite DURO continua sendo o de cada grupo (`ChannelThrottle`, no
+  banco, compartilhado pelos dois números).
+- **Com um número fora do ar o plano não é gravado** (vale só em memória).
+  Gravar faria o número que ficou "herdar" os grupos para sempre.
+- **Canais (`@newsletter`) ficam fora do rodízio** — saem sempre pelo ativo
+  (admin do canal é por número; fica para quando houver dado de admin).
+- **Job com `onDone` não atravessa** no 2a; no 2b o aviso "Mensagem enviada"
+  e a analítica de erro do job roteado ficam sem registro no ativo.
+- **Envio do espelhamento é montado na hora de enfileirar** quando vai para o
+  outro número (no outro processo não existe o contexto da origem). Foto e
+  marca d'água são resolvidas antes da espera da fila.
+
+### Não regredir
+
+- **Só o ativo decide e deduplica.** O segundo remetente não registra
+  `messages.upsert`, não reprocessa falhas da conta, não roda agendados.
+  Testes estruturais em `test/multi-number-rotation.test.js` e
+  `test/multi-number-standby.test.js`.
+- **Fila da conta não muda de nome** (`wabot-send-<userId>`); a do outro
+  processo é `wabot-send-<userId>~n2`. Sem Redis/BullMQ, nada é roteado.
+- **Nunca rotear quando o outro número não está conectado e com sinal
+  recente (3 min).** Fora do ar há 10+ min → o ativo traz de volta o que
+  ficou na fila dele.
+- **Spool:** o Redis só leva nomes de arquivo; nome vindo do Redis nunca
+  escapa da pasta; arquivos saem ao terminar o envio e na limpeza horária.
+
+### Antes de LIGAR (portões + Regra #1)
+
+1. Portões 1–3 do plano (trocas em produção, fatia de `relay`, Redis em
+   produção). Sem Redis o rodízio fica inerte.
+2. Portão 4 (mídia reenviada por outro número) **antes** de
+   `MULTI_NUMBER_ROTATION_RELAY`.
+3. Medir RSS do processo `~n2` com o rodízio ligado no staging e trazer o
+   número para OK (Regra #1).
+
+### Validação em staging (nesta ordem)
+
+1. Flags desligadas: nada muda (bloco da reserva sem "Dividir os envios").
+2. `MULTI_NUMBER_ROTATION_ENABLED=true` (`pm2 delete` + `start`): com a
+   reserva conectada aparece "Dividir os envios entre os números".
+3. Pôr o número reserva em 2 dos grupos de destino e esperar até 1 h (ou
+   reconectar) → `diag-rodizio.mjs --email=<conta>` mostra "grupos por número".
+4. Ligar a divisão. Mandar uma oferta automática/fila para os grupos → parte
+   sai pelo número 2 (`senderSlot`). Nenhuma oferta duplicada.
+5. Desligar o número 2 pelo celular → em ~10 min o que estava na fila dele
+   sai pelo ativo; troca automática continua funcionando.
+6. Só depois do portão 4: `MULTI_NUMBER_ROTATION_RELAY=true` e repetir com
+   espelhamento com foto e com vídeo.

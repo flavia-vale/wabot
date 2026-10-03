@@ -57,6 +57,14 @@ for (const u of users) {
     console.log(`   troca ${t.createdAt.toISOString()}: ${m.from}→${m.to} motivo=${m.reason} (${m.mode})`)
   }
   if (!trocas.length) console.log('   trocas (14 dias): nenhuma')
+
+  // Rodízio (Fase 2): dono de cada grupo e grupos sem nenhum número.
+  const rot = await db.user.findUnique({ where: { id: u.id }, select: { rotationEnabled: true } }).catch(() => null)
+  const donos = await db.destinationSender.groupBy({ by: ['slot'], where: { userId: u.id }, _count: { _all: true } }).catch(() => [])
+  const membros = await db.waGroupMembership.groupBy({ by: ['slot'], where: { userId: u.id }, _count: { _all: true }, _max: { refreshedAt: true } }).catch(() => [])
+  console.log(`   rodízio: ${rot?.rotationEnabled ? 'LIGADO' : 'desligado'} (env MULTI_NUMBER_ROTATION_ENABLED=${process.env.MULTI_NUMBER_ROTATION_ENABLED ?? '(vazia)'}, espelhamento=${process.env.MULTI_NUMBER_ROTATION_RELAY ?? '(vazia)'})`)
+  console.log(`   donos dos grupos: ${donos.map(d => `${d.slot == null ? 'nenhum número' : 'número ' + d.slot}=${d._count._all}`).join(' | ') || '—'}`)
+  console.log(`   grupos por número: ${membros.map(m => `número ${m.slot}=${m._count._all} (gravado ${m._max.refreshedAt?.toISOString?.() ?? '—'})`).join(' | ') || '—'}`)
 }
 
 await db.$disconnect()
