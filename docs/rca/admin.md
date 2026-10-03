@@ -632,3 +632,12 @@ menu = só 5 entradas. Custo: zero RAM, zero processo.
 ## Design system: seção "Admin" em proposta (G5 passo 1, 2026-10-03)
 
 DS v2.1 (`docs/design-system/design-system-v2.html`, âncora `#admin`): tabela densa, chips, barra de ações, faixas de gravidade da caixa Hoje, KPI, bloco da Operação, voz e lista de divergências D1-D12. **Só documentação**: nenhuma tela migrada; o passo 2 só depois do OK da dona.
+
+## Retenção de `AnalyticsEvent ops_*` em 90 dias (item 3 / M7, 2026-10-03)
+
+- **O que era:** `AnalyticsEvent` sem limpeza para `ops_*`. Medição em produção: 409.199 linhas. Top: `ops_mirror_fallback_all_destinations` 205.663, `ops_store_photo_over_origin` 68.493, `ops_custom_domain_link_resolved` 53.871, `ops_wa_group_desync_autoheal` 28.170, `ops_wa_group_desync_unresolved` 13.132.
+- **Onde mora:** `OPS_EVENT_RETENTION_DAYS` (default 90, `0` desliga) no sweep diário de `src/api/server.js` (`cleanupOldLogs`). Apagador em lotes: `src/observability/opsEventRetention.js` (5.000 por lote, pausa 200 ms, no máximo 40 lotes = 200 mil linhas por passada; o primeiro sweep termina nos dias seguintes, sem segurar o SQLite). Lista de eventos: `OPS_RETENTION_EVENTS` em `operationalSignals.js` (valores de `ANALYTICS_EVENT_BY_SIGNAL`), nunca `LIKE 'ops_%'`.
+- **Fora da retenção de propósito:** `ops_self_*` (o bot-worker lê SEM janela para não reenviar mensagem: apagar faria reenviar boas-vindas/nudge), `ops_wa_phone_reuse_*`, `ops_billing_config_problem`, `ops_unsupported_store_daily` (poda própria de 30 d), `credential_expiry_alert_sent`, `session_telemetry` (poda própria) e funil/UTM.
+- **Leitores de `ops_*` auditados (maior janela):** admin 7 d (desync) e 14 d no máximo; alerta de cegueira (`adminOpsAlertSweep`) janela curta; `diag-*` e `wa-forbidden-report` recebem `--days`/`--horas` do usuário (default 30 ou menos). Nada exige mais de 90 d, então o default é 90. Quem precisar de histórico maior sobe a env.
+- **Índice:** já existe `@@index([event, createdAt])` em `AnalyticsEvent` (`prisma/schema.prisma`), que serve ao filtro `event IN (...) AND createdAt < cutoff`. Nenhuma migration criada.
+- **Não regredir:** evento novo de sinal só entra na retenção se estiver em `ANALYTICS_EVENT_BY_SIGNAL`; marcador de dedup nunca entra. Teste: `test/analytics-retencao-ops.test.js`. Zero RAM.

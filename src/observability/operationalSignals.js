@@ -117,6 +117,13 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   session_capacity_limit: 'ops_session_capacity_limit',
 }
 
+// Lista EXPLÍCITA dos eventos `ops_*` que a retenção diária pode apagar
+// (server.js, OPS_EVENT_RETENTION_DAYS). Vem só deste mapa, nunca de LIKE
+// 'ops_%': `ops_self_*` (marcadores de dedup do bot-worker), `ops_wa_phone_reuse_*`,
+// `ops_billing_config_problem`, `ops_unsupported_store_daily` (poda própria de 30 d)
+// e todo evento de negócio ficam de fora de propósito.
+export const OPS_RETENTION_EVENTS = Object.freeze([...new Set(Object.values(ANALYTICS_EVENT_BY_SIGNAL))])
+
 let cachedTrackFn = null
 async function emitDurable(name, metadata) {
   const event = ANALYTICS_EVENT_BY_SIGNAL[name]
