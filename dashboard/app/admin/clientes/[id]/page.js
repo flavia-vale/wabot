@@ -388,6 +388,17 @@ function statusDoRobo(status, lifecycle) {
   return { label: 'Desconectado', cls: 'bg-red-100 text-red-700' }
 }
 
+// Nomes leigos dos eventos de conexão (o `type` cru continua sendo o fallback).
+const ROTULO_EVENTO = {
+  manual_stop_requested: 'Robô parado de propósito',
+  admin_reconnect_requested: 'Admin pediu reconexão',
+  manual_reconnect_requested: 'Cliente pediu reconexão',
+  manual_pairing_requested: 'Cliente pediu novo pareamento',
+  connected: 'Conectou',
+  reconnect_attempt: 'Tentando reconectar',
+  reconnect_success: 'Reconectou',
+}
+
 const TOM_MOTIVO = {
   red: 'bg-red-100 text-red-800',
   amber: 'bg-amber-100 text-amber-800',
@@ -405,6 +416,9 @@ function RoboTab({ userId }) {
   const [result, setResult] = useState(null)
   const [reconectando, setReconectando] = useState(false)
   const [aviso, setAviso] = useState('')
+  const [parando, setParando] = useState(false)
+  const [diag, setDiag] = useState(null)
+  const [diagCarregando, setDiagCarregando] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -417,10 +431,12 @@ function RoboTab({ userId }) {
   async function reconnect(id) {
     // Ação sobre a conta de uma cliente: nunca sem confirmar (Q4 da auditoria).
     if (!window.confirm('Subir o robô desta cliente agora? Ela não precisa fazer nada. Se o WhatsApp exigir QR novo, a API recusa e avisa.')) return
+    const motivoReconexao = (window.prompt('Motivo (fica registrado na auditoria, mín. 5 letras):') || '').trim()
+    if (motivoReconexao.length < 5) { setAviso('Reconexão cancelada: o motivo precisa ter pelo menos 5 letras.'); return }
     setReconectando(true)
     setAviso('')
     try {
-      const resposta = await api.adminOnlineReconnect(id)
+      const resposta = await api.adminOnlineReconnect(id, motivoReconexao)
       setAviso(resposta?.message || 'Robô iniciado.')
       const detail = await api.adminOnlineUser(id)
       setResult({ id, detail, error: '' })
@@ -428,6 +444,37 @@ function RoboTab({ userId }) {
       setAviso(err?.message || 'Não consegui subir o robô.')
     } finally {
       setReconectando(false)
+    }
+  }
+
+  async function parar(id) {
+    // Parar é escolha, não falha: a cliente não recebe aviso de "robô caiu" e o
+    // supervisor não religa sozinho. Nunca sem confirmar e sem motivo.
+    if (!window.confirm('Parar o robô desta cliente? Ele só volta quando ela conectar de novo (ou você usar "Tentar reconectar"). Ela não recebe aviso de queda.')) return
+    const motivoParada = (window.prompt('Motivo (fica registrado na auditoria, mín. 5 letras):') || '').trim()
+    if (motivoParada.length < 5) { setAviso('Parada cancelada: o motivo precisa ter pelo menos 5 letras.'); return }
+    setParando(true)
+    setAviso('')
+    try {
+      const resposta = await api.adminSessionStop(id, motivoParada)
+      setAviso(resposta?.message || 'Robô parado.')
+      const detail = await api.adminOnlineUser(id)
+      setResult({ id, detail, error: '' })
+    } catch (err) {
+      setAviso(err?.message || 'Não consegui parar o robô.')
+    } finally {
+      setParando(false)
+    }
+  }
+
+  async function diagnosticar(id) {
+    setDiagCarregando(true)
+    try {
+      setDiag({ data: await api.adminDiagnosticoEnvios(id), error: '' })
+    } catch (err) {
+      setDiag({ data: null, error: err?.message || 'Não consegui fazer o diagnóstico.' })
+    } finally {
+      setDiagCarregando(false)
     }
   }
 
@@ -455,6 +502,16 @@ function RoboTab({ userId }) {
             {reconectando ? 'Subindo…' : 'Tentar reconectar'}
           </button>
         )}
+        {session?.lifecycle !== 'stopped_by_user' && (
+          <button
+            type="button"
+            onClick={() => parar(userId)}
+            disabled={parando}
+            className={`${detail?.canAdminRetry ? '' : 'ml-auto '}rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-60`}
+          >
+            {parando ? 'Parando…' : 'Parar robô'}
+          </button>
+        )}
       </div>
       {aviso && <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">{aviso}</p>}
 
@@ -465,6 +522,35 @@ function RoboTab({ userId }) {
           <p className="mt-1 text-xs text-slate-500">{motivo.detail}</p>
         </div>
       )}
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Por que não envia?</h3>
+          <button
+            type="button"
+            onClick={() => diagnosticar(userId)}
+            disabled={diagCarregando}
+            className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-black text-white hover:bg-slate-900 disabled:opacity-60"
+          >
+            {diagCarregando ? 'Verificando…' : 'Verificar agora'}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-500">Confere, nesta ordem: conta, robô, WhatsApp, grupos e envios das últimas 6 horas. A primeira que falhar é a causa.</p>
+        {diag?.error && <p className="mt-3 text-sm text-red-700">{diag.error}</p>}
+        {diag?.data && (
+          <div className="mt-3 space-y-2">
+            <p className={`rounded-xl px-3 py-2 text-sm font-bold ${diag.data.veredito.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>{diag.data.veredito.frase}</p>
+            <ul className="divide-y divide-slate-100">
+              {asArray(diag.data.elos).map((elo) => (
+                <li key={elo.id} className="py-2 text-sm">
+                  <p className="font-bold text-slate-900">{elo.ok ? '✔' : '✗'} {elo.titulo}</p>
+                  {asArray(elo.frases).map((frase) => <p key={frase} className="mt-0.5 text-xs text-slate-600">{frase}</p>)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
         <Card label="Quedas 24h" value={formatNumber(cm.disconnects24h)} />
@@ -526,10 +612,11 @@ function RoboTab({ userId }) {
             render={(event) => (
               <div key={event.id} className="rounded-xl bg-slate-50 p-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-black text-slate-900">{event.type}</p>
+                  <p className="font-black text-slate-900">{ROTULO_EVENTO[event.type] || event.type}</p>
                   <span className="text-xs font-bold text-slate-500">{formatDateTime(event.occurredAt)}</span>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">Código {event.code || '—'} · lifecycle {event.lifecycle || '—'}</p>
+                <p className="mt-1 text-xs text-slate-500">Código {event.code || '—'} · lifecycle {event.lifecycle || '—'}{event.metadata?.source === 'admin' ? ' · feito pelo admin' : ''}</p>
+                {event.metadata?.reason && <p className="mt-1 text-xs text-slate-700">Motivo: {event.metadata.reason}</p>}
               </div>
             )}
           />

@@ -3,7 +3,11 @@ import { boundedRange as boundedCampaignRange } from '../../domain/admin/campaig
 import { loadCampaignFunnel } from '../../domain/admin/campaignFunnelQuery.js'
 import { carregarVisaoEntrega } from '../../ops/deliveryQuality.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
-import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot, getBotMetrics, moveSessionToShard, rollbackSessionFromShard, getShardMetrics, getSupervisorNodesSnapshot, getSupervisorBootedAtMs } from '../../manager.js'
+import { stopSessionOnPurpose, validateStopReason } from '../../domain/session/stopSession.js'
+import { diagnoseEnvios } from '../../domain/admin/diagnostics/envios.js'
+import { getPlanEntitlements } from '../../billing/plans.js'
+import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
+import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot, stopBot,getBotMetrics, moveSessionToShard, rollbackSessionFromShard, getShardMetrics, getSupervisorNodesSnapshot, getSupervisorBootedAtMs } from '../../manager.js'
 import { isNodeRoutingEnabled } from '../../supervisor/nodeRouting.js'
 import { buildNodesCapacityView, nodesViewDisabled } from '../../ops/capacity/nodesView.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
@@ -1679,11 +1683,15 @@ export async function adminRoutes(app) {
       return reply.code(409).send({ error: 'Reconectar daqui não resolve este caso', motivo: ownership.reason, owner: ownership.owner })
     }
 
+    // Motivo é opcional aqui (a Caixa "Hoje" reconecta em 1 clique); a ficha
+    // do cliente sempre manda. Se vier, grava no evento e na auditoria.
+    const motivoReconexao = String(req.body?.reason ?? '').trim().slice(0, 300) || null
+
     recordWaConnectionEventSafe({
       userId,
       type: 'admin_reconnect_requested',
       lifecycle: session?.lifecycle ?? null,
-      metadata: { source: 'admin', owner: ownership.owner, adminId: req.admin?.id ?? null },
+      metadata: { source: 'admin', owner: ownership.owner, adminId: req.admin?.id ?? null, ...(motivoReconexao ? { reason: motivoReconexao } : {}) },
     })
 
     try {
@@ -1697,9 +1705,98 @@ export async function adminRoutes(app) {
       action: 'admin.online.reconnect',
       resource: 'waSession',
       targetUserId: userId,
-      after: { owner: ownership.owner, previousStatus: session?.status ?? null },
+      after: { owner: ownership.owner, previousStatus: session?.status ?? null, reason: motivoReconexao },
     })
     return { ok: true, owner: ownership.owner, message: 'Robô iniciado — acompanhe o status nos próximos minutos' }
+  })
+
+  // Botão "Parar robô" da ficha (aba Robô). Mesmo passo a passo do painel da
+  // cliente e do scripts/parar-sessao.mjs: src/domain/session/stopSession.js.
+  // Motivo obrigatório (auditado); evento `manual_stop_requested` com
+  // source=admin para o aviso "seu robô caiu" não sair por uma parada de propósito.
+  app.post('/users/:id/session/stop', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    const userId = String(req.params.id || '')
+    const check = validateStopReason(req.body)
+    if (!check.ok) return reply.code(400).send({ error: check.error })
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, email: true } }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    const before = await db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true } }).catch(() => null)
+
+    const { rodando, parado } = await stopSessionOnPurpose({
+      db,
+      userId,
+      stopBot,
+      isRunning: isRunningSafe,
+      record: recordWaConnectionEventSafe,
+      eventType: MANUAL_STOP_EVENT,
+      source: 'admin',
+      metadata: { adminId: req.admin?.id ?? null, reason: check.reason },
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.session.stop',
+      resource: 'waSession',
+      resourceId: userId,
+      targetUserId: userId,
+      before,
+      after: { lifecycle: 'stopped_by_user', wasRunning: rodando, stopBot: typeof parado === 'string' ? parado : Boolean(parado), reason: check.reason },
+    })
+    return { ok: true, wasRunning: rodando, message: 'Robô parado. Só volta quando a cliente conectar de novo (ou você usar Tentar reconectar).' }
+  })
+
+  // "Por que não envia", elo por elo, em frases leigas. Só banco e Redis (nunca
+  // bot.log). Regras em src/domain/admin/diagnostics/envios.js — o mesmo módulo
+  // do scripts/diag-envios-vazios.mjs.
+  app.get('/users/:id/diagnostico/envios', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const userId = String(req.params.id || '')
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, plan: true, status: true, accessExpiresAt: true },
+    }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const hours = Math.min(48, Math.max(1, Number(req.query?.hours) || 6))
+    const nowMs = Date.now()
+    const since = new Date(nowMs - hours * 3_600_000)
+    const [session, workerRunning, groups, targets, porStatus, ultimo, presos] = await Promise.all([
+      db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true, lastHeartbeatAt: true } }).catch(() => null),
+      isRunningSafe(userId),
+      db.group.findMany({ where: { userId }, select: { id: true, name: true, role: true, kind: true } }).catch(() => []),
+      db.groupTarget.findMany({ where: { userId }, select: { monitorId: true, postId: true } }).catch(() => []),
+      db.messageLog.groupBy({ by: ['status'], where: { userId, sentAt: { gte: since } }, _count: { _all: true } }).catch(() => []),
+      db.messageLog.findFirst({ where: { userId }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }).catch(() => null),
+      db.messageLog.count({ where: { userId, status: 'sending', sentAt: { lt: new Date(nowMs - STUCK_SENDING_MS) } } }).catch(() => 0),
+    ])
+
+    // Fila de erros só existe com BullMQ; sem ele ou sem Redis, "não sei" (null).
+    let dlqTotal = null
+    if (dlqDisponivel(process.env)) {
+      try {
+        const { listDlq } = await import('../../jobs/sendDlq.js')
+        dlqTotal = (await listDlq({ redisUrl: process.env.REDIS_URL, userId, limit: 1 })).total ?? 0
+      } catch { dlqTotal = null }
+    }
+
+    const byStatus = {}
+    let total = 0
+    for (const row of porStatus) { byStatus[row.status] = row._count._all; total += row._count._all }
+    const result = diagnoseEnvios({
+      nowMs,
+      hours,
+      user,
+      canUseChannels: getPlanEntitlements(user).canUseChannels,
+      workerRunning,
+      session,
+      groups,
+      targets,
+      logs: { total, byStatus, lastSentAt: ultimo?.sentAt ?? null },
+      stuckSending: presos,
+      dlqTotal,
+    })
+    await writeAdminAuditLog(req, { action: 'admin.user.diagnostico_envios', resource: 'user', resourceId: userId, targetUserId: userId, after: { veredito: result.veredito.eloId } })
+    return result
   })
 
   app.get('/online/:userId', async (req, reply) => {

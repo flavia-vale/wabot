@@ -550,3 +550,32 @@ Auditoria (`admin.user.block|unblock`) grava o motivo. Ficha 360
 
 **Não regredir:** não baixar para `support:write`; não aceitar motivo curto nem
 pular o e-mail no servidor "porque a tela já pede". Custo: zero RAM.
+
+## Ficha 360 → aba Robô com Parar, motivo e "por que não envia" (item 6 / M2, 2026-10-03)
+
+**Era:** a aba Robô da ficha (`/admin/clientes/[id]`) já mostrava "Por que caiu",
+histórico de quedas e Reconectar (PR #2183), mas a admin não conseguia parar o
+robô sem a VPS (`scripts/parar-sessao.mjs`), nenhuma ação pedia motivo e o
+"por que não envia" só existia como script lendo `bot.log`.
+
+**Agora:**
+
+| Peça | Onde mora |
+|---|---|
+| Parar de propósito (PURO de rota; marca `stopped_by_user` ANTES do `stopBot`, grava `manual_stop_requested` com `source=admin` + motivo) | `src/domain/session/stopSession.js` — usado pela rota E por `scripts/parar-sessao.mjs` |
+| Rota `POST /api/admin/users/:id/session/stop` (`tech:write`, motivo ≥ 5 letras, auditoria `admin.session.stop`) | `src/api/routes/admin.js` |
+| Reconectar com motivo (opcional no servidor, a ficha sempre manda; vai no evento `admin_reconnect_requested` e na auditoria) | `POST /online/:userId/reconnect` |
+| Diagnóstico elo por elo (conta → robô → WhatsApp → grupos → envios), PURO | `src/domain/admin/diagnostics/envios.js`; usado por `GET /api/admin/users/:id/diagnostico/envios` (`support:read`, auditada) e por `scripts/diag-envios-vazios.mjs` |
+| Tela: botões Parar robô / Tentar reconectar (`confirm` + `prompt` de motivo), bloco "Por que não envia?", eventos com nome leigo e motivo | `dashboard/app/admin/clientes/[id]/page.js` (`RoboTab`) |
+| Guarda | `test/admin-ficha-robo.test.js` |
+
+**Não regredir:** o diagnóstico só lê banco e Redis (nunca `bot.log`, que é da
+frota inteira e não se atribui a uma conta — elos de log ficam só no script);
+`workerRunning: null` = "não sei", nunca "parado"; fila de erros (DLQ) só com
+`QUEUE_BACKEND=bullmq` (`null` = indisponível, não erro); a marca
+`stopped_by_user` vive só em `stopSession.js` (rota e script não a reescrevem);
+Parar nunca sem confirmar + motivo; evento próprio `admin_reconnect_requested`
+continua separado de `manual_reconnect_requested` (mede a promessa do produto).
+DLQ continua nas rotas `/send-dlq/:userId` já existentes (Operação → Filas).
+Custo: 6 consultas pequenas por clique em "Verificar agora", zero processo
+novo, zero RAM.

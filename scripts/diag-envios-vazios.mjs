@@ -112,7 +112,6 @@ console.log({
   acessoExpiraEm: fmt(user.accessExpiresAt),
   podeUsarCanais: entitlements.canUseChannels,
 })
-if (user.status !== 'active') flag(`conta com status "${user.status}" (não "active")`)
 
 // ------------------------------------------------------- 2. processo do worker
 line('PROCESSO DO BOT (worker)')
@@ -152,15 +151,12 @@ console.log({ authDir, existe: existsSync(authDir), credsJson: existsSync(join(a
 if (!existsSync(join(authDir, 'creds.json'))) {
   flag('sem creds.json no AUTH_INFO_DIR desta conta — a sessão nunca foi pareada NESTE ambiente (staging e prod têm auth separado)')
 }
-if (workerLines.length === 0) {
-  flag('nenhum processo bot-worker rodando neste host — nada é recebido nem enviado')
-}
 
 // ------------------------------------------------------------- 3. sessão do WA
 line('SESSÃO WHATSAPP')
 const session = await db.waSession.findUnique({ where: { userId } })
 if (!session) {
-  flag('sem linha em WaSession — a conta nunca conectou neste ambiente')
+  console.log('  sem linha em WaSession')
 } else {
   console.log({
     status: session.status,
@@ -169,9 +165,6 @@ if (!session) {
     ultimoHeartbeat: `${fmt(session.lastHeartbeatAt)} (${ago(session.lastHeartbeatAt)})`,
     ultimoCodigoDeQueda: session.lastDisconnectCode,
   })
-  if (session.status !== 'connected') flag(`sessão em "${session.status}" — enquanto não estiver "connected" nada chega do WhatsApp`)
-  const hbAge = session.lastHeartbeatAt ? Date.now() - new Date(session.lastHeartbeatAt).getTime() : Infinity
-  if (hbAge > 5 * 60_000) flag(`heartbeat parado há ${Math.round(hbAge / 60000)}min — worker provavelmente morto ou travado`)
 }
 const events = await db.waConnectionEvent.findMany({
   where: { userId, occurredAt: { gte: new Date(sinceMs) } },
@@ -206,15 +199,11 @@ for (const m of monitors) {
   const dests = targets.filter(t => t.monitorId === m.id).map(t => postById.get(t.postId)?.name || t.postId)
   const canalBloqueado = m.kind === 'channel' && !entitlements.canUseChannels
   console.log(`    [monitor] ${m.name} (${m.kind}) ${m.waJid} → ${dests.length ? dests.join(', ') : '(NENHUM DESTINO)'}${canalBloqueado ? '  ⚠ canal bloqueado pelo plano' : ''}`)
-  if (!dests.length) flag(`grupo monitorado "${m.name}" não tem nenhum destino ligado — nada sai dele`)
-  if (canalBloqueado) flag(`"${m.name}" é canal e o plano atual não libera canais — ele é removido da config do robô em silêncio`)
 }
 for (const p of posts) {
   const bloqueado = p.kind === 'channel' && !entitlements.canUseChannels
   console.log(`    [destino] ${p.name} (${p.kind}) ${p.waJid}${bloqueado ? '  ⚠ canal bloqueado pelo plano' : ''}`)
 }
-if (!monitors.length) flag('nenhum grupo monitorado cadastrado nesta conta/ambiente')
-if (!posts.length) flag('nenhum grupo de destino cadastrado nesta conta/ambiente')
 
 // ---------------------------------------------------------- 5. o que o banco tem
 line('ENVIOS NO BANCO (é isso que a tela mostra)')
@@ -243,6 +232,31 @@ if (porMotivo.size) {
 }
 const last = await db.messageLog.findFirst({ where: { userId }, orderBy: { sentAt: 'desc' }, select: { sentAt: true, status: true } })
 console.log(`  último envio registrado de todos os tempos: ${last ? `${fmt(last.sentAt)} (${ago(last.sentAt)}) status=${last.status}` : 'NENHUM'}`)
+
+// As regras elo por elo (conta, robô, sessão, grupos, envios) moram em
+// src/domain/admin/diagnostics/envios.js — a MESMA função alimenta a aba Robô
+// da ficha do admin. Aqui só entram os dados e a impressão.
+line('CADEIA (banco) — mesmas regras da ficha do admin')
+const { diagnoseEnvios } = await import('../src/domain/admin/diagnostics/envios.js')
+const { STUCK_SENDING_MS } = await import('../src/ops/adminOpsAlertPolicy.js')
+const presos = await db.messageLog.count({ where: { userId, status: 'sending', sentAt: { lt: new Date(Date.now() - STUCK_SENDING_MS) } } }).catch(() => 0)
+const cadeia = diagnoseEnvios({
+  nowMs: Date.now(),
+  hours,
+  user,
+  canUseChannels: entitlements.canUseChannels,
+  workerRunning: workerLines.length > 0,
+  session,
+  groups,
+  targets,
+  logs: { total: logs.length, byStatus, lastSentAt: logs[0]?.sentAt ?? null },
+  stuckSending: presos,
+})
+for (const e of cadeia.elos) {
+  console.log(`  ${e.ok ? '✔' : '✗'} ${e.titulo}`)
+  for (const f of e.frases) flag(f)
+}
+console.log(`  veredito da cadeia: ${cadeia.veredito.frase}`)
 
 // ------------------------------------------------------- 6. o que o socket viu
 line('BOT.LOG (mensagens que chegaram do WhatsApp)')

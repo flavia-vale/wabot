@@ -19,6 +19,7 @@ import db from '../src/db.js'
 import { stopBot, isRunning } from '../src/manager.js'
 import { recordWaConnectionEventSafe } from '../src/waConnectionTelemetry.js'
 import { MANUAL_STOP_EVENT } from '../src/email/accountActivity.js'
+import { stopSessionOnPurpose } from '../src/domain/session/stopSession.js'
 
 const emails = process.argv.slice(2).filter(Boolean)
 if (!emails.length) {
@@ -32,19 +33,11 @@ for (const email of emails) {
     console.log(`${email} → conta não encontrada`)
     continue
   }
-  const rodando = await isRunning(user.id).catch(() => null)
-  await db.waSession.updateMany({
-    where: { userId: user.id },
-    data: { status: 'disconnected', lifecycle: 'stopped_by_user' },
+  // Mesmo passo a passo da ficha do admin: src/domain/session/stopSession.js.
+  const { rodando, parado } = await stopSessionOnPurpose({
+    db, userId: user.id, stopBot, isRunning, record: recordWaConnectionEventSafe,
+    eventType: MANUAL_STOP_EVENT, source: 'script_parar_sessao',
   })
-  recordWaConnectionEventSafe({
-    userId: user.id,
-    type: MANUAL_STOP_EVENT,
-    lifecycle: 'stopped_by_user',
-    metadata: { source: 'script_parar_sessao' },
-  })
-  let parado = null
-  try { parado = await stopBot(user.id) } catch (err) { parado = `erro: ${err.message}` }
   console.log(`${email} → estava rodando: ${rodando} | marcada como parada | stopBot: ${parado}`)
 }
 
