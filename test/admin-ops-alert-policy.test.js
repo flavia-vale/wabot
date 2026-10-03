@@ -66,3 +66,31 @@ test('passada: manda um aviso por situação e respeita o interruptor', async ()
   assert.equal(off.reason, 'desligado')
   assert.equal(isOpsAlertEnabled({ ADMIN_OPS_ALERT_ENABLED: 'false' }), false)
 })
+
+// RCA 2026-10-03 (conta conectada e cega): o sinal passou a dizer ONDE a
+// mensagem de grupo some. "Nada chega" é o caso em que Reconectar e reiniciar o
+// robô não resolvem — só parear de novo — e o aviso precisa dizer isso.
+test('cega: o aviso diz onde a mensagem some e pede re-pareamento quando nada chega', () => {
+  const rows = [
+    { userId: 'a', metadata: JSON.stringify({ silentForMs: 5 * 3_600_000, blindKind: 'nada_chega', stuckDrops: 25 }) },
+    { userId: 'b', metadata: JSON.stringify({ silentForMs: 4 * 3_600_000, blindKind: 'chega_e_nao_abre' }) },
+    { userId: 'c', metadata: JSON.stringify({ silentForMs: 4 * 3_600_000 }) },
+  ]
+  const pagantes = new Map([['a', { name: 'A', email: 'a@x.com' }], ['b', { name: 'B', email: 'b@x.com' }], ['c', { name: 'C', email: 'c@x.com' }]])
+  const cegas = findPayingBlind(rows, pagantes)
+  assert.deepEqual(cegas.map(x => [x.user.id, x.blindKind, x.stuckDrops]), [['a', 'nada_chega', 25], ['b', 'chega_e_nao_abre', 0], ['c', null, 0]])
+  const [alerta] = buildOpsAlerts({ payingBlind: cegas })
+  assert.equal(alerta.key, 'cega')
+  assert.match(alerta.vars.lista, /A \(a@x\.com\) — sem receber há 5 h — nada chega do WhatsApp, 25 queda\(s\) por mensagem travada antes: parear de novo/)
+  assert.match(alerta.vars.lista, /B \(b@x\.com\) — sem receber há 4 h — chega e não abre: Reconectar/)
+  assert.match(alerta.vars.lista, /C \(c@x\.com\) — sem receber há 4 h\n|C \(c@x\.com\) — sem receber há 4 h$/)
+  assert.match(alerta.vars.acao, /parear de novo/)
+  assert.match(alerta.vars.acao, /Reconectar e reiniciar o robô não resolvem/)
+})
+
+test('cega sem o censo (robô antigo) mantém o aviso de sempre', () => {
+  const rows = [{ userId: 'a', metadata: JSON.stringify({ silentForMs: 5 * 3_600_000 }) }]
+  const [alerta] = buildOpsAlerts({ payingBlind: findPayingBlind(rows, new Map([['a', { name: 'A', email: 'a@x.com' }]])) })
+  assert.equal(alerta.vars.lista, '- A (a@x.com) — sem receber há 5 h')
+  assert.doesNotMatch(alerta.vars.acao, /nada chega/)
+})
