@@ -10,6 +10,7 @@
 
 import { CAPABILITIES, DELIVERY_NETWORK } from '../../core/delivery/networks.js'
 import { TELEGRAM_CAPTION_LIMIT, TELEGRAM_TEXT_LIMIT, clampText, whatsappTextToTelegramHtml } from './format.js'
+import { DELIVERY_REDUCTION } from '../../core/delivery/neutralOffer.js'
 
 export const TELEGRAM_DESTINATION_PREFIX = 'tg:'
 
@@ -122,18 +123,53 @@ export function createTelegramAdapter({ api, db, now = () => Date.now(), cacheTt
     return { pronto: false, motivo: destinos[0].motivo }
   }
 
+  // Texto que cabe no limite DEPOIS de virar HTML (revisão crítica, item 6):
+  // "&" vira "&amp;", então medir o texto cru deixava passar legenda que o
+  // Telegram recusava — e a oferta sumia. Encolhe até caber.
+  function renderFit(raw, limit, html) {
+    if (!html) return { text: clampText(raw, limit), cortado: raw.length > limit }
+    let budget = limit
+    for (let i = 0; i < 6; i++) {
+      const rendered = whatsappTextToTelegramHtml(clampText(raw, budget))
+      if (rendered.length <= limit) return { text: rendered, cortado: raw.length > budget }
+      budget = Math.max(1, budget - (rendered.length - limit) - 8)
+    }
+    return { text: clampText(raw, limit), cortado: true, semHtml: true }
+  }
+
+  // Recusa que é DA FOTO (o Telegram não conseguiu baixar, formato, tamanho)
+  // e não do grupo ou do robô: a oferta sai só com o texto (revisão crítica,
+  // item 5), em vez de sumir.
+  function isPhotoOnlyFailure(err) {
+    if (err?.migrateToChatId) return false
+    if (/parse entities/i.test(String(err?.description ?? ''))) return false
+    const { motivo, temporario } = classifyTelegramError(err)
+    if (temporario) return false
+    return motivo !== TELEGRAM_REASON.ROBO_NAO_ADICIONADO && motivo !== TELEGRAM_REASON.DESTINO_APAGADO
+  }
+
+  async function sendText(chatId, raw, html) {
+    const fitted = renderFit(raw, TELEGRAM_TEXT_LIMIT, html)
+    return api.sendMessage(chatId, fitted.text, html && !fitted.semHtml ? { parse_mode: 'HTML' } : {})
+  }
+
   async function sendOnce(chatId, oferta, html) {
     const raw = composeText(oferta)
-    const extra = html ? { parse_mode: 'HTML' } : {}
-    const render = (text, limit) => (html ? whatsappTextToTelegramHtml(clampText(text, limit)) : clampText(text, limit))
     const imageUrl = oferta?.imagem?.url
     if (imageUrl && capabilities.acceptsImage) {
-      if (raw.length <= TELEGRAM_CAPTION_LIMIT) {
-        return api.sendPhoto(chatId, imageUrl, render(raw, TELEGRAM_CAPTION_LIMIT), extra)
+      try {
+        const caption = renderFit(raw, TELEGRAM_CAPTION_LIMIT, html)
+        if (!caption.cortado) {
+          return { result: await api.sendPhoto(chatId, imageUrl, caption.text, html && !caption.semHtml ? { parse_mode: 'HTML' } : {}), reducoes: [] }
+        }
+        // Texto maior que a legenda: foto sozinha e o texto inteiro depois.
+        await api.sendPhoto(chatId, imageUrl, undefined, {})
+      } catch (err) {
+        if (!isPhotoOnlyFailure(err)) throw err
+        return { result: await sendText(chatId, raw, html), reducoes: [DELIVERY_REDUCTION.IMAGEM_REMOVIDA] }
       }
-      await api.sendPhoto(chatId, imageUrl, undefined, {})
     }
-    return api.sendMessage(chatId, render(raw, TELEGRAM_TEXT_LIMIT), extra)
+    return { result: await sendText(chatId, raw, html), reducoes: [] }
   }
 
   // Grupo comum que vira "supergrupo" (acontece, por exemplo, ao tornar o
@@ -145,8 +181,16 @@ export function createTelegramAdapter({ api, db, now = () => Date.now(), cacheTt
     const to = toDestinationId(newChatId)
     const rows = await db.group.findMany({ where: { waJid: from, deliveryNetwork: DELIVERY_NETWORK.TELEGRAM }, select: { id: true } })
     for (const row of rows) {
+      // Colisão (o grupo novo já foi ligado de novo pela cliente): o
+      // cadastro novo segue valendo; o antigo fica como estava.
       await db.group.update({ where: { id: row.id }, data: { waJid: to } }).catch(() => {})
     }
+    // Revisão crítica, item 9: as ofertas que já esperavam na caixa de saída
+    // acompanham o grupo — antes eram descartadas como "grupo desligado".
+    await db.deliveryOutbox?.updateMany?.({
+      where: { destinationId: from, status: { in: ['pending', 'sending'] } },
+      data: { destinationId: to },
+    }).catch(() => {})
     readinessCache.delete(oldChatId)
   }
 
@@ -170,13 +214,13 @@ export function createTelegramAdapter({ api, db, now = () => Date.now(), cacheTt
 
   async function sendAndWrap(chatId, oferta) {
     try {
-      const result = await sendOnce(chatId, oferta, true)
-      return { ok: true, messageId: result?.message_id != null ? String(result.message_id) : null }
+      const { result, reducoes } = await sendOnce(chatId, oferta, true)
+      return { ok: true, messageId: result?.message_id != null ? String(result.message_id) : null, reducoes }
     } catch (err) {
       // Marcação recusada ("can't parse entities"): reenvia em texto puro.
       if (!/parse entities/i.test(String(err?.description ?? ''))) throw err
-      const result = await sendOnce(chatId, oferta, false)
-      return { ok: true, messageId: result?.message_id != null ? String(result.message_id) : null }
+      const { result, reducoes } = await sendOnce(chatId, oferta, false)
+      return { ok: true, messageId: result?.message_id != null ? String(result.message_id) : null, reducoes }
     }
   }
 

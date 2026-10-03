@@ -28,6 +28,7 @@ export const OUTBOX_STATUS = Object.freeze({
 
 const DEFAULT_INTERVAL_MS = 5_000
 const BATCH_SIZE = 200
+const DESTINATIONS_PER_TICK = 500
 const MAX_ATTEMPTS = 6
 // Destino sem "idade máxima na fila" configurada: oferta mais velha que isto
 // não sai mais (preço e estoque mudam). O WhatsApp sem configuração não
@@ -87,7 +88,10 @@ export async function runDeliveryOutboxTick({
     await writeHistory(db, row, parseOffer(row), { status: 'error', errorMsg })
   }
 
-  // 1. Selecionar.
+  // 1. Selecionar: a pendente mais antiga de CADA grupo (revisão crítica,
+  // item 7). Pegar as 200 mais antigas de todo mundo deixava uma conta com
+  // fila grande ocupar o lote inteiro e as outras contas esperando a vez por
+  // minutos. Só sai uma por grupo por passada mesmo (fairShare.js).
   const rows = await db.deliveryOutbox.findMany({
     where: {
       deliveryNetwork,
@@ -95,7 +99,8 @@ export async function runDeliveryOutboxTick({
       OR: [{ notBeforeAt: null }, { notBeforeAt: { lte: new Date(t0) } }],
     },
     orderBy: { enqueuedAt: 'asc' },
-    take: BATCH_SIZE,
+    distinct: ['destinationId'],
+    take: DESTINATIONS_PER_TICK,
   })
 
   // 2. Repartir com justiça sob o orçamento global do robô.
@@ -212,7 +217,7 @@ async function processRow(row, { db, adapter, caps, deliveryNetwork, allowed, he
 
   // 5. Degradar.
   const { oferta, reducoes } = degradeFor(offer, caps)
-  const reductions = serializeDeliveryReductions(reducoes)
+  let reductions = serializeDeliveryReductions(reducoes)
 
   // 6. Enviar.
   await db.deliveryOutbox.update({ where: { id: row.id }, data: { status: OUTBOX_STATUS.SENDING, attempts: { increment: 1 } } })
@@ -220,6 +225,11 @@ async function processRow(row, { db, adapter, caps, deliveryNetwork, allowed, he
 
   if (result?.ok) {
     ctx.entregue = true
+    // O próprio envio pode ter reduzido a oferta (ex.: a foto não baixou e
+    // ela saiu só com o texto) — fica registrado, nunca em silêncio.
+    if (Array.isArray(result.reducoes) && result.reducoes.length) {
+      reductions = serializeDeliveryReductions([...new Set([...reducoes, ...result.reducoes])])
+    }
     await markDoneWithRetry(db, row.id)
     await writeHistory(db, row, offer, { status: 'success', reducoes: reductions })
     health?.record(deliveryNetwork, HEALTH_SIGNAL.OK)

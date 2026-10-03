@@ -8,7 +8,7 @@
 import defaultDb from '../../db.js'
 import logger from '../../logger.js'
 import { DELIVERY_NETWORK, isDeliveryNetworkEnabled, registerDeliveryNetwork } from '../../core/delivery/networks.js'
-import { createHealthRecorder } from '../../core/delivery/networkHealth.js'
+import { HEALTH_SIGNAL, createHealthRecorder } from '../../core/delivery/networkHealth.js'
 import { getPlanAccess } from '../../billing/plans.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { startDeliveryOutboxJanitor, startDeliveryOutboxSweep } from '../../deliveryOutbox/sweep.js'
@@ -46,8 +46,19 @@ export function startTelegramDelivery({ db = defaultDb, env = process.env, fetch
   const health = createHealthRecorder()
   const canUseMultiNetwork = (userId) => canUseMultiNetworkFor(db, userId)
 
+  // Revisão crítica, item 8: aviso (webhook) ligado no robô faz o Telegram
+  // responder 409 para sempre à leitura contínua. Desliga na partida
+  // (inofensivo) e transforma 409/401 da leitura em sinal do estado do robô —
+  // antes ninguém ficava sabendo e nenhuma cliente conseguia ligar grupo.
+  api.deleteWebhook().catch((err) => logger.warn({ err: err?.message }, 'telegram: não deu para desligar o aviso automático do robô'))
+  const onReadError = (err) => {
+    const code = Number(err?.errorCode)
+    if (code === 409) health.record(DELIVERY_NETWORK.TELEGRAM, HEALTH_SIGNAL.CONFLITO)
+    else if (code === 401) health.record(DELIVERY_NETWORK.TELEGRAM, HEALTH_SIGNAL.BLOQUEADO)
+  }
+
   const linkHandler = (update) => handleLinkUpdate(update, { db, adapter, canUseMultiNetwork, botUsername: adapter.botUsername })
-  const updates = startTelegramUpdatesLoop({ api, handlers: [linkHandler, ...extraUpdateHandlers] })
+  const updates = startTelegramUpdatesLoop({ api, handlers: [linkHandler, ...extraUpdateHandlers], onError: onReadError })
   const sweep = startDeliveryOutboxSweep({
     deliveryNetwork: DELIVERY_NETWORK.TELEGRAM,
     db,
