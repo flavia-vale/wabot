@@ -1,5 +1,7 @@
 # Revisão crítica da integração Rakuten — 2026-10-03
 
+> **Status (2026-10-03):** PR 1 implementado em `fix/rakuten-revisao` (testes em `test/rakuten-revisao.test.js`). O R6 ficou mais estreito do que o planejado (ver tabela) para não quebrar um caso que funciona hoje.
+
 > Escopo: tudo o que está no `develop` em 2026-10-03 — ofertas automáticas
 > (V1) e conversão de links (V2, `afa37fe3`). Leitura de código + testes que
 > reproduzem + medições na API real (conta SID 4640819).
@@ -131,7 +133,7 @@ Tudo na Rakuten. Nenhuma linha muda em Shopee/Awin, exceto o A1 (opcional).
 | R11 | Gravar em lotes de 100 por transação | `syncService.js` | 500 itens → 5 transações, mesmo resultado |
 | R13 | "Atualizar agora" dispara em segundo plano e responde na hora (202). A tela acompanha pelo histórico | `src/api/routes/rakuten.js`, `RakutenCredentialsCard.js` | rota responde < 1 s; 2º clique → 409 |
 | R5 | `click.linksynergy.com/...` sem `https://` entra na rede de segurança final (mesma linha da F3 da Awin) | `src/core/mirrorLinkGuard.js` | texto com `click.linksynergy.com/x` solto → bloqueado |
-| R6 | Loja achada só pelo `mid`: a página (`murl`) precisa ser de um domínio daquela loja (quando a loja tem domínio). Senão o link é apagado | `src/integrations/rakuten/storeMatcher.js`, `src/converters/rakuten.js` | `mid` Netshoes + `murl` Amazon → apagado; `murl` Netshoes → converte |
+| R6 | Loja achada só pelo `mid`: a página (`murl`) **não pode ser de loja fixa** (Shopee, ML, Amazon, Magalu, SHEIN, AliExpress). Senão o link é apagado. Domínio desconhecido segue pelo `mid`, como decidido em 2026-10-01 (só guardamos o site principal de cada loja) | `src/integrations/rakuten/storeMatcher.js`, `src/converters/rakuten.js` | `mid` Netshoes + `murl` Amazon → apagado; `murl` Netshoes → converte |
 | R8 | Robô guarda o último contexto Rakuten bom. Falha de leitura → usa o anterior (até 10 min) | `src/bot-worker.js` (só o bloco da Rakuten em `loadConfig`) | carga que falha → contexto anterior mantido |
 | R16 | Logo só `https` e host público | `src/integrations/rakuten/translate.js` | `http://127.0.0.1/x` → descartado |
 | R14 | Cupom que não aparece no texto renderizado é acrescentado (igual `ensureRenderedAutomationPrice`), **só para origem `rakuten`** | `src/offerAutomation/dispatcher.js` (ramo Rakuten) | modelo Shopee + cupom → linha do cupom presente |
