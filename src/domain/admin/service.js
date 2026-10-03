@@ -87,6 +87,8 @@ export function buildUserOrigin(user, { referrerMap = new Map(), signupMetaMap =
 // Colunas realmente ordenáveis no banco. Campos derivados (último envio, LTV)
 // ficam de fora de propósito: ordenar por eles exigiria carregar a base
 // inteira em memória a cada página.
+// Teto de cadastros por consulta do funil (26 semanas pode passar disso).
+export const FUNNEL_COHORT_LIMIT = 5000
 const SORTABLE_CUSTOMER_FIELDS = new Set(['createdAt', 'accessExpiresAt', 'name', 'email', 'plan', 'status', 'sendCount', 'lastLoginAt'])
 
 export function createAdminService({
@@ -622,18 +624,23 @@ export function createAdminService({
     const now = new Date()
     const since = addDays(now, -weeksCount * 7)
 
-    const users = await db.user.findMany({
+    // Teto por coorte: pega os mais recentes (a janela mais útil) e devolve
+    // `truncated` para a tela avisar. Busca 1 a mais só para saber se passou.
+    const cohortRows = await db.user.findMany({
       where: { createdAt: { gte: since } },
       // Nome e e-mail entram para a lista de "com quem falar" de cada motivo.
       // Telefone NÃO — a tela é para começar a conversa, e telefone tem regra
       // de mascaramento por papel (`sanitizeUser`).
       select: { id: true, createdAt: true, name: true, email: true },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
+      take: FUNNEL_COHORT_LIMIT + 1,
     })
+    const truncated = cohortRows.length > FUNNEL_COHORT_LIMIT
+    const users = cohortRows.slice(0, FUNNEL_COHORT_LIMIT).reverse()
 
     const ids = users.map((user) => user.id)
     if (!ids.length) {
-      return { weeksCount, since, generatedAt: now, ...buildActivationFunnel({ users: [] }) }
+      return { weeksCount, since, generatedAt: now, truncated: false, cohortLimit: FUNNEL_COHORT_LIMIT, ...buildActivationFunnel({ users: [] }) }
     }
 
     const [
@@ -730,6 +737,8 @@ export function createAdminService({
       weeksCount,
       since,
       generatedAt: now,
+      truncated,
+      cohortLimit: FUNNEL_COHORT_LIMIT,
       ...buildActivationFunnel({
         users,
         originByUserId,
