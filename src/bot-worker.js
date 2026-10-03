@@ -51,7 +51,7 @@ import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, effectiveDestinationImageMode, resolveOfferAppearance } from './core/imageModePolicy.js'
 import { renderDestinationWatermark } from './core/destinationWatermark.js'
 import db from './db.js'
-import { getAuthInfoDir, getDedupFile, getKnownChannelsFile, getSentMessagesDir } from './paths.js'
+import { getAuthInfoDir, getDedupFile, getKnownChannelsFile, getSentMessagesDir, getSendSpoolDir } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { createUnsupportedStoreSignal } from './observability/unsupportedStoreSignal.js'
@@ -133,6 +133,7 @@ import { multiNumberEnabled } from './domain/session/multiNumberFlag.js'
 import { buildMembershipRows } from './domain/session/groupMembership.js'
 import { rotationEnabledByEnv, sendQueueNameFor, isRoutableJob } from './domain/session/senderRouting.js'
 import { createRotationRouter } from './core/rotationRouter.js'
+import { spoolPayload, unspoolPayload, removeSpoolFiles, sweepSpool } from './core/sendSpool.js'
 import { standbyProcessKey } from './domain/session/workerIdentity.js'
 import { STANDBY_PROCESS_SLOT } from './domain/session/workerIdentity.js'
 import { recordWaConnectionEventSafe as recordWaConnectionEventSafeBase } from './waConnectionTelemetry.js'
@@ -196,6 +197,16 @@ const MULTI_NUMBER_ON = multiNumberEnabled()
 // para a fila dele. Continua sem escutar origens. Desligado = Fase 1.
 const ROTATION_ON = MULTI_NUMBER_ON && rotationEnabledByEnv()
 const CAN_SEND = !IS_STANDBY || ROTATION_ON
+// Fase 2b: o espelhamento também entra no rodízio (envio montado no ativo e
+// gravado em disco — src/core/sendSpool.js). Flag própria: depende do teste
+// de mídia reenviada por outro número (portão 4 do plano).
+const MIRROR_ROTATION_ON = ROTATION_ON && String(process.env.MULTI_NUMBER_ROTATION_RELAY ?? '').trim().toLowerCase() === 'true'
+const SEND_SPOOL_DIR = getSendSpoolDir(userId)
+const spoolCodec = {
+  encodeProto: message => proto.Message.encode(message).finish(),
+  decodeProto: bytes => proto.Message.decode(bytes),
+  isProtoMessage: value => value instanceof proto.Message,
+}
 // Eventos de conexão contam a história do número QUE ENVIA (admin, funil,
 // alertas). A prontidão não entra neles.
 const recordWaConnectionEventSafe = payload => { if (!IS_STANDBY) recordWaConnectionEventSafeBase(payload) }
@@ -2405,7 +2416,36 @@ async function getOtherNumberProducer() {
   })
   return otherNumberProducer
 }
+async function routeMirrorToOtherNumber(job, normalizedJob) {
+  const slot = await rotationRouter.chooseSlot(job.destJid)
+  if (slot === SESSION_IDENTITY.authSlot) return false
+  const producer = await getOtherNumberProducer()
+  if (!producer) return false
+  // Monta AGORA (no dequeue do outro número não existe o contexto da origem).
+  const payload = await job.buildPayload()
+  // Quem cair para o envio local reaproveita o que já foi montado.
+  normalizedJob.buildPayload = async () => payload
+  const spooled = await spoolPayload(payload, { dir: SEND_SPOOL_DIR, jobId: job.logId, ...spoolCodec })
+  const routed = { ...normalizedJob, buildPayload: undefined, onDone: undefined, preparedPayload: spooled.payload, spoolFiles: spooled.files }
+  const accepted = !findUnserializableField(routed) && await producer.enqueue(routed)
+  if (!accepted) {
+    await removeSpoolFiles({ dir: SEND_SPOOL_DIR, files: spooled.files })
+    return false
+  }
+  // O aviso de "Mensagem enviada" deste job fica com o outro número.
+  doneCallbacks.delete(job.logId)
+  rotationRouter.noteRouted(slot)
+  logger.info({ logId: job.logId, destJid: job.destJid, slot }, 'Rodízio: espelhamento entregue ao outro número')
+  return true
+}
+
 async function routeToOtherNumber(job, normalizedJob) {
+  if (rotationRouter && MIRROR_ROTATION_ON && typeof job.buildPayload === 'function' && String(job.destJid ?? '').endsWith('@g.us')) {
+    return routeMirrorToOtherNumber(job, normalizedJob).catch(err => {
+      logger.warn({ err: err?.message, logId: job.logId }, 'Rodízio: espelhamento fica neste número')
+      return false
+    })
+  }
   if (!rotationRouter || !isRoutableJob(job, { findUnserializableField })) return false
   try {
     const slot = await rotationRouter.chooseSlot(job.destJid)
@@ -2442,6 +2482,9 @@ const reclaimTimer = rotationRouter ? setInterval(async () => {
   }
 }, 60_000) : null
 reclaimTimer?.unref?.()
+// Spool do espelhamento: limpa por idade (24 h) e teto de tamanho.
+const spoolSweepTimer = MIRROR_ROTATION_ON ? setInterval(() => { void sweepSpool({ dir: SEND_SPOOL_DIR }) }, 60 * 60_000) : null
+spoolSweepTimer?.unref?.()
 
 function getRetryDelayMs(attempt) {
   const exponential = SEND_RETRY_BASE_MS * 2 ** Math.max(0, attempt - 1)
@@ -2461,6 +2504,7 @@ async function waitDestinationRateLimit(destJid) {
 }
 
 async function finishSendJob(job, result) {
+  if (Array.isArray(job?.spoolFiles) && job.spoolFiles.length) await removeSpoolFiles({ dir: SEND_SPOOL_DIR, files: job.spoolFiles })
   const onDone = doneCallbacks.get(job.logId)
   doneCallbacks.delete(job.logId)
   await finalizeSendJob(onDone, job, result)
@@ -3442,6 +3486,8 @@ async function processSendJob(job) {
         if (!sockForAttempt) throw new Error('Bot não conectado')
         if (payload === null) {
           if (typeof job.buildPayload === 'function') payload = await job.buildPayload()
+          // Rodízio (2b): envio montado pelo outro número e gravado em disco.
+          else if (job.preparedPayload) payload = await unspoolPayload(job.preparedPayload, { dir: SEND_SPOOL_DIR, decodeProto: spoolCodec.decodeProto })
           else if (job.payloadRecipe) payload = await buildPayloadFromRecipe(job.payloadRecipe, { destJid: job.destJid })
           else payload = job.payload
         }
@@ -6444,6 +6490,7 @@ async function shutdown(code = 0, { exit = registerProcessHandlers } = {}) {
   clearInterval(monitorSilenceTimer)
   clearInterval(membershipTimer)
   if (reclaimTimer) clearInterval(reclaimTimer)
+  if (spoolSweepTimer) clearInterval(spoolSweepTimer)
   await otherNumberProducer?.close?.()
   if (dedupFlushTimer) clearTimeout(dedupFlushTimer)
   if (knownChannelsFlushTimer) clearTimeout(knownChannelsFlushTimer)

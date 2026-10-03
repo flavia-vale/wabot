@@ -298,7 +298,9 @@ export async function multiNumberRoutes(app, opts = {}) {
       members: { 1: in1.has(g.waJid), 2: in2.has(g.waJid) },
     }))
     const sent24h = Object.fromEntries(sent.filter(r => r.senderSlot != null).map(r => [r.senderSlot, r._count._all]))
-    return { enabled: Boolean(user?.rotationEnabled), activeWaSlot: state.activeWaSlot, groups: list, sent24h }
+    // 2b (espelhamento no rodízio) tem flag própria; a tela diz a verdade sobre ela.
+    const mirrorRotation = String(env.MULTI_NUMBER_ROTATION_RELAY ?? '').trim().toLowerCase() === 'true'
+    return { enabled: Boolean(user?.rotationEnabled), activeWaSlot: state.activeWaSlot, groups: list, sent24h, mirrorRotation }
   })
 
   app.post('/rotation', { onRequest: [app.authenticate] }, async (req, reply) => {

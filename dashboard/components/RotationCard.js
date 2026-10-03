@@ -57,7 +57,8 @@ export function RotationCard() {
     <div style={{ marginTop: 16, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
       <div className="pnl-card-title">Dividir os envios entre os números</div>
       <p className="pnl-card-note" style={{ marginTop: 6 }}>
-        Cada grupo passa a receber sempre do mesmo número, e cada número envia menos por hora. As ofertas espelhadas continuam saindo pelo número principal.
+        Cada grupo passa a receber sempre do mesmo número, e cada número envia menos por hora.
+        {state.mirrorRotation ? ' Vale também para as ofertas espelhadas.' : ' As ofertas espelhadas continuam saindo pelo número principal.'}
       </p>
       <button type="button" className={`pnl-btn ${state.enabled ? '' : 'is-primary'}`} style={{ marginTop: 10 }} disabled={busy} onClick={toggle} aria-pressed={state.enabled}>
         {busy ? 'Salvando…' : state.enabled ? 'Desligar divisão dos envios' : 'Ligar divisão dos envios'}
