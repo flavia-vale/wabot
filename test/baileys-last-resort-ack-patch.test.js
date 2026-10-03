@@ -29,8 +29,8 @@ test('o patch versionado contém as mudanças (não só o node_modules local)', 
     'respondedMessageNodes',
     'handleMessageGuarded',
     'nackUnansweredMessage',
-    'wabot: status sem decifrar confirmado com ack, sem retry',
-    'wabot: unavailable com enc sem decifrar confirmado com ack',
+    'wabot: status sem decifrar confirmado com nack, sem retry',
+    'wabot: unavailable com enc sem decifrar confirmado com nack',
     "onUnexpectedError(error, 'processing offline node')",
   ]) assert.ok(patch.includes(marca), `patch sem: ${marca}`)
 })
@@ -60,19 +60,19 @@ test('receipt e retry-receipt contam como resposta (sem nack duplicado)', () => 
   assert.match(failureBranch, /respondedMessageNodes\.add\(node\);\s*retryMutex\.mutex\(/)
 })
 
-test('E7: unavailable com enc que não decifra recebe ack; sem enc não duplica', () => {
+test('E7: unavailable com enc que não decifra recebe nack 500; sem enc não duplica', () => {
   const m = failureBranch.match(/if \(getBinaryNodeChild\(node, 'unavailable'\)\) \{[\s\S]*?return;\s*\}/)
   assert.ok(m)
-  assert.match(m[0], /if \(getBinaryNodeChild\(node, 'enc'\)\) \{\s*await sendMessageAck\(node\);/)
+  assert.match(m[0], /if \(getBinaryNodeChild\(node, 'enc'\)\) \{\s*await sendMessageAck\(node, NACK_REASONS\.UnhandledError\);/)
 })
 
-test('E8: status que não decifra é confirmado com ack antes do retry; grupo segue no retry', () => {
+test('E8: status que não decifra é confirmado com nack 500 antes do retry; grupo segue no retry', () => {
   const idxDm = failureBranch.indexOf('isJidUser(msg.key.remoteJid)')
   const idxStatus = failureBranch.indexOf('if (isJidStatusBroadcast(msg.key.remoteJid)) {')
   const idxRetry = failureBranch.indexOf('retryMutex.mutex(')
   assert.ok(idxDm > 0 && idxStatus > idxDm && idxRetry > idxStatus)
   const statusBranch = failureBranch.slice(idxStatus, failureBranch.indexOf('return;', idxStatus))
-  assert.match(statusBranch, /await sendMessageAck\(node\);/)
+  assert.match(statusBranch, /await sendMessageAck\(node, NACK_REASONS\.UnhandledError\);/)
   assert.doesNotMatch(statusBranch, /isJidGroup|isJidNewsletter|sendRetryRequest/)
   assert.match(failureBranch, /sendRetryRequest\(node, !encNode\)/, 'o retry de grupo precisa continuar existindo')
 })

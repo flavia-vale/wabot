@@ -46,3 +46,22 @@ test('o patch versionado contém as mudanças (não só o node_modules local)', 
     'isLidUser(recipient) || isJidMetaIa(recipient)',
   ]) assert.ok(patch.includes(marca), `patch sem: ${marca}`)
 })
+
+// RCA 2026-10-03 (medido depois do ack com type): o servidor seguiu reentregando a
+// cópia para a Meta AI 4-5× por conexão e a fila offline nunca fechou. Para
+// <message>, resposta válida é <receipt> ou nack; o 7.x responde nack 500 a
+// mensagem ignorada e nack 495 a msmsg. Nenhum caminho de descarte de <message>
+// pode voltar a mandar ack de sucesso (exceto canal e unavailable sem enc, que o
+// 7.x também confirma com ack).
+test('mensagem ignorada por shouldIgnoreJid leva nack 500; msmsg leva nack 495', () => {
+  assert.match(recv, /'ignored message'\);[\s\S]{0,400}?await sendMessageAck\(node, NACK_REASONS\.UnhandledError\);/)
+  assert.match(recv, /'ignored msmsg'\);[\s\S]{0,300}?await sendMessageAck\(node, NACK_REASONS\.MissingMessageSecret\);/)
+})
+
+test('só canal e unavailable-sem-enc continuam com ack de sucesso dentro de handleMessage', () => {
+  const start = recv.indexOf('const handleMessage = async (node) => {')
+  const end = recv.indexOf('const nackUnansweredMessage', start)
+  const body = recv.slice(start, end)
+  const sucessos = body.match(/await sendMessageAck\(node\);/g) || []
+  assert.equal(sucessos.length, 2, `ack de sucesso para <message> só no canal e no unavailable sem enc; achei ${sucessos.length}`)
+})

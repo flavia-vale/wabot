@@ -40,11 +40,15 @@ const dmBranch = (() => {
   return m[0]
 })()
 
-test('DM que não abre é confirmada com <ack>, sem retry e sem receipt', () => {
-  assert.match(dmBranch, /await sendMessageAck\(node\);/)
+// RCA 2026-10-03: para <message> o servidor só aceita <receipt> ou nack (<ack error=…>);
+// o ack de sucesso era ignorado e a mensagem voltava 5× por conexão, segurando a
+// fila offline e o buffer de eventos (conta cega). Nack 500 como o Baileys 7.x.
+test('DM que não abre é confirmada com nack 500, sem retry e sem receipt', () => {
+  assert.match(dmBranch, /await sendMessageAck\(node, NACK_REASONS\.UnhandledError\);/)
+  assert.doesNotMatch(dmBranch, /sendMessageAck\(node\);/)
   assert.match(dmBranch, /return;/)
   assert.doesNotMatch(dmBranch, /sendRetryRequest|sendReceipt\(|retryMutex/)
-  assert.match(dmBranch, /wabot: DM sem decifrar confirmada com ack, sem retry/, 'o log é a medição de aceite (grep -c no bot.log)')
+  assert.match(dmBranch, /wabot: DM sem decifrar confirmada com nack, sem retry/, 'o log é a medição de aceite (grep -c no bot.log)')
 })
 
 test('o ramo de DM vem ANTES do pedido de reenvio e depois do nack de chaves ausentes', () => {

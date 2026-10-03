@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto'
 import { multiNumberEnabled } from '../domain/session/multiNumberFlag.js'
 import { extraNumberAccess } from '../domain/session/extraNumberAccess.js'
-import { decideFailover, failoverSettings } from '../domain/session/failoverPolicy.js'
+import { decideFailover, failoverSettings, isActiveBlind } from '../domain/session/failoverPolicy.js'
 import { STANDBY_PROCESS_SLOT } from '../domain/session/workerIdentity.js'
 import { switchActiveNumber } from '../core/numberSwitch.js'
 import { writeAnalyticsEvent } from '../events/store.js'
@@ -12,6 +12,7 @@ import { writeAnalyticsEvent } from '../events/store.js'
 export const NUMBER_SWITCHED_EVENT = 'multi_number_switched'
 
 const SESSION_SELECT = { status: true, lifecycle: true, lastDisconnectCode: true, lastHeartbeatAt: true, phone: true }
+const ACTIVE_SELECT = { ...SESSION_SELECT, receptionState: true, receptionStateAt: true }
 
 export function createNumberFailoverSweep({ db, manager, notify = async () => {}, env = process.env, logger = console, clock = () => new Date() } = {}) {
   // "Caído desde": o heartbeat do banco segue andando com o robô desconectado,
@@ -31,7 +32,7 @@ export function createNumberFailoverSweep({ db, manager, notify = async () => {}
         select: {
           id: true, name: true, email: true, plan: true, accessExpiresAt: true, extraNumbers: true,
           activeWaSlot: true, waSlotSwitchedAt: true,
-          waSession: { select: SESSION_SELECT },
+          waSession: { select: ACTIVE_SELECT },
           waExtraSessions: { where: { slot: STANDBY_PROCESS_SLOT }, select: SESSION_SELECT },
         },
       })
@@ -41,7 +42,8 @@ export function createNumberFailoverSweep({ db, manager, notify = async () => {}
         seen.add(user.id)
         if (!extraNumberAccess(user, { now, env }).allowed) continue
         const active = user.waSession
-        if (!active || active.status === 'connected') { downSince.delete(user.id); continue }
+        // "Conectado mas cego" conta como caído (Fase 2).
+        if (!active || (active.status === 'connected' && !isActiveBlind(active, now.getTime()))) { downSince.delete(user.id); continue }
         if (!downSince.has(user.id)) downSince.set(user.id, now.getTime())
         const decision = decideFailover({
           active,
