@@ -911,6 +911,7 @@ export default function AdminPage() {
   // ofertas estão saindo com foto?" é de olhar todo dia, e página separada é
   // página que ninguém abre.
   const [entrega, setEntrega] = useState(null)
+  const [loadedAt, setLoadedAt] = useState(null)
 
   async function reloadOnline(next = onlineFilters) {
     setOnlineFiltering(true)
@@ -1059,6 +1060,7 @@ export default function AdminPage() {
     setSystemObservability(systemObservabilityData)
     setOnline(onlineData)
     setEntrega(entregaData)
+    setLoadedAt(new Date())
   }
 
   useEffect(() => {
@@ -1094,6 +1096,7 @@ export default function AdminPage() {
         setSystemObservability(systemObservabilityData)
         setOnline(onlineData)
         setEntrega(entregaData)
+        setLoadedAt(new Date())
       })
       .catch((err) => {
         if (!active) return
@@ -1298,7 +1301,7 @@ export default function AdminPage() {
                 <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Semáforo operacional</p>
                 <h2 className="text-lg font-black text-gray-900">O que precisa de decisão agora</h2>
               </div>
-              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-600">Atualização em tempo real</span>
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-600">{loadedAt ? `Atualizado às ${loadedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Carregando…'}</span>
             </div>
             {/* Cenários da frota (Fase 1B do plano de recepção, RCA 2026-08-26).
                 Primeira fileira de propósito: é o retrato de quantas clientes
