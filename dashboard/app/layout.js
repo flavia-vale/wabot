@@ -26,7 +26,7 @@ export const metadata = {
   // O sufixo do título é a marca que bate com o domínio (espelhagrupos.com.br).
   // Ver a nota de hierarquia de marca em lib/marketing-content.js.
   title: {
-    default: 'Espelha Grupos | Bot para afiliados espelhar ofertas no WhatsApp',
+    default: 'Bot de afiliados para WhatsApp: 7 dias grátis | Espelha Grupos',
     template: '%s | Espelha Grupos',
   },
   description: 'O Espelha Grupos automatiza grupos e canais de ofertas no WhatsApp: converte o link para o seu código de afiliado e publica sozinho, com intervalo controlado e histórico de envio.',
