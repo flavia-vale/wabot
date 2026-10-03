@@ -22,7 +22,7 @@ export function TestAccountTag({ email, emails, compact = false, className = '' 
   return (
     <span
       title="Assinatura de teste: aparece nas listas, mas fica fora das somas de receita, MRR, LTV e ROI"
-      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 font-black text-amber-800 ring-1 ring-amber-300 ${compact ? 'text-[10px]' : 'text-[11px]'} ${className}`}
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-ds-warn/20 px-2 py-0.5 font-black text-ds-warn-ink ring-1 ring-ds-warn/60 ${compact ? 'text-[10.5px]' : 'text-[10.5px]'} ${className}`}
     >
       <span aria-hidden="true">🧪</span>Teste · fora da soma
     </span>

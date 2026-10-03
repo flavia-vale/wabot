@@ -641,3 +641,12 @@ DS v2.1 (`docs/design-system/design-system-v2.html`, âncora `#admin`): tabela d
 - **Leitores de `ops_*` auditados (maior janela):** admin 7 d (desync) e 14 d no máximo; alerta de cegueira (`adminOpsAlertSweep`) janela curta; `diag-*` e `wa-forbidden-report` recebem `--days`/`--horas` do usuário (default 30 ou menos). Nada exige mais de 90 d, então o default é 90. Quem precisar de histórico maior sobe a env.
 - **Índice:** já existe `@@index([event, createdAt])` em `AnalyticsEvent` (`prisma/schema.prisma`), que serve ao filtro `event IN (...) AND createdAt < cutoff`. Nenhuma migration criada.
 - **Não regredir:** evento novo de sinal só entra na retenção se estiver em `ANALYTICS_EVENT_BY_SIGNAL`; marcador de dedup nunca entra. Teste: `test/analytics-retencao-ops.test.js`. Zero RAM.
+
+## Admin nos tokens do DS (G5 passo 2)
+
+- **O que migrou (3 out 2026):** `admin/{hoje,receita,operacao,clientes}/**` (inclui `clientes/[id]`, `clientes/contato`, `operacao/modelos`) e os componentes só desses fluxos: `FilasSection`, `AuditoriaSection`, `SaudeSection`, `AdminContato`, `PayingTag`, `SharedPhoneTag`, `TestAccountTag`, `HelpDot`, `AdminTutorialAccordion`, `SectionErrorBoundary`. Cores Tailwind viraram classes `ds-*` (ex.: `bg-ds-surface`, `text-ds-danger`), declaradas em `@theme inline` no `globals.css`; sem hex nem cor nomeada.
+- **D12:** `--pro*`, `--pnl-shadow*` e `--warn-ink` (derivado de `--warn`) ficam em `dashboard/app/admin/admin.css`, escopo `.admin-root` do layout do admin. Nenhuma outra tela muda.
+- **D10:** Hoje pinta cada linha pela faixa de gravidade (`faixaDoMotivo` em `lib/admin/inboxFiltros.js`, ligada a `GRAVIDADE`); o rótulo da faixa vai escrito.
+- **D9/D8/D11:** painel escuro de erros e tiles escuros viraram cartões claros; tabelas com cabeçalho do DS, zebra e hover (`adm-zebra`); jargão (GO/NO-GO, webhook, token MFA, tech:write, Volumetria) trocado por frase leiga, sem mudar lógica.
+- **Teste:** `test/admin-tokens-ds.test.js` falha com hex, `rgb()`, cor nomeada do Tailwind, `white`/`black` ou jargão nas telas migradas. Tela nova do admin entra na lista `TELAS_MIGRADAS`.
+- **Próximo passo (ficou de fora):** Início (`admin/page.js`) e páginas legadas (`afiliados`, `capacidade`, `erros`, `funil`, `pipeline`, `teste-shard`); `window.confirm` para `ConfirmDialog` (D7); botões em pílula e sombra `--pnl-shadow-soft` (D5, ainda `rounded-xl`).
