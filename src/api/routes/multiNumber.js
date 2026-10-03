@@ -8,6 +8,7 @@ import { canStartReserve, reserveHeadroom } from '../../domain/session/reserveCa
 import { normalizePairingPhone } from '../../domain/session/service.js'
 import { switchActiveNumber } from '../../core/numberSwitch.js'
 import { NUMBER_SWITCHED_EVENT } from '../../jobs/numberFailover.js'
+import { missingDestinations } from '../../domain/session/groupMembership.js'
 import { writeAnalyticsEvent } from '../../events/store.js'
 import {
   MULTI_NUMBER_WAITLIST_EVENTS,
@@ -26,6 +27,8 @@ import {
 // Não liga sessão nem reserva vaga: só registra a intenção.
 const SESSION_VIEW = { phone: true, status: true, lifecycle: true, lastHeartbeatAt: true, blockNotice: true }
 const MANUAL_SWITCH_MIN_INTERVAL_MS = 60_000
+// Pertença gravada há menos de 2 h vale (o robô regrava a cada hora).
+const MEMBERSHIP_FRESH_MS = 2 * 60 * 60_000
 
 function parseBlockNotice(raw) {
   try { return raw ? JSON.parse(raw) : null } catch { return null }
@@ -219,14 +222,23 @@ export async function multiNumberRoutes(app, opts = {}) {
     if (!state) return
     if (state.standby?.status !== 'connected') return reply.code(409).send({ error: 'O número reserva ainda não está conectado.' })
     const userId = req.user.sub
-    const [destinations, standbyGroups] = await Promise.all([
-      db.group.findMany({ where: { userId, role: 'post', kind: 'group' }, select: { waJid: true, name: true } }),
-      Promise.resolve(manager.listGroups(standbyProcessKey(userId))).catch(() => null),
-    ])
-    if (!Array.isArray(standbyGroups)) return reply.code(502).send({ error: 'Não foi possível ler os grupos do número reserva agora.' })
-    const present = new Set(standbyGroups.map(g => g.waJid))
-    const missing = destinations.filter(g => !present.has(g.waJid))
-    return { total: destinations.length, missing }
+    const destinations = await db.group.findMany({ where: { userId, role: 'post', kind: 'group' }, select: { waJid: true, name: true } })
+    // Fase 2: lê a pertença gravada pelo próprio robô (WaGroupMembership) do
+    // número que está de prontidão; sem dado recente, pergunta ao robô ao vivo.
+    const standbySlot = otherSlot(state.activeWaSlot)
+    const stored = await db.waGroupMembership.findMany({
+      where: { userId, slot: standbySlot, refreshedAt: { gte: new Date(Date.now() - MEMBERSHIP_FRESH_MS) } },
+      select: { waJid: true },
+    })
+    let memberJids = stored.map(r => r.waJid)
+    let source = 'stored'
+    if (!stored.length) {
+      const live = await Promise.resolve(manager.listGroups(standbyProcessKey(userId))).catch(() => null)
+      if (!Array.isArray(live)) return reply.code(502).send({ error: 'Não foi possível ler os grupos do número reserva agora.' })
+      memberJids = live.map(g => g.waJid)
+      source = 'live'
+    }
+    return { total: destinations.length, missing: missingDestinations({ destinations, memberJids }), source }
   })
 
   // Troca manual (ex.: "voltar para o número 1"). Só com o outro número

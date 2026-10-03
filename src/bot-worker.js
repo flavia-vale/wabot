@@ -130,6 +130,7 @@ import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { loadWorkerIdentity } from './core/workerIdentity.js'
 import { multiNumberEnabled } from './domain/session/multiNumberFlag.js'
+import { buildMembershipRows } from './domain/session/groupMembership.js'
 import { STANDBY_PROCESS_SLOT } from './domain/session/workerIdentity.js'
 import { recordWaConnectionEventSafe as recordWaConnectionEventSafeBase } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
@@ -1508,6 +1509,42 @@ const stuckSendLogsTimer = IS_STANDBY ? null : setInterval(() => {
 
 // Força re-emissão de sender_keys do WhatsApp via groupFetchAllParticipating().
 // Compartilhado entre o watchdog e o endpoint manual /refresh-wa-state.
+// Vários números por conta, Fase 2: grava em quais grupos ESTE número (login)
+// está. Só com a flag ligada e conta com número extra; reaproveita o mesmo
+// groupFetchAllParticipating (nenhuma chamada nova ao WhatsApp quando vem do
+// refresh). Best-effort: falha não derruba nada.
+const MEMBERSHIP_SYNC_MS = 60 * 60_000
+let lastMembershipSyncAt = 0
+async function accountHasExtraNumbers() {
+  if (!MULTI_NUMBER_ON) return false
+  const row = await db.user.findUnique({ where: { id: userId }, select: { extraNumbers: true } }).catch(() => null)
+  return Number(row?.extraNumbers) > 0
+}
+async function syncGroupMembership(reason, groups = null) {
+  if (!MULTI_NUMBER_ON || !activeSock) return { ok: false, reason: 'off' }
+  if (!(await accountHasExtraNumbers())) return { ok: false, reason: 'no_extra_numbers' }
+  try {
+    const all = groups ?? await activeSock.groupFetchAllParticipating()
+    const rows = buildMembershipRows({ groups: all, selfIds: [activeSock.user?.id, activeSock.user?.lid] })
+    const slot = SESSION_IDENTITY.authSlot
+    const now = new Date()
+    await db.$transaction([
+      db.waGroupMembership.deleteMany({ where: { userId, slot } }),
+      db.waGroupMembership.createMany({ data: rows.map(r => ({ ...r, userId, slot, refreshedAt: now })) }),
+    ])
+    lastMembershipSyncAt = Date.now()
+    logger.info({ reason, slot, count: rows.length }, 'Pertença do número aos grupos gravada')
+    return { ok: true, count: rows.length }
+  } catch (err) {
+    logger.warn({ reason, err: err?.message }, 'Falha ao gravar a pertença do número aos grupos')
+    return { ok: false, reason: 'error' }
+  }
+}
+const membershipTimer = setInterval(() => {
+  if (Date.now() - lastMembershipSyncAt >= MEMBERSHIP_SYNC_MS) void syncGroupMembership('hourly')
+}, 5 * 60_000)
+membershipTimer.unref?.()
+
 async function triggerWaGroupsRefresh(reason = 'manual') {
   if (!activeSock) return { ok: false, reason: 'not_connected' }
   if (waGroupsRefreshInFlight) return { ok: false, reason: 'in_flight' }
@@ -1525,6 +1562,7 @@ async function triggerWaGroupsRefresh(reason = 'manual') {
     }
     lastWaGroupsRefreshAt = Date.now()
     logger.info({ reason, count, durationMs: lastWaGroupsRefreshAt - startedAt }, 'WA groups refresh concluído')
+    if (groups) void syncGroupMembership(`refresh:${reason}`, groups)
     return { ok: true, count }
   } catch (err) {
     logger.error({ reason, err: err?.message }, 'WA groups refresh falhou')
@@ -4053,6 +4091,8 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // durável de "esta conta já conectou alguma vez" (mesmo usado por
       // `waEverConnected` nos gatilhos de e-mail). Precisa vir antes, senão a
       // mensagem de boas-vindas do piloto reenviaria em toda reconexão.
+      // Pertença aos grupos (Fase 2) — com folga para a sessão assentar.
+      setTimeout(() => { void syncGroupMembership('open') }, 20_000).unref?.()
       if (IS_STANDBY) {
         await handleStandbyOpen({ phone })
       } else {
@@ -6286,6 +6326,7 @@ async function shutdown(code = 0, { exit = registerProcessHandlers } = {}) {
   clearInterval(scheduledMessagesTimer)
   clearInterval(stuckSendLogsTimer)
   clearInterval(monitorSilenceTimer)
+  clearInterval(membershipTimer)
   if (dedupFlushTimer) clearTimeout(dedupFlushTimer)
   if (knownChannelsFlushTimer) clearTimeout(knownChannelsFlushTimer)
 

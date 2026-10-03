@@ -46,6 +46,7 @@ model User {
   // `activeWaSlot` = qual número envia agora (1 = o principal); trocar é um
   // único UPDATE com guarda, então nunca há dois números ativos.
   waExtraSessions       WaExtraSession[]
+  waGroupMemberships    WaGroupMembership[]
   extraNumbers          Int       @default(0)
   activeWaSlot          Int       @default(1)
   waSlotSwitchedAt      DateTime?
@@ -153,6 +154,24 @@ model WaExtraSession {
 
   @@unique([userId, slot])
   @@index([status, lastHeartbeatAt])
+}
+
+// Em quais grupos cada NÚMERO da conta está (vários números, Fase 2 —
+// docs/rca/multi-numero.md). `slot` = número (login), não processo. Gravado
+// pelo próprio robô ao conectar e 1x/hora com o groupFetchAllParticipating que
+// já existe. Base do rodízio: só é dono de um grupo o número que está nele.
+model WaGroupMembership {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slot        Int
+  waJid       String
+  name        String?
+  isAdmin     Boolean  @default(false)
+  refreshedAt DateTime @default(now())
+
+  @@unique([userId, slot, waJid])
+  @@index([userId, waJid])
 }
 
 // Histórico de qual conta conectou qual número de WhatsApp.
