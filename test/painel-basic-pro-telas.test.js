@@ -10,7 +10,7 @@ import { BASIC_FEATURE_LIST, PRO_FEATURE_LIST, PRO_FEATURES } from '../dashboard
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 
 test('as listas de plano são as aprovadas pela dona do produto, numa fonte só', () => {
-  assert.deepEqual(BASIC_FEATURE_LIST, ['Espelhamento de grupos', 'Conversão de links de 6 lojas (Shopee, Mercado Livre, Amazon, SHEIN, Magalu e AliExpress)', 'Card de oferta clicável', 'Mensagem reescrita do seu jeito', 'Envio imediato ou agendado', 'Relatórios com histórico completo'])
+  assert.deepEqual(BASIC_FEATURE_LIST, ['Espelhamento de grupos', 'Conversão de links de 6 lojas (Shopee, Mercado Livre, Amazon, SHEIN, Magalu e AliExpress)', 'Card de oferta clicável', 'Mensagem reescrita do seu jeito', 'Envio imediato ou agendado', 'Relatórios com histórico completo', 'Uma mensagem do Espelha Grupos a cada 50 envios no seu grupo (o Pro não tem)'])
   assert.deepEqual(PRO_FEATURE_LIST, ['Tudo do plano Basic', 'Espelhamento de grupos e CANAIS do WhatsApp', 'Garimpo automático de ofertas', 'Filas de ofertas', 'Sua marca d’água nas ofertas', 'Horário de descanso, máximo de ofertas por dia, intervalo entre mensagens e variação do texto', 'Painel de vendas e comissão da Shopee'])
   assert.deepEqual(BASIC_FEATURE_LIST, DEFAULT_LANDING_PLANS.find(p => p.id === 'basic').features)
   for (const item of BASIC_FEATURE_LIST) assert.doesNotMatch(item, /marca d|vendas|varia/i, `o Basic não pode prometer "${item}"`)
@@ -90,4 +90,10 @@ test('página pública de vendas não diz mais que está no Basic', () => {
   const page = read('dashboard/app/vendas-e-comissao-afiliado-whatsapp/page.js')
   assert.doesNotMatch(page, /incluindo o Basic|Está no Basic|todos os planos/)
   assert.doesNotMatch(read('dashboard/public/pricing.md'), /Every plan, including Basic/)
+})
+
+test('o anúncio do Basic termina com o link do site e só sai para o plano basic', () => {
+  const worker = read('src/bot-worker.js')
+  assert.match(worker, /const AD_TEXT = '[^']*\\nhttps:\/\/espelhagrupos\.com\.br'/)
+  assert.match(worker, /if \(job\.plan === 'basic'\) \{\s*adSendCount\+\+/)
 })

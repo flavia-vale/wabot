@@ -1504,7 +1504,7 @@ async function monitorSilenceWatchdog() {
 }
 
 // Marca única do produto (decisão 2026-09-23: "Espelha Grupos em tudo").
-const AD_TEXT = '💡 Bot gerenciado pelo Espelha Grupos — automatize seus grupos de afiliados'
+const AD_TEXT = '💡 Bot gerenciado pelo Espelha Grupos — automatize seus grupos de afiliados\nhttps://espelhagrupos.com.br'
 function envNumber(name, fallback) {
   if (process.env[name] === undefined) return fallback
   const value = Number(process.env[name])
