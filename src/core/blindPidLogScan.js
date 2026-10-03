@@ -33,6 +33,8 @@ export function scanPidLog(text, pid) {
     decryptFailsGrupo: 0,
     retryReceipts: 0,
     outroAparelhoChegou: 0,
+    outroAparelhoRecipients: {},
+    offlineHandled: 0,
     dmOutroAparelhoDescartada: 0,
     escopoDescartes: 0,
     freioEmergencia: 0,
@@ -67,7 +69,12 @@ export function scanPidLog(text, pid) {
       r.decryptFails += 1
       if (line.includes('@g.us')) r.decryptFailsGrupo += 1
     } else if (line.includes('sent retry receipt')) r.retryReceipts += 1
-    else if (line.includes('mensagem de outro aparelho da conta chegou ao socket')) r.outroAparelhoChegou += 1
+    else if (line.includes('mensagem de outro aparelho da conta chegou ao socket')) {
+      r.outroAparelhoChegou += 1
+      const m = line.match(/"recipient":"([^"]*)"/)
+      const dest = m ? m[1] : '(sem recipient)'
+      r.outroAparelhoRecipients[dest] = (r.outroAparelhoRecipients[dest] || 0) + 1
+    } else if (line.includes('handled ') && line.includes(' offline messages')) r.offlineHandled += 1
     else if (line.includes('fora do escopo confirmada com ack, sem abrir')) r.dmOutroAparelhoDescartada += 1
     else if (line.includes('Conversa fora da lista de escolhidos')) r.escopoDescartes += 1
     else if (line.includes('FREIO DE EMERG')) r.freioEmergencia += 1
@@ -130,6 +137,16 @@ export function verdictFromScan(r, { conectado = null, espelhavaAntes = null } =
     return { nivel: 'descartada', texto: `grupo chegou (${r.censoGrupoChegou}) e foi descartado por regra nossa (${r.censoGrupoDescartado}) — hipótese c; conferir lista de monitorados e modo de escopo (${r.filtros?.chatScopeMode ?? '?'})`, linhas }
   }
   // Sem censo: o que o log antigo permite dizer.
+  // RCA 2026-10-03 (doritosmms): cópia fromMe para a Meta AI (@bot) confirmada com <ack> sem
+  // `type`, reentregue 5× por conexão, fila offline nunca fechada → nada de grupo chega.
+  if (r.outroAparelhoChegou > 0 && r.offlineHandled === 0 && r.upserts === 0) {
+    const top = Object.entries(r.outroAparelhoRecipients).sort((a, b) => b[1] - a[1])[0]
+    return {
+      nivel: 'fila_offline_presa',
+      texto: `${r.outroAparelhoChegou} cópia(s) de outro aparelho da conta (destino principal ${top ? `${top[0]} ×${top[1]}` : '?'}), fila offline nunca encerrada (0 "handled offline") e 0 upsert — mensagem sem ack aceito segurando a fila (RCA 2026-10-03, ack sem type); confirmar o patch do ack no robô (uptime do bot-supervisor)`,
+      linhas,
+    }
+  }
   if (r.decryptFailsGrupo > 0) return { nivel: 'nao_abre', texto: `${r.decryptFailsGrupo} falha(s) de decrypt de grupo e 0 aceitas — chave de grupo ruim (hipótese b)`, linhas }
   if (r.upsertsNotify > 0) return { nivel: 'filtro_worker', texto: `${r.upsertsNotify} upsert(s) ao vivo e 0 aceitas — mensagens abrem e o worker descarta (ver 'Mensagem descartada')`, linhas }
   linhas.push(`sem censo não dá para separar "o servidor não manda" de "chega e é descartada antes de abrir"${espelhavaAntes ? ' — a conta espelhava antes, então o silêncio não é fonte parada' : ''}`)
