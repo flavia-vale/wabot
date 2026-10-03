@@ -7,7 +7,8 @@
 #   cd ~/wabot && scripts/voltar_ao_ponto.sh ponto-retorno/2026-10-01-antes-do-merge-main
 #   cd ~/wabot && APLICAR=1 scripts/voltar_ao_ponto.sh <commit|branch|tag>
 #
-# Com APLICAR=1: checkout "solto" (detached) do ponto + npm ci + prisma generate.
+# Com APLICAR=1: checkout "solto" (detached) do ponto + npm ci + prisma generate
+# + build do painel (dashboard/.next).
 #
 # AVISOS:
 #  - O próximo push em main faz o deploy automático da ponta de main e
@@ -42,6 +43,10 @@ else
   git checkout --detach "$HASH"
   npm ci
   npx prisma generate
+  # O painel serve o build em dashboard/.next: sem rebuild, o restart do
+  # `dashboard` continuaria mostrando a versão nova. APP_ENV no build, como no
+  # deploy_safe_dashboard.sh (CSP/HSTS de produção são gravados no build).
+  (cd dashboard && npm ci && APP_ENV="${APP_ENV:-production}" npm run build)
   echo "Código voltado para $HASH."
 fi
 
@@ -52,5 +57,5 @@ bot-supervisor reconecta TODAS as sessões):
   pm2 restart api --update-env          # só a API/painel, sem derrubar sessões
   pm2 restart dashboard --update-env
   pm2 restart bot-supervisor --update-env   # só se a mudança era do código dos robôs
-Depois confira:  node scripts/vigia.mjs
+Depois confira:  node scripts/vigia.mjs   e   node scripts/vigia-subida.mjs agora
 MSG
