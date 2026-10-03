@@ -22,7 +22,7 @@
 import dbDefault from '../../db.js'
 import { decryptCredential } from '../../credentialCrypto.js'
 import { getDefaultRakutenClient, RAKUTEN_MAX_PAGE_SIZE } from './client.js'
-import { RakutenAuthError, RakutenRateLimitError, RakutenResponseError } from './errors.js'
+import { RakutenAccessDeniedError, RakutenAuthError, RakutenRateLimitError, RakutenResponseError, RakutenTimeoutError } from './errors.js'
 import { extractAdvertiser, extractCouponPage, translateCoupon } from './translate.js'
 import { extractApprovedMerchants, extractRakutenLinkId, storeDomainsFromUrl } from './storeMatcher.js'
 import { RAKUTEN_ACCOUNT_STATUS, RAKUTEN_MESSAGES } from './accountService.js'
@@ -38,6 +38,15 @@ export const RAKUTEN_RETRY_AFTER_RATE_LIMIT_MS = 5 * 60_000
 export const RAKUTEN_EXPIRED_RETENTION_MS = 30 * 24 * 60 * 60_000
 export const RAKUTEN_SYNC_RUNS_KEPT = 50
 const MAX_ERRORS = 5
+// Revisão 2026-10-03 (docs/revisao-rakuten-2026-10-03.md):
+// R1 — prazo total de UMA conta; conferido entre uma chamada e outra (cada
+// chamada já tem o próprio prazo no cliente), então a sync sempre termina.
+export const RAKUTEN_SYNC_DEADLINE_MS = 5 * 60_000
+// R2 — 401/403 em pedido de dados só desliga a conta na 3ª execução seguida.
+export const RAKUTEN_ACCESS_DENIED_LIMIT = 3
+// R11 — gravações por transação (SQLite tem um escritor por vez; robôs
+// escrevem no mesmo banco).
+export const RAKUTEN_UPSERT_CHUNK = 100
 
 const SKIP_REASON_TEXT = {
   missing_link: 'vieram sem link',
@@ -47,6 +56,24 @@ const SKIP_REASON_TEXT = {
 }
 
 const runningAccounts = new Set()
+// R3/R4 — leituras completas VAZIAS seguidas, por conta (memória da API, poucos
+// bytes). Uma vazia sozinha (soluço da Rakuten) não vence promoção nem apaga
+// loja; só a 2ª seguida. Reinício da API zera a conta: só atrasa a limpeza.
+const emptyStreaks = new Map()
+
+function bumpEmptyStreak(key, empty) {
+  if (!empty) {
+    emptyStreaks.delete(key)
+    return 0
+  }
+  const next = (emptyStreaks.get(key) || 0) + 1
+  emptyStreaks.set(key, next)
+  return next
+}
+
+export function __resetRakutenEmptyStreaks() {
+  emptyStreaks.clear()
+}
 
 export function isRakutenAccountSyncing(accountId) {
   return runningAccounts.has(accountId)
@@ -78,11 +105,13 @@ async function upsertPage({ db, account, runId, items, counters, skipReasons }) 
     select: { promotionId: true },
   })
   const known = new Set(existing.map((row) => row.promotionId))
-  await db.$transaction(records.map((record) => db.rakutenPromotion.upsert({
-    where: { accountId_promotionId: { accountId: account.id, promotionId: record.promotionId } },
-    create: { ...record, userId: account.userId, accountId: account.id, status: 'active', lastSeenRunId: runId },
-    update: { ...record, status: 'active', expiredAt: null, lastSeenRunId: runId },
-  })))
+  for (let i = 0; i < records.length; i += RAKUTEN_UPSERT_CHUNK) {
+    await db.$transaction(records.slice(i, i + RAKUTEN_UPSERT_CHUNK).map((record) => db.rakutenPromotion.upsert({
+      where: { accountId_promotionId: { accountId: account.id, promotionId: record.promotionId } },
+      create: { ...record, userId: account.userId, accountId: account.id, status: 'active', lastSeenRunId: runId },
+      update: { ...record, status: 'active', expiredAt: null, lastSeenRunId: runId },
+    })))
+  }
   for (const record of records) {
     if (known.has(record.promotionId)) counters.updated++
     else { counters.inserted++; known.add(record.promotionId) }
@@ -93,7 +122,7 @@ async function upsertPage({ db, account, runId, items, counters, skipReasons }) 
 // Logo/site da loja: reaproveita o que já está no banco; pergunta à Rakuten
 // só pelas lojas sem logo (teto por execução). Falha aqui nunca derruba o
 // sync — a promoção sai sem foto, como a Awin v1.
-async function fillAdvertiserInfo({ db, client, account, creds, advertiserIds }) {
+async function fillAdvertiserInfo({ db, client, account, creds, advertiserIds, checkDeadline = () => {} }) {
   if (!advertiserIds.size) return 0
   const ids = [...advertiserIds]
   const known = await db.rakutenPromotion.findMany({
@@ -105,6 +134,7 @@ async function fillAdvertiserInfo({ db, client, account, creds, advertiserIds })
   let asked = 0
   for (const id of ids) {
     if (info.has(id) || asked >= RAKUTEN_MAX_NEW_ADVERTISERS_PER_RUN) continue
+    checkDeadline()
     asked++
     try {
       const advertiser = extractAdvertiser(await client.getAdvertiser(creds, id))
@@ -127,10 +157,12 @@ async function fillAdvertiserInfo({ db, client, account, creds, advertiserIds })
 // chamada por loja nova (teto por execução). Loja que sumiu da lista é
 // apagada; resposta estranha não apaga nada. Devolve quantas lojas ficaram
 // (null = não leu).
-async function syncProgrammes({ db, client, account, creds, runId }) {
+async function syncProgrammes({ db, client, account, creds, runId, checkDeadline = () => {} }) {
   if (typeof client.listApprovedMerchants !== 'function') return null
   const merchants = extractApprovedMerchants(await client.listApprovedMerchants(creds))
   if (!merchants) return null
+  // R4: lista vazia 1× (soluço) mantém as lojas; só a 2ª vazia seguida apaga.
+  if (bumpEmptyStreak(`${account.id}:stores`, merchants.length === 0) === 1) return null
   const ids = merchants.map((merchant) => merchant.advertiserId)
   const knownProgrammes = await db.rakutenProgramme.findMany({
     where: { accountId: account.id, advertiserId: { in: ids } },
@@ -146,6 +178,7 @@ async function syncProgrammes({ db, client, account, creds, runId }) {
   let asked = 0
   for (const merchant of merchants) {
     if (storeUrls.has(merchant.advertiserId) || asked >= RAKUTEN_MAX_PROGRAMME_LOOKUPS_PER_RUN) continue
+    checkDeadline()
     asked++
     try {
       const advertiser = extractAdvertiser(await client.getAdvertiser(creds, merchant.advertiserId))
@@ -172,6 +205,7 @@ async function syncProgrammes({ db, client, account, creds, runId }) {
 function describeFailure(error) {
   if (error instanceof RakutenAuthError) return RAKUTEN_MESSAGES.auth
   if (error instanceof RakutenRateLimitError) return RAKUTEN_MESSAGES.rateLimited
+  if (error instanceof RakutenAccessDeniedError) return RAKUTEN_MESSAGES.accessDenied
   return RAKUTEN_MESSAGES.unavailable
 }
 
@@ -202,15 +236,22 @@ export async function syncRakutenAccount(accountId, deps = {}) {
     let programmes = null
     let programmesError = null
     let linkId = null
+    let validRecords = 0
+    const deadlineAt = Date.now() + (deps.deadlineMs ?? RAKUTEN_SYNC_DEADLINE_MS)
+    const checkDeadline = () => {
+      if (Date.now() > deadlineAt) throw new RakutenTimeoutError()
+    }
 
     try {
       const creds = decryptRakutenCreds(account, decrypt)
       const advertiserIds = new Set()
       for (let page = 1; page <= maxPages; page++) {
+        checkDeadline()
         const parsed = extractCouponPage(await client.listCoupons(creds, { page, pageSize: RAKUTEN_MAX_PAGE_SIZE }))
         if (!parsed) throw new RakutenResponseError()
         counters.pages++
         const records = await upsertPage({ db, account, runId: run.id, items: parsed.items, counters, skipReasons })
+        validRecords += records.length
         for (const record of records) {
           advertiserIds.add(record.advertiserId)
           linkId ||= extractRakutenLinkId(record.clickUrl)
@@ -219,17 +260,17 @@ export async function syncRakutenAccount(accountId, deps = {}) {
         if (!parsed.items.length || page >= lastPage) { complete = true; break }
       }
       try {
-        await fillAdvertiserInfo({ db, client, account, creds, advertiserIds })
+        await fillAdvertiserInfo({ db, client, account, creds, advertiserIds, checkDeadline })
       } catch (error) {
-        if (error instanceof RakutenAuthError) throw error
+        if (error instanceof RakutenAuthError || error instanceof RakutenTimeoutError) throw error
         advertiserError = error
       }
       // Lojas aprovadas: falha só aqui não derruba as promoções e mantém a
       // lista antiga (a conversão segue com ela).
       try {
-        programmes = await syncProgrammes({ db, client, account, creds, runId: run.id })
+        programmes = await syncProgrammes({ db, client, account, creds, runId: run.id, checkDeadline })
       } catch (error) {
-        if (error instanceof RakutenAuthError) throw error
+        if (error instanceof RakutenAuthError || error instanceof RakutenTimeoutError) throw error
         programmesError = error
       }
     } catch (error) {
@@ -243,7 +284,11 @@ export async function syncRakutenAccount(accountId, deps = {}) {
       data: { status: 'expired', expiredAt: finishedAt },
     })
     counters.expired += expiredByDate.count
-    if (complete) {
+    // R3: leitura completa SEM nenhuma promoção válida só vence por ausência
+    // na 2ª vez seguida (um feed vazio por soluço apagava tudo e matava a
+    // fila de revisão).
+    const emptyStreak = complete ? bumpEmptyStreak(`${account.id}:feed`, validRecords === 0) : 0
+    if (complete && emptyStreak !== 1) {
       const expiredByAbsence = await db.rakutenPromotion.updateMany({
         where: { accountId: account.id, status: 'active', OR: [{ lastSeenRunId: null }, { lastSeenRunId: { not: run.id } }] },
         data: { status: 'expired', expiredAt: finishedAt },
@@ -267,13 +312,28 @@ export async function syncRakutenAccount(accountId, deps = {}) {
     const accountUpdate = { lastSyncAt: finishedAt }
     // Só troca quando achou: conta sem promoção nesta hora mantém o que tinha.
     if (linkId && linkId !== account.linkId) accountUpdate.linkId = linkId
-    if (failure instanceof RakutenAuthError) {
+    // R2: 401/403 em pedido de dados é passageiro; só a 3ª execução seguida
+    // assim desliga a conta (contada pelo histórico, sem coluna nova).
+    let deniedTooOften = false
+    if (failure instanceof RakutenAccessDeniedError) {
+      const previous = await db.rakutenSyncRun.findMany({
+        where: { accountId: account.id, id: { not: run.id }, status: { not: 'running' } },
+        orderBy: { startedAt: 'desc' },
+        take: RAKUTEN_ACCESS_DENIED_LIMIT - 1,
+        select: { status: true },
+      })
+      deniedTooOften = previous.length === RAKUTEN_ACCESS_DENIED_LIMIT - 1 && previous.every((row) => row.status === 'access_denied')
+    }
+    if (failure instanceof RakutenAuthError || deniedTooOften) {
       runStatus = 'invalid_credential'
       Object.assign(accountUpdate, { status: RAKUTEN_ACCOUNT_STATUS.INVALID_CREDENTIAL, statusDetail: RAKUTEN_MESSAGES.auth, nextSyncAt: null })
     } else if (failure instanceof RakutenRateLimitError) {
       runStatus = 'rate_limited'
       const wait = Math.max(RAKUTEN_RETRY_AFTER_RATE_LIMIT_MS, Number(failure.retryAfterMs) || 0)
       Object.assign(accountUpdate, { nextSyncAt: new Date(finishedAt.getTime() + wait) })
+    } else if (failure instanceof RakutenAccessDeniedError) {
+      runStatus = 'access_denied'
+      Object.assign(accountUpdate, { status: RAKUTEN_ACCOUNT_STATUS.ERROR, statusDetail: describeFailure(failure), nextSyncAt: new Date(finishedAt.getTime() + RAKUTEN_RETRY_AFTER_ERROR_MS) })
     } else if (failure) {
       runStatus = 'failed'
       Object.assign(accountUpdate, { status: RAKUTEN_ACCOUNT_STATUS.ERROR, statusDetail: describeFailure(failure), nextSyncAt: new Date(finishedAt.getTime() + RAKUTEN_RETRY_AFTER_ERROR_MS) })

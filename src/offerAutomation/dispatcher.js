@@ -166,9 +166,22 @@ export function materializeAutomationOffer(automation, offer, botConfig) {
 }
 
 
+// Cupom da promoção Rakuten vai em `{descrição}`. Modelo sem essa variável
+// (ex.: "Automático clássico") fazia o código do cupom sumir da mensagem:
+// aqui ele volta, antes da linha do link. Só para a origem Rakuten
+// (revisão 2026-10-03, R14).
+export function ensureRakutenCouponLine(text, offer = {}) {
+  const body = String(text || '')
+  const line = String(offer.description || '').trim()
+  if (offer.source !== 'rakuten' || !line || body.includes(line)) return body
+  const linkIndex = body.search(/^\s*(?:👉|🛒).*https?:\/\//m)
+  if (linkIndex >= 0) return `${body.slice(0, linkIndex).trimEnd()}\n\n${line}\n\n${body.slice(linkIndex)}`
+  return `${body.trimEnd()}\n\n${line}`
+}
+
 export function formatOfferMessage(offer, keyword, templateBody = null) {
   if (templateBody) {
-    return buildMobileOfferText({
+    const text = buildMobileOfferText({
       product: automationOfferProduct(offer),
       link: offer.offerLink,
       template: DEFAULT_AUTOMATION_TEMPLATE_KEY,
@@ -178,6 +191,7 @@ export function formatOfferMessage(offer, keyword, templateBody = null) {
       // sempre — com cupom, ou apagado quando a automação não usa cupons.
       keepCouponToken: true,
     })
+    return offer.source === 'rakuten' ? ensureRakutenCouponLine(text, offer) : text
   }
 
   if (isPromotionSource(offer.source)) {

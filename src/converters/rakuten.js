@@ -65,9 +65,10 @@ export async function convert(url, creds, _options = {}) {
   }
 
   const destinationUrl = cleanRakutenDestinationUrl(click ? click.destinationUrl : url)
-  const store = (destinationUrl && matcher.storeForUrl(destinationUrl))
-    || (click?.advertiserId && matcher.storeForAdvertiser(click.advertiserId))
-    || null
+  // Pela página primeiro; pelo `mid` só se a página for da mesma loja (R6).
+  const store = typeof matcher.storeForClick === 'function'
+    ? matcher.storeForClick({ advertiserId: click?.advertiserId ?? null, destinationUrl })
+    : ((destinationUrl && matcher.storeForUrl(destinationUrl)) || (click?.advertiserId && matcher.storeForAdvertiser(click.advertiserId)) || null)
   if (!store) throw notConvertible('Loja da Rakuten em que você ainda não foi aprovada.', RAKUTEN_NOT_JOINED_ERROR)
   if (!destinationUrl) throw notConvertible('O link da Rakuten não diz para qual página da loja ele vai.', 'no_destination')
   const account = accounts.get(store.accountId)

@@ -27,6 +27,7 @@
 import { createHmac } from 'node:crypto'
 import { createTokenRateLimiter } from '../awin/rateLimiter.js'
 import {
+  RakutenAccessDeniedError,
   RakutenAuthError,
   RakutenHttpError,
   RakutenNetworkError,
@@ -40,6 +41,14 @@ export const RAKUTEN_DEFAULT_TIMEOUT_MS = 20_000
 export const RAKUTEN_BRAZIL_NETWORK = '8'
 export const RAKUTEN_MAX_PAGE_SIZE = 500
 const TOKEN_EARLY_REFRESH_MS = 5 * 60_000
+// Teto de uma resposta (revisão 2026-10-03, R10): a página de 500 ofertas
+// medida tem ~1 MB. Resposta maior que isto é defeito do outro lado e não
+// pode derrubar a API por falta de memória.
+export const RAKUTEN_MAX_RESPONSE_BYTES = 10 * 1024 * 1024
+// Pedido de token recusado por DADO ERRADO (medido 2026-09-30: SID errado e
+// segredo errado → `invalid_client`). Qualquer outra recusa é passageira
+// (revisão 2026-10-03, R2): um soluço da Rakuten não pode desligar a conta.
+const CREDENTIAL_REFUSED_ERRORS = new Set(['invalid_client', 'unauthorized_client', 'invalid_grant'])
 const TOKEN_CACHE_MAX = 500
 
 const SID_RE = /^\d{1,12}$/
@@ -80,16 +89,84 @@ export function createRakutenClient({
 } = {}) {
   const tokens = new Map()
 
+  // Lê o corpo contando bytes (teto R10). Sem stream (respostas de teste),
+  // cai no text() — ainda dentro do prazo de send().
+  async function readBody(response) {
+    const declared = Number(response.headers?.get?.('content-length'))
+    if (Number.isFinite(declared) && declared > RAKUTEN_MAX_RESPONSE_BYTES) throw new RakutenResponseError()
+    const reader = response.body?.getReader?.()
+    if (!reader) {
+      const text = await response.text()
+      if (Buffer.byteLength(String(text ?? '')) > RAKUTEN_MAX_RESPONSE_BYTES) throw new RakutenResponseError()
+      return String(text ?? '')
+    }
+    const chunks = []
+    let received = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      received += value.byteLength
+      if (received > RAKUTEN_MAX_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => {})
+        throw new RakutenResponseError()
+      }
+      chunks.push(Buffer.from(value))
+    }
+    return Buffer.concat(chunks, received).toString('utf8')
+  }
+
+  // Requisição INTEIRA dentro do prazo — inclusive a leitura do corpo
+  // (revisão 2026-10-03, R1: o prazo era desligado antes do corpo e uma
+  // resposta que travava no meio segurava a sync de todas as contas para
+  // sempre). → { status, ok, headers, text }
   async function send(url, init) {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    let timer
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort()
+        reject(new RakutenTimeoutError())
+      }, timeoutMs)
+    })
+    const work = (async () => {
+      let response
+      try {
+        response = await fetchFn(url, { ...init, signal: controller.signal })
+      } catch (error) {
+        if (error?.name === 'AbortError' || controller.signal.aborted) throw new RakutenTimeoutError()
+        throw new RakutenNetworkError()
+      }
+      let text = ''
+      try {
+        text = await readBody(response)
+      } catch (error) {
+        if (error instanceof RakutenResponseError) throw error
+        if (error?.name === 'AbortError' || controller.signal.aborted) throw new RakutenTimeoutError()
+        throw new RakutenNetworkError()
+      }
+      return { status: response.status, ok: response.ok, headers: response.headers, text }
+    })()
+    work.catch(() => {})
     try {
-      return await fetchFn(url, { ...init, signal: controller.signal })
-    } catch (error) {
-      if (error?.name === 'AbortError' || controller.signal.aborted) throw new RakutenTimeoutError()
-      throw new RakutenNetworkError()
+      return await Promise.race([work, deadline])
     } finally {
       clearTimeout(timer)
+    }
+  }
+
+  function parseJson(text) {
+    try {
+      return JSON.parse(text)
+    } catch {
+      throw new RakutenResponseError()
+    }
+  }
+
+  function oauthError(text) {
+    try {
+      return String(JSON.parse(text)?.error ?? '')
+    } catch {
+      return ''
     }
   }
 
@@ -114,10 +191,11 @@ export function createRakutenClient({
       headers: { Authorization: `Bearer ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
       body: new URLSearchParams({ scope: c.sid }).toString(),
     })
-    if (response.status === 400 || response.status === 401 || response.status === 403) throw new RakutenAuthError(response.status)
+    if ([400, 401, 403].includes(response.status) && CREDENTIAL_REFUSED_ERRORS.has(oauthError(response.text))) {
+      throw new RakutenAuthError(response.status)
+    }
     checkStatus(response)
-    let body
-    try { body = await response.json() } catch { throw new RakutenResponseError() }
+    const body = parseJson(response.text)
     const accessToken = typeof body?.access_token === 'string' ? body.access_token : ''
     if (!accessToken) throw new RakutenResponseError()
     const ttlMs = Math.max(60_000, (Number(body.expires_in) || 3600) * 1000 - TOKEN_EARLY_REFRESH_MS)
@@ -134,7 +212,8 @@ export function createRakutenClient({
   }
 
   // Chamada autenticada. Token recusado (vencido antes da hora) → pede um
-  // novo UMA vez; recusado de novo → RakutenAuthError.
+  // novo UMA vez; recusado de novo → RakutenAccessDeniedError (passageiro:
+  // quem decide desligar a conta é a sync, depois de 3 seguidos — R2).
   async function request(creds, { path, query = null, accept = 'application/json', parse = 'json' }) {
     const c = readCreds(creds)
     const url = new URL(path, baseUrl)
@@ -148,16 +227,12 @@ export function createRakutenClient({
       if (response.status === 401 || response.status === 403) {
         tokens.delete(c.key)
         if (attempt === 0) continue
-        throw new RakutenAuthError(response.status)
+        throw new RakutenAccessDeniedError(response.status)
       }
       checkStatus(response)
-      try {
-        return parse === 'text' ? await response.text() : await response.json()
-      } catch {
-        throw new RakutenResponseError()
-      }
+      return parse === 'text' ? response.text : parseJson(response.text)
     }
-    throw new RakutenAuthError(null)
+    throw new RakutenAccessDeniedError(null)
   }
 
   // Os dados valem? Só pede o token (1 chamada).

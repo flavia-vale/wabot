@@ -33,6 +33,19 @@ function logAutomationResult(automation, result) {
 
 let running = false
 
+// Automação RAKUTEN que pulou por falta de promoção só volta a ser tentada
+// depois deste tempo. Sem isso, rodava todo minuto para sempre (pulo não
+// atualiza lastSentAt) — e na Rakuten isso é o estado normal: feed pequeno e
+// promoções "indeterminadas" que já saíram. Só Rakuten; Shopee/Awin seguem
+// como sempre (revisão 2026-10-03, R7). Memória: 1 número por automação.
+export const RAKUTEN_EMPTY_BACKOFF_MS = 15 * 60_000
+const RAKUTEN_EMPTY_SKIPS = new Set(['all_offers_filtered', 'no_rakuten_promotions', 'no_rakuten_account'])
+const rakutenBackoffUntil = new Map()
+
+export function __resetRakutenBackoff() {
+  rakutenBackoffUntil.clear()
+}
+
 export async function tickOfferAutomations(deps = {}) {
   if (running) return
   running = true
@@ -83,6 +96,7 @@ export async function tickOfferAutomations(deps = {}) {
         continue
       }
       if (!isOfferAutomationDue(automation, now)) continue
+      if (automation.source === 'rakuten' && (rakutenBackoffUntil.get(automation.id) ?? 0) > now.getTime()) continue
       if (runningSet && !runningSet.has(automation.userId) && !automation.instagramDestinations?.length) continue
 
       // Ofertas automáticas são feature Pro/Trial ativo. Automações criadas
@@ -101,6 +115,10 @@ export async function tickOfferAutomations(deps = {}) {
       try {
         const result = await run(automation, { dbOverride: database })
         logAutomationResult(automation, result)
+        if (automation.source === 'rakuten') {
+          if (RAKUTEN_EMPTY_SKIPS.has(result?.skipped)) rakutenBackoffUntil.set(automation.id, now.getTime() + RAKUTEN_EMPTY_BACKOFF_MS)
+          else rakutenBackoffUntil.delete(automation.id)
+        }
       } catch (err) {
         console.error(`[offer-cron] automation ${automation.id} failed:`, err.message)
       }
