@@ -24,3 +24,6 @@
 .admin-root .adm-table tbody tr:hover { background: var(--bg-soft); }
 .admin-root .adm-table .num { text-align: right; }
 .admin-root .adm-scroll { overflow-x: auto; }
+/* Zebra e hover para tabelas que já têm o próprio espaçamento (receita, clientes). */
+.admin-root .adm-zebra tbody tr:nth-child(even) { background: var(--bg); }
+.admin-root .adm-zebra tbody tr:hover { background: var(--bg-soft); }

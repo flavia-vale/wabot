@@ -207,8 +207,8 @@ export default function AdminClientesPage() {
 
         {data && (
           <section className="overflow-x-auto rounded-2xl border border-ds-line bg-ds-surface shadow-sm">
-            <table className="min-w-full text-sm">
-              <thead className="bg-ds-bg text-left text-xs uppercase tracking-wide text-ds-ink-soft">
+            <table className="adm-zebra min-w-full text-sm">
+              <thead className="bg-ds-surface text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-ds-ink-faint">
                 <tr>
                   {COLUMNS.map(column => (
                     <th key={column.key} className="px-4 py-3 font-bold">
