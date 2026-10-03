@@ -702,3 +702,23 @@ silencioso — inclusive os avisos internos. Conferir antes de concluir que o
 alarme não dispara.
 
 Teste: `test/cobranca-plano-b.test.js`.
+
+## ADMIN > Ficha do cliente > Financeiro: Sincronizar MP e Testar renovação (2026-10-03)
+
+**O que era:** acertar assinatura divergente e provar a renovação só dava por
+SSH (`sincronizar-assinatura.mjs`, `testar-recorrencia.mjs`).
+**Onde mora:** `src/domain/payments/subscriptionSync.js` — `planSync()` (lê o MP,
+devolve o diff, NÃO grava), `applySync()` (relê o MP e só grava o item que
+continua igual ao diff mostrado; mudou no meio = `stale`, nada gravado; nenhum
+valor vindo do HTTP vai para o banco) e `checkRenewal()` (os 6 elos, leitura).
+Rotas em `src/api/routes/admin.js`: `GET /users/:id/assinatura/diff` e
+`GET .../testar-renovacao` (`billing:read`), `POST .../sincronizar`
+(`billing:write`, exige `confirm:true` + diff, auditada
+`admin.assinatura.sincronizar`). Tela: aba Financeiro de `/admin/clientes/[id]`
+(diff antes, `window.confirm`, cobranças da cliente).
+**Não regredir:** `sincronizar-assinatura.mjs` importa o módulo (sem lógica
+duplicada; `--aplicar` = planSync + applySync); nunca gravar sem diff mostrado +
+confirm; `pending` continua não sendo "renovação ligada". Sem `MP_ACCESS_TOKEN`
+os itens saem `unreachable` (não grava). `testar-recorrencia.mjs` segue com a
+própria cópia dos 6 elos (candidato a importar `checkRenewal`).
+Teste: `test/admin-ficha-financeiro.test.js`.
