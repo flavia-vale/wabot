@@ -722,3 +722,16 @@ confirm; `pending` continua não sendo "renovação ligada". Sem `MP_ACCESS_TOKE
 os itens saem `unreachable` (não grava). `testar-recorrencia.mjs` segue com a
 própria cópia dos 6 elos (candidato a importar `checkRenewal`).
 Teste: `test/admin-ficha-financeiro.test.js`.
+
+## ADMIN > Receita: reembolso feito no Mercado Pago e mês corrente no ROI (2026-10-03)
+
+- Reembolso feito direto no painel do MP muda o `Payment`/`SubscriptionCharge`
+  para `refunded`/`charged_back` e saía do "approved" sem aparecer como linha.
+  Agora entra no valor cheio e sai como "(–) Reembolsos no Mercado Pago"
+  (`mpRefunds30d`; no ROI, `mpRefunds` dentro de `refunds`). Pagamento que já
+  tem linha em `Refund` (PIX) não conta de novo. Mês = o do pagamento original
+  (o MP não informa a data da devolução).
+- A fatura de assinatura ficava `processed` mesmo estornada: o sync de faturas
+  agora usa o status do pagamento quando é `refunded`/`charged_back`.
+- ROI: a tabela "Passado" só tinha meses fechados, então o mês corrente
+  (outubro) só aparecia no bloco Presente. Ganhou linha "em andamento".

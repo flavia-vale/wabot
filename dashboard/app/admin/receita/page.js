@@ -379,8 +379,9 @@ function RoiPanel({ data, loading, months, onMonths, onReconcile, reconciling, o
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-ds-ink-soft">(–) reembolsos devolvidos por PIX</span>
-                <span className="font-bold text-ds-danger">− {formatCurrency(reconciliation.refundsAllTime ?? 0)}</span>
+                <span className="font-bold text-ds-danger">− {formatCurrency((reconciliation.refundsAllTime ?? 0) - (reconciliation.mpRefundsAllTime ?? 0))}</span>
               </div>
+              <div className="flex items-center justify-between gap-3"><span className="text-ds-ink-soft">(–) reembolsos feitos no Mercado Pago</span><span className="font-bold text-ds-danger">− {formatCurrency(reconciliation.mpRefundsAllTime ?? 0)}</span></div>
               <div className="flex items-center justify-between gap-3 border-t-2 border-ds-line-strong pt-1">
                 <span className="font-bold text-ds-ink">(=) o número do placar acima</span>
                 <span className="font-black text-ds-accent-strong">{formatCurrency(reconciliation.netToDate ?? reconciliation.netAllTime)}</span>
@@ -433,14 +434,12 @@ function RoiPanel({ data, loading, months, onMonths, onReconcile, reconciling, o
               </tr>
             </thead>
             <tbody className="divide-y divide-ds-line">
-              {(data.past ?? []).map(row => (
-                <tr key={row.month} className="hover:bg-ds-bg">
-                  <td className="px-3 py-2 font-bold text-ds-ink">{formatMonth(row.month)}</td>
+              {[...(data.past ?? []), ...(present.month ? [{ ...present, profit: present.profitSoFar, cumulativeProfit: summary.resultToDate ?? 0, emAndamento: true }] : [])].map(row => (
+                <tr key={row.month} className={row.emAndamento ? 'bg-ds-bg-soft/60' : 'hover:bg-ds-bg'}>
+                  <td className="px-3 py-2 font-bold text-ds-ink">{formatMonth(row.month)}{row.emAndamento && <span className="ml-1 rounded-full bg-ds-warn/20 px-2 py-0.5 text-[10px] font-black text-ds-warn-ink">em andamento</span>}</td>
                   <td className="px-3 py-2">
                     {formatCurrency(row.net)}
-                    {row.gross > row.net && (
-                      <span className="ml-1 text-[10.5px] text-ds-ink-faint">(valor cheio {formatCurrency(row.gross)})</span>
-                    )}
+                    {row.gross > row.net && <span className="ml-1 text-[10.5px] text-ds-ink-faint">(valor cheio {formatCurrency(row.gross)})</span>}
                   </td>
                   <td className="px-3 py-2 text-ds-danger">{row.costClaude ? `− ${formatCurrency(row.costClaude)}` : '—'}</td>
                   <td className="px-3 py-2 text-ds-danger">{row.costVps ? `− ${formatCurrency(row.costVps)}` : '—'}</td>
@@ -448,9 +447,7 @@ function RoiPanel({ data, loading, months, onMonths, onReconcile, reconciling, o
                   <td className={`px-3 py-2 font-black ${row.cumulativeProfit >= 0 ? 'text-ds-accent-strong' : 'text-ds-danger'}`}>{signedCurrency(row.cumulativeProfit)}</td>
                 </tr>
               ))}
-              {!(data.past ?? []).length && (
-                <tr><td colSpan={6} className="px-3 py-4 text-center text-sm text-ds-ink-faint">Nenhum mês fechado ainda.</td></tr>
-              )}
+              {!(data.past ?? []).length && !present.month && <tr><td colSpan={6} className="px-3 py-4 text-center text-sm text-ds-ink-faint">Nenhum mês fechado ainda.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1237,6 +1234,10 @@ export default function ReceitaPage() {
                 <p className="text-xs font-bold uppercase tracking-wide text-ds-danger">(–) Reembolsos por PIX</p>
                 <p className="mt-1 text-[28px] font-black text-ds-danger">− {formatCurrency(finance.refunds30d ?? 0)}</p>
                 <p className="mt-1 text-[10.5px] text-ds-danger">{formatNumber(finance.refunds30dCount ?? 0)} devolução(ões) · taxa perdida {formatCurrency(finance.refundFeeLoss30d ?? 0)}</p>
+              </div>
+              <div className="rounded-xl bg-ds-danger/10 p-4 ring-1 ring-ds-danger/40">
+                <p className="text-xs font-bold uppercase tracking-wide text-ds-danger">(–) Reembolsos no Mercado Pago</p>
+                <p className="mt-1 text-[28px] font-black text-ds-danger">− {formatCurrency(finance.mpRefunds30d ?? 0)}</p><p className="mt-1 text-[10.5px] text-ds-danger">{formatNumber(finance.mpRefunds30dCount ?? 0)} devolução(ões) direto no MP</p>
               </div>
               <div className="rounded-xl bg-ds-bg-soft p-4 ring-1 ring-ds-line">
                 <p className="text-xs font-bold uppercase tracking-wide text-ds-ink-soft">(=) Receita líquida · {finance.periodLabel ?? '30 dias'}</p>
