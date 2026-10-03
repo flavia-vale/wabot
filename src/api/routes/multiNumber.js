@@ -7,6 +7,7 @@ import { standbyProcessKey, STANDBY_PROCESS_SLOT, otherSlot } from '../../domain
 import { canStartReserve, reserveHeadroom } from '../../domain/session/reserveCapacity.js'
 import { normalizePairingPhone } from '../../domain/session/service.js'
 import { switchActiveNumber } from '../../core/numberSwitch.js'
+import { MOVING_NODE_LIFECYCLE } from '../../supervisor/accountMove.js'
 import { NUMBER_SWITCHED_EVENT } from '../../jobs/numberFailover.js'
 import { missingDestinations } from '../../domain/session/groupMembership.js'
 import { rotationEnabledByEnv } from '../../domain/session/senderRouting.js'
@@ -154,8 +155,13 @@ export async function multiNumberRoutes(app, opts = {}) {
     if (!state.active || !state.active.phone) {
       return reply.code(409).send({ error: 'Conecte primeiro o número principal.', code: 'PRIMARY_NOT_CONNECTED' })
     }
+    // Revisão V1 (multi-servidor): conta mudando de servidor não liga nada.
+    if (state.active.lifecycle === MOVING_NODE_LIFECYCLE) {
+      return reply.code(409).send({ error: 'Seu WhatsApp está mudando de servidor. Tente de novo em alguns minutos.', code: 'WA_SESSION_MOVING' })
+    }
     // Principal tem prioridade na vaga (Regra #1 — docs/rca/memoria-e-capacidade.md).
-    const node = manager.getNodeRoutingInfo ? await manager.getNodeRoutingInfo(userId).catch(() => null) : null
+    // Revisão V3: com roteamento, soma as vagas prometidas a contas novas.
+    const node = manager.getNodeRoutingInfo ? await manager.getNodeRoutingInfo(userId, { includeReservations: true }).catch(() => null) : null
     let runningCount = node?.running ?? null
     let max = node?.max ?? null
     if (!node) {
@@ -168,6 +174,9 @@ export async function multiNumberRoutes(app, opts = {}) {
       req.log.warn({ userId, runningCount, max, reason: capacity.reason }, 'Número reserva recusado por vaga')
       return reply.code(503).send({ error: 'Servidor sem vaga para o número reserva agora. Tente mais tarde.', code: 'RESERVE_NO_CAPACITY' })
     }
+    // Revisão V3: segura a vaga (a contagem tem cache de 15 s) — dois pedidos
+    // seguidos não passam juntos pela mesma medição.
+    if (node?.nodeId && manager.reserveNodeSlot) await Promise.resolve(manager.reserveNodeSlot(node.nodeId)).catch(() => {})
     await db.waExtraSession.upsert({
       where: { userId_slot: { userId, slot: STANDBY_PROCESS_SLOT } },
       update: { status: 'connecting', lifecycle: 'authenticating', blockNotice: null },
