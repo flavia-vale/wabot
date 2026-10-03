@@ -250,6 +250,11 @@ risco:
   estrutural em `test/multi-number-billing.test.js`.
 - **Reserva nunca tira vaga de principal**: só liga com
   `MULTI_NUMBER_RESERVE_HEADROOM` vagas sobrando; sem dado de vaga, recusa.
+- **Mesmo número na reserva** (RCA staging 2026-10-03): a prontidão que abre
+  com o telefone do número ativo sai do aparelho (`sock.logout`) e apaga a
+  PRÓPRIA pasta de login antes de desligar. Antes ficava o login guardado:
+  "Conectar número reserva" reconectava sem QR e caía no bloqueio de novo
+  (loop de 9 em 9 s no `bot.log`), e o celular ganhava um aparelho a mais.
 - Cancelar o adicional desliga a prontidão **na hora** (diferente do plano,
   que vale até o fim do período pago) — decisão da Fase 1.
 - Ainda **não** existe gatilho de troca por "conectado mas cego": esse estado
