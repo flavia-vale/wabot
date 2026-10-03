@@ -68,10 +68,13 @@ test('gate do multicanal aponta para a compra do Premium em /painel/plano', () =
 
 test('financeiro do admin conta Premium no MRR e na lista de pagantes', () => {
   const admin = read('src/api/routes/admin.js')
+  const mrr = read('src/domain/admin/mrr.js')
   assert.match(admin, /premium: 99/)
-  assert.match(admin, /activePremium \* currentPrices\.premium/)
-  assert.match(admin, /activePremium \* prices\.premium/)
-  assert.match(admin, /paidActiveUsers: activeBasic \+ activePro \+ activePremium/)
+  // A conta mora num helper só (visão geral e ROI chamam o mesmo).
+  assert.match(admin, /loadCanonicalMrr/)
+  assert.match(mrr, /MRR_PLANS = \['basic', 'pro', 'premium'\]/)
+  assert.match(mrr, /activePremium \* p\('premium'\)/)
+  assert.match(mrr, /paidActiveUsers: activeBasic \+ activePro \+ activePremium/)
 })
 
 test('tela de plano do painel mostra o Premium, R$ 99 e o que ele libera, sem jargão', () => {
