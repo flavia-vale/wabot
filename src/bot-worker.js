@@ -109,7 +109,7 @@ import { getAdvancedPreservationAccess, isPreservationActive } from './billing/p
 // é o único ponto que fala com o socket do WhatsApp, movido para o adaptador
 // de WhatsApp com o corpo INALTERADO (test/delivery-whatsapp-send-inalterado.test.js).
 import { sendPreparedPayload } from './delivery/whatsapp/send.js'
-import { DELIVERY_NETWORK } from './core/delivery/networks.js'
+import { DELIVERY_NETWORK, deliveryNetworkOfDestinationId } from './core/delivery/networks.js'
 import { enqueueDeliveryOutbox } from './deliveryOutbox/enqueue.js'
 import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
@@ -1244,6 +1244,11 @@ async function maybeSendTrialDecisionMessage() {
   }
 }
 
+// Último contexto Rakuten lido com sucesso (poucos KB): rede de segurança do
+// loadConfig quando a leitura falha (revisão 2026-10-03, R8).
+const RAKUTEN_CONTEXT_FALLBACK_MS = 10 * 60_000
+let lastGoodRakutenContext = null
+
 async function loadConfig() {
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -1290,11 +1295,19 @@ async function loadConfig() {
   }
   // Rakuten: mesmo caminho (lojas aprovadas + id dos links dela). Falhou →
   // segue sem Rakuten. docs/rca/afiliados-rakuten.md.
+  // Falha de leitura (ex.: banco ocupado) usa o último contexto bom por até
+  // 10 min, em vez de apagar os links Rakuten daquele minuto (revisão
+  // 2026-10-03, R8). Leitura que diz "sem conta/sem loja" (null) vale na hora.
   try {
     const rakuten = await loadRakutenConversionContext(userId, { db })
+    lastGoodRakutenContext = { value: rakuten, at: Date.now() }
     if (rakuten) credentials.rakuten = rakuten
   } catch (err) {
-    logger.warn({ err: err?.message }, 'Falha ao carregar contas Rakuten; links dessas lojas seguem sem conversão até a próxima carga')
+    const fallback = lastGoodRakutenContext && Date.now() - lastGoodRakutenContext.at <= RAKUTEN_CONTEXT_FALLBACK_MS
+      ? lastGoodRakutenContext.value
+      : null
+    if (fallback) credentials.rakuten = fallback
+    logger.warn({ err: err?.message, usouAnterior: Boolean(fallback) }, 'Falha ao carregar contas Rakuten; usando a última leitura boa (até 10 min) ou seguindo sem conversão')
   }
 
   Object.defineProperty(credentials, '__onCredentialPatch', {
@@ -1408,6 +1421,27 @@ async function checkScheduledMessages() {
       const state = { remaining: jids.length, hasError: false }
 
       for (const jid of jids) {
+        // Feature 017 (revisão crítica, item 1): destino de outro aplicativo
+        // vai para a caixa de saída (drenada na API), nunca para o socket.
+        const scheduledDeliveryNetwork = deliveryNetworkOfDestinationId(jid)
+        if (scheduledDeliveryNetwork !== DELIVERY_NETWORK.WHATSAPP) {
+          const handedOff = await enqueueDeliveryOutbox({
+            userId,
+            deliveryNetwork: scheduledDeliveryNetwork,
+            destinationId: jid,
+            sourceId: 'scheduled',
+            offer: {
+              texto: msg.text,
+              linkConvertido: '',
+              imagem: msg.imageUrl ? { url: msg.imageUrl } : null,
+              produto: { titulo: null, preco: null },
+              historico: { origem: 'scheduled', loja: 'scheduled' },
+            },
+          }).catch(() => null)
+          if (!handedOff) state.hasError = true
+          state.remaining--
+          continue
+        }
         let log
         try {
           log = await db.messageLog.create({
@@ -1482,10 +1516,12 @@ async function checkScheduledMessages() {
         }
       }
 
+      // Chega a zero aqui só quando nenhum envio do WhatsApp ficou pendente:
+      // ou todos falharam (hasError) ou todos foram para outro aplicativo.
       if (state.remaining === 0) {
         await db.scheduledMessage.update({
           where: { id: msg.id },
-          data: { status: 'failed', sentAt: new Date() },
+          data: { status: state.hasError ? 'failed' : 'sent', sentAt: new Date() },
         })
       }
     }
@@ -3134,6 +3170,20 @@ async function processSendJob(job) {
     if (isQueueClearedLog(current)) {
       logger.info({ destJid: job.destJid, logId: job.logId }, 'Envio cancelado: a cliente limpou a fila de envios')
       await finishSendJob(job, { ok: false, error: 'queue_cleared' })
+      return
+    }
+    // Feature 017 (revisão crítica, item 1): destino de OUTRO aplicativo
+    // (`tg:`) nunca é enviado pelo WhatsApp. Sem esta trava ele falhava aqui
+    // dentro com 3 tentativas e espera, segurando a fila serial e a vez dos
+    // outros grupos. Descarta na hora, sem tentar de novo e sem reservar vez.
+    // Destino do WhatsApp nunca entra neste ramo.
+    if (deliveryNetworkOfDestinationId(job.destJid) !== DELIVERY_NETWORK.WHATSAPP) {
+      logger.warn({ destJid: job.destJid, logId: job.logId, type: job.type }, 'Destino de outro aplicativo chegou à fila do WhatsApp; descartado sem envio')
+      await db.messageLog.update({
+        where: { id: job.logId },
+        data: { status: 'skipped', errorMsg: 'skip:destino_outro_aplicativo', sentAt: new Date() },
+      }).catch(() => {})
+      await finishSendJob(job, { ok: false, error: 'other_delivery_network' })
       return
     }
     await db.messageLog.update({
@@ -6582,6 +6632,28 @@ const handleMessage = async msg => {
     let queued = 0
     const errors = []
     for (const jid of msg.jids) {
+      // Feature 017 (revisão crítica, item 1): defesa em profundidade — a API
+      // já separa por aplicativo, mas destino de outro aplicativo que chegue
+      // aqui vai para a caixa de saída, nunca para o socket.
+      const broadcastDeliveryNetwork = deliveryNetworkOfDestinationId(jid)
+      if (broadcastDeliveryNetwork !== DELIVERY_NETWORK.WHATSAPP) {
+        const handedOff = await enqueueDeliveryOutbox({
+          userId,
+          deliveryNetwork: broadcastDeliveryNetwork,
+          destinationId: jid,
+          sourceId: broadcastSourceGroup(msg.options),
+          offer: {
+            texto: msg.text,
+            linkConvertido: '',
+            imagem: msg.options?.imageUrl ? { url: msg.options.imageUrl } : null,
+            produto: { titulo: null, preco: null },
+            historico: { origem: broadcastSourceGroup(msg.options), loja: 'broadcast' },
+          },
+        }).catch(() => null)
+        if (handedOff) queued++
+        else errors.push({ jid, error: 'error:delivery_outbox_unavailable' })
+        continue
+      }
       let log
       try {
         log = await db.messageLog.create({

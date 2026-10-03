@@ -151,7 +151,13 @@ Como funciona:
    com lista própria (`allowedPlatforms`) não ganhou sozinho — liga na tela
    Espelhamento.
 
-⚠️ **Hipóteses a medir antes de ir para produção** (`diag-rakuten.mjs
+✅ **Medido em 2026-10-03** (`docs/revisao-rakuten-2026-10-03.md`): (a) o
+formato do Link Locator bate com o leitor; (b) o `id` do `clickurl` é o mesmo
+do deep link gerado pela API oficial `POST /v1/links/deep_links`, no mesmo
+formato que montamos. Pedir token novo não derruba o anterior. A mesma
+revisão lista os gaps abertos (R1–R18) e o plano de correção.
+
+Texto original: ⚠️ **Hipóteses a medir antes de ir para produção** (`diag-rakuten.mjs
 <email> --rakuten`): (a) formato do XML do Link Locator (`<ns1:return>` com
 `<ns1:mid>`/`<ns1:name>`; se vier `FORMATO DESCONHECIDO`, o parser precisa de
 ajuste e nada converte — nada quebra); (b) o `id` do `clickurl` é o mesmo do
@@ -164,6 +170,44 @@ Rakuten escrito sem `https://`; loja da Rakuten com domínio de rastreio própri
 (fora de `linksynergy.com`); o desembrulho de "site próprio de grupo" ainda
 pode abrir `click.linksynergy.com` de quem NÃO tem conta Rakuten (vale medir
 antes de bloquear: hoje isso também recupera links da AliExpress).
+
+## Revisão crítica de 2026-10-03 — não regredir
+
+Detalhes e testes: `docs/revisao-rakuten-2026-10-03.md`, `test/rakuten-revisao.test.js`.
+
+- **Prazo cobre o corpo** (`client.js` `send()`): a requisição inteira, leitura
+  incluída, fica dentro do prazo. Teto de 10 MB por resposta. A sync tem prazo
+  total de 5 min por conta (conferido entre uma chamada e outra), e o agendador
+  segue mesmo com um tick preso há mais de 30 min.
+- **"Dados recusados" = só `invalid_client`** no pedido de token. 401/403 em
+  pedido de dados é `access_denied` (passageiro, tenta de novo em 15 min); a
+  conta só vira `invalid_credential` na 3ª execução seguida assim.
+- **Conta recusada segue convertendo por 7 dias** desde a última sync
+  (`RAKUTEN_REFUSED_GRACE_MS`): o deep link não usa credencial.
+- **Feed vazio e lista de lojas vazia só valem na 2ª vez seguida** (contador em
+  memória da API; reinício só atrasa a limpeza).
+- Gravação de promoções em lotes de 100 por transação.
+- "Atualizar agora" espera no máximo 20 s; depois responde 202 e a sync segue
+  em segundo plano.
+- `click.linksynergy.com/...` sem `https://` é pego pela rede de segurança
+  final (`mirrorLinkGuard`), para toda cliente.
+- Loja achada só pelo `mid` com página de **loja fixa** (Amazon etc.) → link
+  apagado. Domínio desconhecido continua seguindo pelo `mid`.
+- O robô usa a última leitura boa da Rakuten (até 10 min) quando a carga falha.
+- O cupom da promoção nunca some: modelo sem `{descrição}` ganha a linha do
+  cupom antes do link (só a origem Rakuten).
+- Automação **Rakuten** que pulou por falta de promoção espera 15 min no cron.
+  Shopee e Awin não mudaram.
+- Logo só `https` e host público.
+- Conta que passa a recusada → e-mail `rakuten_dados_recusados` (uma vez,
+  janela de 7 dias; conta parada é barrada pelo motor, como os outros avisos).
+- Cliente sem acesso (plano vencido há mais de 3 dias, banida/suspensa) não
+  sincroniza: a conta é reagendada para 6 h depois. Sem data de vencimento,
+  continua.
+- Seleção com as correções F5/F6/F7 da Awin: revezamento entre execuções,
+  candidatas por loja e memória de enviados podada pelo que está ativo.
+- Sem promoção no feed, o `id` dos links vem do deep link oficial
+  (`POST /v1/links/deep_links`, 1 chamada só enquanto não há `id`).
 
 ## Diagnóstico
 

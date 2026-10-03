@@ -154,6 +154,15 @@ function evalBackup(ageH, t, extra = {}) {
   return check('backup', LEVEL.OK, title, `Último backup há ${v.toFixed(0)} h.`)
 }
 
+// Revisão C11 (só com roteamento por nó): o mesmo robô ligado em dois
+// servidores derruba a conta em loop. `undefined` = flag desligada (sem linha).
+function evalDualOwner(status) {
+  const title = 'Robô em dois servidores'
+  if (status === null) return unknown('dual', title, 'sem varredura recente da API')
+  if (Number(status.count) > 0) return check('dual', LEVEL.RED, title, `${status.count} conta(s) com o robô ligado em mais de um servidor. Pare o do servidor que não é o dono.`)
+  return check('dual', LEVEL.OK, title, 'Nenhum robô ligado em dois servidores.')
+}
+
 // needrestart em modo diferente de 'l' reinicia serviços sozinho depois de um
 // `apt install` — provável gatilho do pm2 ter caído em 01/10. Não é queda,
 // é risco: amarelo.
@@ -180,6 +189,7 @@ export function evaluateVigia(snapshot = {}, thresholds = {}, now = Date.now()) 
     evalWa(snapshot.wa, t),
     evalBackup(snapshot.backupAgeH, t, snapshot.backupInfo ?? {}),
     evalNeedrestart(snapshot.needrestartMode),
+    ...(snapshot.dualOwners === undefined ? [] : [evalDualOwner(snapshot.dualOwners)]),
   ]
   const has = l => checks.some(c => c.level === l)
   const level = has(LEVEL.RED) ? LEVEL.RED : has(LEVEL.WARN) ? LEVEL.WARN : has(LEVEL.UNKNOWN) ? LEVEL.UNKNOWN : LEVEL.OK

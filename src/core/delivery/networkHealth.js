@@ -8,6 +8,7 @@ export const NETWORK_HEALTH = Object.freeze({
   LIMITADO: 'limitado',
   BLOQUEADO: 'bloqueado',
   INDISPONIVEL: 'indisponivel',
+  CONFLITO: 'conflito',
   SEM_MEDICAO: 'sem_medicao',
 })
 
@@ -16,6 +17,7 @@ export const HEALTH_SIGNAL = Object.freeze({
   LIMITE: 'limite',
   BLOQUEADO: 'bloqueado',
   INDISPONIVEL: 'indisponivel',
+  CONFLITO: 'conflito',
 })
 
 const MOTIVOS = Object.freeze({
@@ -24,9 +26,10 @@ const MOTIVOS = Object.freeze({
   bloqueado: 'O aplicativo recusou o robô inteiro (chave inválida ou robô bloqueado). Ninguém recebe até a troca do robô.',
   indisponivel: 'O aplicativo não está respondendo. As ofertas ficam guardadas e saem quando ele voltar.',
   sem_medicao: 'Ainda não houve envio recente para medir.',
+  conflito: 'Outro servidor está lendo o mesmo robô (por exemplo, staging e produção com o mesmo robô). Ninguém consegue ligar grupo novo até isso ser resolvido.',
 })
 
-export function computeNetworkHealth(signals = [], { now = Date.now(), windowMs = 10 * 60_000, unavailableStreak = 3 } = {}) {
+export function computeNetworkHealth(signals = [], { now = Date.now(), windowMs = 10 * 60_000, unavailableStreak = 3, minLimitedDestinations = 2 } = {}) {
   const recent = signals
     .filter((s) => s && Number.isFinite(Number(s.at)) && now - Number(s.at) <= windowMs)
     .sort((a, b) => Number(a.at) - Number(b.at))
@@ -39,6 +42,12 @@ export function computeNetworkHealth(signals = [], { now = Date.now(), windowMs 
     return new Date(Number(since))
   }
 
+  // Conflito de leitura (409) é persistente por natureza: vale enquanto
+  // aparecer na janela, mesmo com envios dando certo no meio.
+  const conflicts = recent.filter((s) => s.kind === HEALTH_SIGNAL.CONFLITO)
+  if (conflicts.length >= 2 && now - Number(conflicts[conflicts.length - 1].at) <= 5 * 60_000) {
+    return { estado: NETWORK_HEALTH.CONFLITO, motivo: MOTIVOS.conflito, desde: new Date(Number(conflicts[0].at)) }
+  }
   if (last.kind === HEALTH_SIGNAL.BLOQUEADO) {
     return { estado: NETWORK_HEALTH.BLOQUEADO, motivo: MOTIVOS.bloqueado, desde: sinceOf(HEALTH_SIGNAL.BLOQUEADO) }
   }
@@ -49,7 +58,12 @@ export function computeNetworkHealth(signals = [], { now = Date.now(), windowMs 
       return { estado: NETWORK_HEALTH.INDISPONIVEL, motivo: MOTIVOS.indisponivel, desde: sinceOf(HEALTH_SIGNAL.INDISPONIVEL) }
     }
   }
-  const limitedRecently = recent.some((s) => s.kind === HEALTH_SIGNAL.LIMITE && now - Number(s.at) <= 5 * 60_000)
+  // Revisão crítica, item 13: limite de ritmo em UM grupo (~20/min por grupo)
+  // é normal e não diz nada sobre o robô. Só conta como "robô limitado" se
+  // aparecer em vários grupos diferentes (ou sem grupo identificado).
+  const limits = recent.filter((s) => s.kind === HEALTH_SIGNAL.LIMITE && now - Number(s.at) <= 5 * 60_000)
+  const limitedKeys = new Set(limits.map((s, i) => s.chave ?? `sem-grupo-${i}`))
+  const limitedRecently = limitedKeys.size >= minLimitedDestinations
   if (limitedRecently) {
     const firstLimit = recent.find((s) => s.kind === HEALTH_SIGNAL.LIMITE)
     return { estado: NETWORK_HEALTH.LIMITADO, motivo: MOTIVOS.limitado, desde: new Date(Number(firstLimit.at)) }
@@ -62,10 +76,10 @@ export function computeNetworkHealth(signals = [], { now = Date.now(), windowMs 
 export function createHealthRecorder({ max = 200 } = {}) {
   const byNetwork = new Map()
   return {
-    record(network, kind, at = Date.now()) {
+    record(network, kind, at = Date.now(), chave = null) {
       if (!byNetwork.has(network)) byNetwork.set(network, [])
       const list = byNetwork.get(network)
-      list.push({ kind, at })
+      list.push({ kind, at, chave })
       if (list.length > max) list.splice(0, list.length - max)
     },
     signals(network) {
@@ -74,7 +88,7 @@ export function createHealthRecorder({ max = 200 } = {}) {
   }
 }
 
-const BAD_STATES = new Set([NETWORK_HEALTH.LIMITADO, NETWORK_HEALTH.BLOQUEADO, NETWORK_HEALTH.INDISPONIVEL])
+const BAD_STATES = new Set([NETWORK_HEALTH.LIMITADO, NETWORK_HEALTH.BLOQUEADO, NETWORK_HEALTH.INDISPONIVEL, NETWORK_HEALTH.CONFLITO])
 
 // Decide o que avisar numa mudança de estado (T081/T083). Só a TRANSIÇÃO para
 // um estado ruim avisa — ficar no mesmo estado não repete o aviso (o cooldown
@@ -94,5 +108,6 @@ export const NETWORK_HEALTH_LABEL = Object.freeze({
   limitado: 'limitado no ritmo',
   bloqueado: 'bloqueado',
   indisponivel: 'fora do ar',
+  conflito: 'em conflito com outro servidor',
   sem_medicao: 'sem medição',
 })

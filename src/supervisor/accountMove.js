@@ -19,7 +19,9 @@ import { resolveSessionNodeId } from './placement.js'
  * @param {Array<{nodeId:string, alive:boolean, running:number|null, max:number|null}>} m.nodes
  * @returns {{ok:boolean, sourceNode:string, errors:string[], warnings:string[]}}
  */
-export function planAccountMove({ userId, targetNode, sessionRow, nodes = [] } = {}) {
+export const MOVING_NODE_LIFECYCLE = 'moving_node'
+
+export function planAccountMove({ userId, targetNode, sessionRow, nodes = [], resuming = false } = {}) {
   const errors = []
   const warnings = []
   const sourceNode = resolveSessionNodeId(sessionRow)
@@ -27,7 +29,10 @@ export function planAccountMove({ userId, targetNode, sessionRow, nodes = [] } =
   if (!userId) errors.push('Conta não informada.')
   if (!sessionRow) errors.push('Esta conta não tem sessão de WhatsApp registrada: não há nada para mover (conta nova é colocada sozinha).')
   if (!isValidNodeId(targetNode)) errors.push('O servidor de destino é inválido (use letras minúsculas, números e hífen).')
-  if (isValidNodeId(targetNode) && targetNode === sourceNode) errors.push(`A conta já está no servidor "${sourceNode}".`)
+  // Retomada (C6): o "trocar" pode ter gravado o destino e caído antes de
+  // religar. Com a conta ainda marcada `moving_node`, rodar de novo continua.
+  const retomando = resuming && sessionRow?.lifecycle === MOVING_NODE_LIFECYCLE
+  if (isValidNodeId(targetNode) && targetNode === sourceNode && !retomando) errors.push(`A conta já está no servidor "${sourceNode}".`)
 
   const source = nodes.find(n => n.nodeId === sourceNode)
   const target = nodes.find(n => n.nodeId === targetNode)
@@ -40,7 +45,7 @@ export function planAccountMove({ userId, targetNode, sessionRow, nodes = [] } =
     else if (running === null || running === undefined) errors.push(`Não consegui medir quantos robôs o servidor "${targetNode}" já tem.`)
     else if (running >= cap) errors.push(`O servidor de destino "${targetNode}" está lotado (${running}/${cap}).`)
   }
-  if (!source?.alive) warnings.push(`O servidor de origem "${sourceNode}" não está respondendo: não dá para parar o robô por ele. Só continue se tiver certeza de que o robô NÃO está ligado em lugar nenhum.`)
+  if (!source?.alive && !retomando) warnings.push(`O servidor de origem "${sourceNode}" não está respondendo: não dá para parar o robô por ele. Só continue se tiver certeza de que o robô NÃO está ligado em lugar nenhum.`)
 
   const connecting = ['connecting', 'qr', 'pairing'].includes(String(sessionRow?.lifecycle)) || sessionRow?.status === 'connecting'
   if (connecting) errors.push('A cliente está no meio do pareamento (QR/código). Espere terminar antes de mover.')
@@ -53,5 +58,8 @@ export function buildRsyncCommand({ authDir, sourceHost }) {
   if (!authDir) throw new Error('buildRsyncCommand: authDir obrigatório')
   const dir = String(authDir).replace(/\/+$/, '')
   const origem = sourceHost ? `${sourceHost}:${dir}/` : `<usuario@servidor-de-origem>:${dir}/`
-  return `rsync -a --checksum ${origem} ${dir}/`
+  // --delete (revisão C6): sem ele, arquivos de um login ANTIGO desta conta no
+  // destino (de uma mudança anterior) sobravam misturados ao novo — chaves velhas
+  // = mensagens que não abrem ("Bad MAC"/"Aguardando mensagem").
+  return `rsync -a --checksum --delete ${origem} ${dir}/`
 }

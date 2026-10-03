@@ -83,6 +83,22 @@ apagado; os grupos voltam a receber ao religar.
 - 409 no log da API = outro processo lendo o mesmo robô (staging e produção
   com o mesmo segredo, ou `api` com mais de uma instância).
 
+## Revisão crítica (2026-10-03) — não regredir
+
+PRs A/B/C da revisão. Cada item tem teste em `test/telegram-revisao-{a,a-sweep,b,c}.test.js`.
+
+- **Destino `tg:` nunca passa pelo normalizador do WhatsApp** (`normalizeTargetJids`): ele acrescentava `@g.us` e o Telegram de filas/ofertas automáticas/"Enviar agora" nunca chegava. `canonicalDestinationId` aceita valores antigos com sufixo.
+- **Robô do WhatsApp descarta destino de outro aplicativo** no início de `processSendJob` (`skip:destino_outro_aplicativo`), antes de "enviando", da vez entre destinos e de qualquer tentativa. Broadcast e agendadas repassam o Telegram para a caixa de saída.
+- **Link Inteligente e rotas de grupo que consultam o WhatsApp** recusam grupo de outro aplicativo (o Baileys mandaria `tg:` ao servidor).
+- **`canUseMultiNetwork` exige acesso em dia** (Premium vencido publicava de graça). O Instagram Stories ainda NÃO confere a data — mesma brecha, fora desta revisão.
+- **Oferta aceita pelo Telegram nunca volta para a fila**: banco ocupado ao gravar "entregue" reenviava a cada minuto; "enviando" preso vira `entrega_incerta`, sem reenvio.
+- **Foto que o Telegram não baixa** → sai só o texto (`imagem_removida`). **Tamanho** medido depois do HTML.
+- **Caixa de saída pega 1 por grupo** (`distinct`), não as 200 mais antigas — uma conta não trava as outras.
+- **`deleteWebhook` na partida**; 409/401 da leitura viram estado `conflito`/`bloqueado` com aviso.
+- **Supergrupo** leva junto as ofertas da caixa de saída.
+- **Fila só de Telegram** não para quando o WhatsApp cai.
+- **Limite de grupos** vale no link; **horário de envio e limite diário** do destino valem no Telegram (adia, não descarta); **limite de ritmo** só vira alerta em 2+ grupos; **robô removido 3x** pausa o envio até a prontidão voltar; Premium no editor de planos e no público dos e-mails.
+
 ## Ainda não feito
 
 - **Telegram como origem (Fatia 5)**: depende de decisão da dona do produto
