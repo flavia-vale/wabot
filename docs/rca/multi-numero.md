@@ -464,6 +464,7 @@ antes dos portões: eles viraram **checagens obrigatórias antes de LIGAR**
 | API | `GET/POST /api/multi-number/rotation` |
 | Painel | `dashboard/components/RotationCard.js` (dentro do bloco da reserva) |
 | Diagnóstico | `scripts/diag-rodizio.mjs` |
+| Coluna "Número" na aba Envios (qual número enviou; só conta com número extra) | `senderNumbersFor` em `src/api/routes/logs.js`, `senderNumberLabel` em `dashboard/lib/painel/logsCopy.js`, `dashboard/app/painel/envios/SendHistory.js` |
 
 **Envs novas** (todas opcionais):
 

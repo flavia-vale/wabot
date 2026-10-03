@@ -51,6 +51,22 @@ function resolvePeriodRange(period) {
   return { from, to }
 }
 
+
+// Telefone de cada número da conta (slot → telefone). O número ativo mora em
+// `WaSession`, o outro em `WaExtraSession` (Fase 1). Só para conta com número
+// extra; erro de leitura não derruba a tela de Envios.
+async function senderNumbersFor(userId) {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { extraNumbers: true, activeWaSlot: true, waSession: { select: { phone: true } } },
+  }).catch(() => null)
+  if (!(Number(user?.extraNumbers) > 0)) return null
+  const extra = await db.waExtraSession.findFirst({ where: { userId }, select: { phone: true } }).catch(() => null)
+  const activeSlot = user.activeWaSlot === 2 ? 2 : 1
+  const otherSlot = activeSlot === 1 ? 2 : 1
+  return { [activeSlot]: user.waSession?.phone ?? null, [otherSlot]: extra?.phone ?? null }
+}
+
 export async function logsRoutes(app) {
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const userId = req.user.sub
@@ -171,6 +187,9 @@ export async function logsRoutes(app) {
       limit: limitNum,
       statusCounts,
       statusCountsTotal,
+      // Vários números (docs/rca/multi-numero.md): telefone de cada número
+      // para a coluna "Número" (log.senderSlot). Null = conta com um número só.
+      senderNumbers: await senderNumbersFor(userId),
       // resendText é o texto completo guardado só para o reenvio pós-restart
       // (a tela usa messageText) — não trafega para o painel.
       logs: logs.map(({ resendText: _resendText, ...log }) => ({
