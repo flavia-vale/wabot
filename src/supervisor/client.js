@@ -278,6 +278,9 @@ export function createSupervisorClient({
     if (!liveness.alive) {
       const err = new Error('O servidor dos seus robôs não está respondendo agora. Nossa equipe já foi avisada — tente de novo em alguns minutos.')
       err.code = 'WA_NODE_UNAVAILABLE'
+      // C10: indisponibilidade conhecida (503), não falha da API — o tratador de
+      // erros responde 503 com frase genérica e o classificador não a conta como incidente.
+      err.statusCode = 503
       err.nodeId = nodeId
       throw err
     }

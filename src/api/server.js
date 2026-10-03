@@ -574,13 +574,6 @@ await app.register(fastifyRateLimit, {
 // registrou o erro no stdout do processo e mais nada: sem termo para procurar,
 // sem linha no banco, sem ninguém avisado. Ver src/ops/apiErrorSignal.js.
 app.setErrorHandler((error, req, reply) => {
-  // Revisão C10 (só existe com SUPERVISOR_NODE_ROUTING ligado): "servidor dos
-  // robôs não responde" é indisponibilidade conhecida, não falha da API — 503
-  // com a frase leiga, sem "FALHA DA API" nem e-mail de alerta falso.
-  if (error?.code === 'WA_NODE_UNAVAILABLE') {
-    req.log.warn({ nodeId: error.nodeId ?? null, rota: `${req.method} ${req.routeOptions?.url ?? req.url}` }, 'servidor de robôs sem resposta')
-    return reply.code(503).send({ error: error.message, code: 'WA_NODE_UNAVAILABLE', retryable: true })
-  }
   const status = Number(error?.statusCode ?? 500)
   const { signal, kind, alert } = classifyApiError(error, { statusCode: status })
 

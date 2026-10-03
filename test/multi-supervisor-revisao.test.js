@@ -155,9 +155,13 @@ test('C7: deploy do nó não roda npm ci na pasta em uso nem restart --update-en
 })
 
 // ---- C10 ----
-test('C10: servidor sem resposta vira 503 leigo, sem "FALHA DA API"', () => {
-  const s = read('src/api/server.js')
-  const i = s.indexOf("if (error?.code === 'WA_NODE_UNAVAILABLE')")
-  assert.ok(i > 0 && i < s.indexOf('classifyApiError(error', i), 'tratado ANTES da classificação de falha')
-  assert.match(s.slice(i, i + 600), /reply\.code\(503\)/)
+test('C10: servidor sem resposta = 503 e não conta como "FALHA DA API"', async () => {
+  const { classifyApiError } = await import('../src/ops/apiErrorSignal.js')
+  const err = Object.assign(new Error('x'), { code: 'WA_NODE_UNAVAILABLE', statusCode: 503 })
+  assert.deepEqual(classifyApiError(err, { statusCode: 503 }), { signal: false, kind: null, alert: false })
+  assert.equal(classifyApiError(new Error('boom'), { statusCode: 500 }).signal, true, 'outros 5xx seguem como antes')
+  const h = harness(new Map())
+  const c = createSupervisorClient({ redisUrl: 'redis://x', ...h, env: {}, nodeRouting: true, nodeIds: ['n1'], db })
+  await assert.rejects(() => c.sendBroadcast('u1', 'oi', []), e => e.code === 'WA_NODE_UNAVAILABLE' && e.statusCode === 503)
+  await c.close()
 })
