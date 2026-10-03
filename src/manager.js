@@ -111,6 +111,12 @@ export async function getSupervisorNodesSnapshot() {
   }
 }
 
+// Revisão C11: varredura "mesmo robô em 2 servidores". null = flag desligada.
+export async function checkDualOwners() {
+  if (MODE !== 'remote' || !remoteClient?.nodeRouting || !remoteClient.checkDualOwners) return null
+  return remoteClient.checkDualOwners()
+}
+
 export function getDualOwnerTotal() {
   return remoteClient?.getDualOwnerTotal?.() ?? 0
 }
