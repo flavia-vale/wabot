@@ -1125,7 +1125,61 @@ Subir o Baileys exige refazer o patch. Não ampliar o ramo de DM para
 com ack' bot.log` > 0; `500 / conexões` por dia cai; `diag-frota-cega.mjs`
 estável. Isso NÃO é aceite do caso da cliente (segue cega).
 
-## Conectada e cega depois do ciclo de quedas: `<ack>` sem `type` segurava a fila offline (RCA 2026-10-03 — causa medida; não regredir)
+## Conectada e cega depois do ciclo de quedas: `<ack>` de sucesso para `<message>` é ignorado pelo servidor e segura a fila offline (RCA 2026-10-03 — causa medida; não regredir)
+
+**Mecanismo completo (medido em 2026-10-03, dois pids da `doritosmms@gmail.com`
+e varredura da frota):**
+
+1. O celular da cliente (iPhone, ids `3A…`) conversa com a **Meta AI**
+   (`recipient` `…@bot`). A cópia `fromMe` chega ao robô cifrada em `msg`/`pkmsg`
+   e não abre (`No matching sessions`): não há sessão Signal com o celular.
+2. O patch respondia com **`<ack>` de sucesso**. Para `<message>` o servidor
+   **não aceita** ack de sucesso como resposta — só `<receipt>` ou **nack**
+   (`<ack error=…>`). Resultado medido: a mesma mensagem volta **4-5× por
+   conexão**, e **com `type`/`from` no ack não mudou nada** (197 cópias, 15 ids,
+   4 `stream:error` em 3 h depois do #2221).
+3. Enquanto a cópia não é respondida, o servidor **não encerra a fila offline**
+   (0 `handled N offline messages`) e entrega **tudo** como offline (censo: 71 de
+   71 nós de grupo com `offline`). No Baileys 6.7.23 os eventos dos nós offline
+   ficam no **buffer** (`ev.buffer()` no início da conexão) e só são liberados no
+   `CB:ib,,offline` — que nunca vem. Os `messages.upsert` dos **grupos
+   monitorados** ficam presos dentro da lib: censo `grupoChegou=288`,
+   `grupoDescartado=131` (grupos que ela não monitora), `grupoFalhou=0`,
+   `grupoUpsert=0`. Conta "conectada" e cega.
+4. 50 min depois o servidor derruba a conexão citando o ack que esperava
+   (`<ack class=message type=text|media id=3A…>`), e o ciclo recomeça.
+5. Frota: **todo** robô com cópia para `@bot` estava assim — 6 pids, de 75 a
+   1.208 cópias, todos com `fila_fechada=0` e `aceitas=0`.
+
+Re-parear "curava" porque zera a fila offline do aparelho no servidor. O "outro
+sistema Baileys no mesmo número" **não existe**: é o próprio celular da cliente.
+
+**Conserto (patch do Baileys, como o 7.x):** todo caminho que **descarta** um
+`<message>` responde **nack**, nunca ack de sucesso — mensagem ignorada por
+`shouldIgnoreJid` → nack 500 (`UnhandledError`, igual ao 7.x), regra A (cópia
+de outro aparelho fora da lista, inclusive `@bot`) → nack 500, DM/status/
+`unavailable`+enc sem decifrar → nack 500, `msmsg` → nack 495
+(`MissingMessageSecret`, igual ao 7.x). Ack de sucesso só onde o 7.x também
+usa: canal e `unavailable` sem enc. O ack ganhou `type` e `from` (#2221) e isso
+fica, mas sozinho não bastava. Dado a favor do nack: no caso glaucia, o nack 487
+(`MessageCounterError`) parou as quedas. Testes:
+`test/baileys-ack-type-patch.test.js`, `test/baileys-dm-undecryptable-ack-patch.test.js`,
+`test/baileys-last-resort-ack-patch.test.js`, `test/out-of-scope-chat-guard.test.js`.
+
+**Aceite:** no pid da conta, depois do restart do `bot-supervisor`:
+`handled N offline messages/notifications` na primeira conexão; cada id `3A…`
+chega **1×** por conexão; `Censo de entrada do socket na janela` com
+`accepted.grupo` > 0; zero `stream:error` com `<ack class=message>`;
+`diag-cega-pid.mjs` deixa de dar `fila_offline_presa`. Varredura da frota:
+`grep -c 'handled .* offline' bot.log` por pid > 0 para todo pid com cópia `@bot`.
+
+**Não regredir:** nenhum caminho de descarte de `<message>` volta a mandar
+`sendMessageAck(node)` sem código de erro (teste conta as ocorrências); não voltar
+a condicionar `type` a erro/`unavailable`; a mensagem travada do `stream:error` é
+o **ack esperado pelo servidor** — comparar com o que mandamos é o primeiro passo.
+
+### Primeira tentativa (ack com `type`/`from`, #2221) — insuficiente, mantida
+
 
 **Causa medida (2026-10-03, `doritosmms@gmail.com`, pid 3519832, 3 h de log):**
 
