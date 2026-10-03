@@ -530,3 +530,144 @@ O nó é da CONTA: `<conta>~n2` sempre segue o nó de `WaSession.nodeId`
 leva os dois processos e as duas pastas de login. Conta em `moving_node` não
 troca de número nem liga a reserva.
 
+## Fase 2.1 — plano técnico: origens na reserva (2026-10-03)
+
+**Problema (relatado na validação em staging):** a checagem da reserva só
+olha os **destinos**. As **origens** (grupos e canais de onde o robô copia)
+não são conferidas. Quando a reserva assume, o processo ativo passa a usar o
+login dela (Fase 1). Esse login só recebe `messages.upsert` dos grupos em que
+o número está e dos canais que ele segue. Origem fora da reserva = o
+espelhamento daquela origem **para em silêncio** depois da troca.
+
+### Fatos do código (conferidos)
+
+| Fato | Onde |
+|---|---|
+| Origem = `Group.role='monitor'`, `kind` `group` (`@g.us`) ou `channel` (`@newsletter`) | `prisma/schema.prisma`, `src/api/routes/groups.js` |
+| "Conferir grupos da reserva" filtra só `role:'post', kind:'group'` | `GET /reserve/missing-groups` em `src/api/routes/multiNumber.js` |
+| A pertença gravada (`WaGroupMembership`) já tem **todos** os `@g.us` de cada número, origens inclusive | `buildMembershipRows` em `src/domain/session/groupMembership.js`, `syncGroupMembership` em `src/bot-worker.js` (roda também na prontidão) |
+| Canais **não** entram na pertença: `groupFetchAllParticipating` não lista `@newsletter` e o Baileys não tem "listar canais que sigo" | comentário em `src/bot-worker.js` (~l. 975) |
+| `newsletterMetadata` pede `fetch_viewer_metadata` e devolve a resposta crua, com `viewer_metadata.role` (o que descarta o papel é só o `parseNewsletterCreateResponse`, de criar canal) | `node_modules/@whiskeysockets/baileys/lib/Socket/newsletter.js` |
+| Seguir canal já existe | `followChannel` em `src/core/channelDirectory.js` (`sock.newsletterFollow`) |
+| Origem faltando na reserva NÃO dispara alarme: o robô fica `quiet`/`starved`, não `blind` — e só `blind` aciona a troca | `src/core/receptionHealth.js`, `isActiveBlind` em `src/domain/session/failoverPolicy.js` |
+
+O último fato é o mais grave: hoje a perda seria **silenciosa**.
+
+### Desenho
+
+1. **Domínio (puro):** `coverageReport({ destinations, sources, memberJids, followedChannelJids })`
+   em `groupMembership.js`, devolvendo por tipo: `ok`, `missing`, `unknown`.
+   Grupo: `ok`/`missing` pela pertença. Canal: `ok`/`missing` se soubermos se o
+   número segue, senão `unknown`. `missingDestinations` continua (compatível).
+2. **Canais seguidos por número:** depende de um dado que ainda não temos
+   (ver Portão abaixo). Caminho preferido: acrescentar `viewer_role:
+   viewer?.role` no `parseNewsletterMetadata` do patch existente
+   (`patches/@whiskeysockets+baileys+6.7.23.patch`). No `syncGroupMembership`,
+   para cada canal de origem da conta (poucos), `newsletterMetadata('jid', jid)`
+   espaçado (1 a cada 2 s) e gravar em `WaGroupMembership` com `waJid`
+   `@newsletter` (a tabela aceita qualquer `waJid`, sem migration). Seguir =
+   `role` em `SUBSCRIBER|ADMIN|OWNER`.
+3. **API:** `GET /reserve/missing-groups` passa a devolver, além do que já
+   devolve (o painel atual continua funcionando), `sources: { total, missing,
+   unknown }`. Sempre do número que **não** está ativo (`otherSlot(activeWaSlot)`).
+4. **Ação "Seguir os canais de origem na reserva":** `POST
+   /reserve/follow-source-channels` → comando IPC novo `followChannels` na
+   prontidão (entra em `STANDBY_IPC_TYPES`; continua sem espelhar e sem enviar).
+   Segue só os canais de origem da própria conta, 1 a cada 5 s, no máximo 30
+   por pedido. `newsletterFollow` em canal já seguido não faz mal.
+   **Grupos não têm atalho**: sem link de convite (as origens costumam ser
+   grupos de terceiros), a cliente entra pelo celular. O painel lista quais.
+5. **Painel (`ReserveNumberCard`):** "Conferir grupos da reserva" vira duas
+   listas — "Grupos onde a reserva publica" e "Origens que a reserva precisa
+   receber" — e um resumo "A reserva recebe X de Y origens". Faltando origem:
+   aviso `--warn` com o texto "Se a reserva assumir, estas origens param de
+   ser copiadas". Segue o design system v2 (sem padrão novo).
+6. **Na troca:** a troca **não** é bloqueada por origem faltando (a reserva
+   ainda envia ofertas automáticas, agendadas e fila — vale mais que nada).
+   O e-mail `whatsapp_reserva_assumiu` passa a listar as origens que não
+   chegam pelo novo número. Decisão de produto: confirmar com a dona.
+7. **Diagnóstico:** `diag-rodizio.mjs` ganha "origens por número" (ok / falta
+   / a confirmar).
+
+### Portão (medir antes de codar o item 2)
+
+Confirmar em staging, com o número reserva conectado, que o WhatsApp devolve
+`viewer_metadata.role` para canal seguido e não seguido (dois canais de teste).
+Se não devolver, os canais ficam `unknown` ("confira no celular") e o botão do
+item 4 resolve na prática (seguir de novo é inofensivo).
+
+### Riscos
+
+- Seguir muitos canais de uma vez pela reserva = ação em massa num número
+  novo (anti-ban). Por isso: só os canais de origem da conta, espaçado, teto
+  por pedido, sempre por clique da cliente (nunca automático).
+- `newsletterMetadata` por canal a cada sincronização: poucos canais por conta;
+  ainda assim, só a cada 1 h e espaçado.
+- RAM: nenhum processo novo, nenhum cache novo (Regra #1 não se aplica).
+
+### Testes obrigatórios
+
+- `coverageReport`: grupo presente/ausente, canal seguido/não/desconhecido,
+  conta sem origens, origem do Telegram (`tg:`) ignorada.
+- Rota: resposta antiga intacta + `sources`; sempre o slot não ativo; 404 com a
+  flag desligada.
+- Estrutural: `followChannels` só segue `role:'monitor', kind:'channel'` da
+  própria conta, com espaço e teto; a prontidão continua sem espelhar/enviar.
+- E-mail da troca com e sem origens faltando.
+
+### Validação em staging
+
+1. Conta com 2 grupos de origem e 1 canal de origem; reserva em só 1 grupo.
+2. Painel: "A reserva recebe 1 de 3 origens", lista o grupo e o canal que faltam.
+3. "Seguir os canais de origem na reserva" → canal passa a `ok` (após a
+   próxima sincronização ou reconectar a reserva).
+4. Pôr a reserva no outro grupo pelo celular → 3 de 3.
+5. Forçar a troca (desconectar o principal) → o e-mail não lista nenhuma
+   origem faltando; mandar mensagem nas 3 origens → as 3 espelham pela reserva.
+
+### Ordem de entrega
+
+Um PR só, atrás de `MULTI_NUMBER_ENABLED` (sem flag nova): portão → domínio +
+rota → IPC de seguir canais → painel → e-mail → diag → docs.
+
+## Fase 2.1 — como ficou (implementado em 2026-10-03)
+
+Diferenças em relação ao plano acima (para ficar mais simples e sem tráfego
+extra):
+
+- **Sem patch no Baileys:** `newsletterMetadata` já traz `viewer_metadata.role`.
+  `getChannelMetadata` (`src/core/channelDirectory.js`) passou a devolver
+  `viewerRole`.
+- **Canais conferidos ao vivo, não gravados:** só quando a cliente clica em
+  "Conferir grupos e canais da reserva" (até 20 canais, 5 s cada). Nada roda de
+  hora em hora. Grupos continuam vindo da pertença gravada.
+- **Sem comando novo:** a prontidão passou a aceitar `channel:metadata` e
+  `channel:follow` (já existiam para o número ativo). Seguir pela prontidão
+  não grava na lista de canais da conta (`rememberChannelJid` só no ativo).
+- **Troca não é bloqueada** por origem faltando (decisão padrão; a reserva
+  ainda envia automáticas, agendadas e fila).
+
+| Peça | Onde |
+|---|---|
+| Regras puras (`channelFollowState`, `sourceCoverage`) | `src/domain/session/groupMembership.js` |
+| `GET /reserve/missing-groups` → campo novo `sources` (resposta antiga intacta) | `src/api/routes/multiNumber.js` |
+| `POST /reserve/follow-source-channels` (lote de 5, 3 s entre canais, 30 s entre cliques, 1 por vez) | `src/api/routes/multiNumber.js` |
+| Aviso no e-mail da troca (`{{aviso_origens}}`) | `src/core/reserveCoverage.js`, `src/api/server.js`, `src/email/registry.js` |
+| Painel: duas listas + botão "Seguir os canais com a reserva" | `dashboard/components/ReserveNumberCard.js` |
+| Diagnóstico: "origens número N" | `scripts/diag-rodizio.mjs` |
+| Testes | `test/multi-number-sources.test.js` |
+
+### Não regredir
+
+- Origem faltando no número que envia **não dispara alarme nenhum** (fica
+  `quiet`, não `blind`). Por isso o aviso tem que estar no painel e no e-mail.
+- Seguir canal pela reserva é sempre por clique, em lote pequeno e espaçado —
+  nunca automático (número novo seguindo muitos canais de uma vez = risco).
+- E-mail com template editado no admin (override no banco) não mostra o
+  `{{aviso_origens}}` até o texto ser atualizado lá.
+
+### Validação em staging
+
+Igual à lista "Validação em staging" do plano acima, passos 1 a 5. Conferir
+também: `node scripts/diag-rodizio.mjs --email=<conta>` mostra "origens número
+2: grupos X/Y".

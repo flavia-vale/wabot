@@ -157,6 +157,8 @@ export function notifyPayoutPaid({ db, sendMail, affiliateUserId, user, amountCe
 
 // Vários números por conta (docs/rca/multi-numero.md): o número reserva
 // assumiu os envios porque o número ativo caiu ou foi bloqueado.
-export function notifyNumberSwitched({ db, sendMail, user, userId, logger } = {}) {
-  return fire({ db, sendMail, slug: 'whatsapp_reserva_assumiu', user, userId, logger, vars: { ...panelLinks() } })
+// `avisoOrigens`: origens que o novo número não recebe (Fase 2.1), de
+// `sourceGapsNotice` em src/core/reserveCoverage.js.
+export function notifyNumberSwitched({ db, sendMail, user, userId, avisoOrigens = '', logger } = {}) {
+  return fire({ db, sendMail, slug: 'whatsapp_reserva_assumiu', user, userId, logger, vars: { ...panelLinks(), aviso_origens: avisoOrigens } })
 }

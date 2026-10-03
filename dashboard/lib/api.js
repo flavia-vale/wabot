@@ -217,6 +217,7 @@ export const api = {
   reserveQr: () => apiFetch('/api/multi-number/reserve/qr'),
   reservePairingCode: (phone) => apiFetch('/api/multi-number/reserve/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
   reserveMissingGroups: () => apiFetch('/api/multi-number/reserve/missing-groups'),
+  reserveFollowSourceChannels: () => apiFetch('/api/multi-number/reserve/follow-source-channels', { method: 'POST' }),
   reserveSwitch: () => apiFetch('/api/multi-number/reserve/switch', { method: 'POST' }),
   extraNumberSubscribe: (payerEmail) => apiFetch('/api/payments/extra-number/subscribe', { method: 'POST', body: JSON.stringify(payerEmail ? { payerEmail } : {}) }),
   extraNumberCancel: () => apiFetch('/api/payments/extra-number/cancel', { method: 'POST' }),
