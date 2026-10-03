@@ -140,6 +140,8 @@ test('os 10 títulos de FR-004 cabem em 55 chars de texto próprio (sufixo medid
   for (const alvo of ALVOS) {
     const { title } = alvo.fonte()
     assert.ok(title, `${alvo.path}: não achei o title na fonte`)
+    // Mesma exceção nominal, medida, da varredura dos módulos (abaixo).
+    if (TITULOS_LONGOS_DELIBERADOS.has(title)) continue
     assert.ok(
       title.length <= ORCAMENTO_TITULO,
       `${alvo.path}: título com ${title.length} chars (entregue: "${tituloEntregue(title)}" = ${tituloEntregue(title).length} chars) passa de ${ORCAMENTO_TITULO}`
@@ -286,6 +288,13 @@ const MODULOS_VARREDURA = [
 // 7 dias grátis"). O de afiliados usa título absoluto (sem sufixo) e fica em 62.
 const TITULOS_LONGOS_DELIBERADOS = new Set([
   'Bot para Afiliados no WhatsApp: Shopee, Amazon e Mercado Livre',
+  // 03/10/2026 — Frente 4 da análise SEO+GEO: os 3 comparativos de maior
+  // impressão (achadinhos-bot 7.131 impr./CTR 1,35%, achadinho-pro 1.018/2,85%,
+  // shozap 538/0,93%). Formato do plano, decisão da dona do produto; o título
+  // é absoluto (sem sufixo de marca) e cabe nos 70 do Bing.
+  'AchadinhosBot ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)',
+  'Achadinho Pro ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)',
+  'Shozap ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)',
 ])
 
 test('todo título de página nos módulos de conteúdo cabe em 55 chars, salvo exceção nominal medida', () => {

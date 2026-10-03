@@ -198,6 +198,14 @@ com título-pergunta + contraste:
 - Contexto de medição: os 3 já tinham sido reescritos em 27/09 (Frente D1) e
   foram trocados de novo antes de medir. Comparar pela série diária a partir do
   deploy desta troca, não contra 27/09.
+- **03/10/2026 — novo formato (Frente 4 da análise SEO+GEO de 02/10, decisão
+  da dona do produto):** os 3 passam a "X ou Espelha Grupos: R$ 39, lojas e 7
+  dias grátis (2026)", com `titleAbsolute` (o título já traz a marca; sem ele
+  o sufixo do layout duplicaria "Espelha Grupos" e estouraria os 70 do Bing).
+  Continua exceção nominal da FR-030 e continua exigindo "R$ 39". Os 3 estão
+  em `TITULOS_LONGOS_DELIBERADOS` (68/68/61 chars). Medir 4 semanas pela
+  série diária a partir do deploy em `main`; se o CTR não passar de 2,5%,
+  parar de mexer nesses títulos.
 
 ## Datas, "Melhor para" e validadores de SEO (23/09/2026 — não regredir)
 
