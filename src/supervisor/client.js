@@ -7,6 +7,7 @@
  * erro apenas quando uma rota tentar de fato falar com o supervisor.
  */
 
+import { accountIdFromSessionKey, isExtraSessionKey } from '../domain/session/sessionKey.js'
 import { EventEmitter } from 'events'
 import logger from '../logger.js'
 import { buildRedisOptions } from '../core/redisFactory.js'
@@ -221,7 +222,8 @@ export function createSupervisorClient({
   async function resolveNodeId(userId) {
     const hit = nodeOfUser.get(userId)
     if (hit && hit.expiresAt > now()) return hit.nodeId
-    const row = await (await getDb()).waSession.findUnique({ where: { userId }, select: { nodeId: true } })
+    // Número reserva (<conta>~n2) mora no nó da CONTA (docs/rca/multi-numero.md).
+    const row = await (await getDb()).waSession.findUnique({ where: { userId: accountIdFromSessionKey(userId) ?? userId }, select: { nodeId: true } })
     const nodeId = resolveSessionNodeId(row)
     nodeOfUser.set(userId, { nodeId, expiresAt: now() + nodeCacheTtlMs })
     return nodeId
@@ -337,6 +339,8 @@ export function createSupervisorClient({
   // nodeId ANTES de enviar o START_BOT — assim um segundo comando concorrente
   // já enxerga o dono. Devolve null quando nenhum nó pode receber.
   async function ensureNodePlacement(userId) {
+    // Número reserva nunca escolhe nó próprio: segue o nó da conta.
+    if (isExtraSessionKey(userId)) return resolveNodeId(userId)
     const database = await getDb()
     const row = await database.waSession.findUnique({ where: { userId }, select: { nodeId: true, phone: true, status: true, lifecycle: true } })
     // Regra única: nulo = 'n1'. Conta antiga (já pareada) NUNCA é recolocada.

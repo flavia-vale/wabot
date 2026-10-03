@@ -12,6 +12,7 @@
  * Acoplamento com API é apenas via Redis. Reiniciar API não toca os workers.
  */
 
+import { accountIdFromSessionKey } from '../domain/session/sessionKey.js'
 import { listResumableStandbySessions } from '../core/standbySessions.js'
 import 'dotenv/config'
 import { Worker } from 'bullmq'
@@ -281,7 +282,9 @@ async function listStandbyForThisNode() {
   })
 }
 
-function belongsToThisShard(userId) {
+function belongsToThisShard(sessionKey) {
+  // Número reserva (<conta>~n2) mora no shard/nó da CONTA.
+  const userId = accountIdFromSessionKey(sessionKey) ?? sessionKey
   if (!NODE_ROUTING) return shouldHandleUserOnShard(userId, SHARD_COUNT, SHARD_INDEX)
   const cached = nodeOwnership.peek(userId)
   return cached === null ? true : cached === NODE_ID
