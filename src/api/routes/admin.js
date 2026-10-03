@@ -28,6 +28,8 @@ import { resolvePayingStatus } from '../../domain/admin/payingStatus.js'
 import { classifyOutreachSegment } from '../../domain/admin/outreachSegments.js'
 import { buildInbox } from '../../domain/admin/inboxPriority.js'
 import { findPayingDown, findPayingBlind, STUCK_SENDING_MS } from '../../ops/adminOpsAlertPolicy.js'
+import { resolveQueueBackend, dlqDisponivel, buildFilasRows, validateReprocessReason, FILAS_MAX_LINHAS } from '../../domain/admin/stuckSendQueue.js'
+import { recoverStuckSendLogs } from '../../jobs/stuckSendLogs.js'
 import { wasStoppedByUser } from '../../email/accountActivity.js'
 import { SUBSCRIPTION_ACTIVE_STATUS } from '../../domain/payments/subscriptionPolicy.js'
 import { sendAdminAlert } from '../../email/adminAlerts.js'
@@ -457,7 +459,7 @@ function buildAdminObservabilityContract({
   const queues = {
     offerQueueItems: queueCounts,
     paymentWebhookDlq: { open: dlqOpen ?? 0 },
-    sendDlq: dlqSnapshot,
+    sendDlq: { ...dlqSnapshot, backend: resolveQueueBackend() },
   }
 
   const database = {
@@ -3697,6 +3699,52 @@ app.get('/sessions', async (req, reply) => {
     }
   })
 
+  // ---- Operação → Filas (M5): envios presos em 'sending', por cliente ----
+  // Vale para fila em memória (produção) e BullMQ. Só groupBy/in, teto de 500.
+  app.get('/filas', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const nowMs = Date.now()
+    const cutoff = new Date(nowMs - STUCK_SENDING_MS)
+    const presos = await db.messageLog.groupBy({
+      by: ['userId'],
+      where: { status: 'sending', sentAt: { lt: cutoff } },
+      _count: { _all: true },
+      _min: { sentAt: true },
+      orderBy: { _min: { sentAt: 'asc' } },
+      take: FILAS_MAX_LINHAS,
+    })
+    const ids = presos.map(p => p.userId)
+    const [usuarios, ultimosSucessos] = ids.length
+      ? await Promise.all([
+        db.user.findMany({ where: { id: { in: ids } }, select: { id: true, email: true, name: true } }),
+        db.messageLog.groupBy({ by: ['userId'], where: { userId: { in: ids }, status: 'success' }, _max: { sentAt: true } }),
+      ])
+      : [[], []]
+    const linhas = buildFilasRows({ presos, usuarios, ultimosSucessos, nowMs })
+    await writeAdminAuditLog(req, { action: 'admin.filas.list', resource: 'filas', after: { clientes: linhas.length } })
+    return {
+      backend: resolveQueueBackend(),
+      presosDesdeMin: Math.round(STUCK_SENDING_MS / 60_000),
+      totalPresos: linhas.reduce((n, l) => n + l.presos, 0),
+      linhas,
+    }
+  })
+
+  // Destrava os 'sending' presos de UM cliente (mesma função do watchdog; não
+  // reenvia — a fonte reenfileira por conta própria).
+  app.post('/filas/:userId/reprocessar', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    const userId = String(req.params.userId ?? '').trim()
+    if (!userId || userId.length > 128) return reply.code(400).send({ error: 'userId inválido' })
+    const motivo = validateReprocessReason(req.body)
+    if (!motivo.ok) return reply.code(400).send({ error: motivo.error })
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } })
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    const result = await recoverStuckSendLogs({ db, userId, cutoffMs: STUCK_SENDING_MS })
+    await writeAdminAuditLog(req, { action: 'admin.filas.reprocessar', resource: 'filas', resourceId: userId, after: { ...result, reason: motivo.reason } })
+    return result
+  })
+
   // ---- DLQ do pipeline de envio (BullMQ) ----
   //
   // Disponível apenas quando o worker do usuário está em backend bullmq
@@ -3708,6 +3756,11 @@ app.get('/sessions', async (req, reply) => {
   // valor não pode ser usado cru: rejeita vazio/malformado (400) e confirma
   // que o usuário existe (404), evitando construir chaves Redis arbitrárias.
   async function resolveDlqUserId(req, reply) {
+    // Em produção a fila é em memória: não há DLQ do Redis (M5, envio-e-filas.md).
+    if (!dlqDisponivel()) {
+      reply.code(409).send({ error: 'Fila em memória neste ambiente: não há DLQ. Use Operação → Filas.' })
+      return null
+    }
     const userId = String(req.params.userId ?? '').trim()
     if (!userId || userId.length > 128 || /[\s:]/.test(userId)) {
       reply.code(400).send({ error: 'userId inválido' })

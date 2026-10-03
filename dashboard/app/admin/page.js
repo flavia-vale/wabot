@@ -800,7 +800,7 @@ function TechDrilldownModal({ kind, observability, metrics, onClose }) {
   if (!kind) return null
   const erros5xx = asArray(metrics?.recentErrors)
   const dlqPagamentos = Number(observability?.queues?.paymentWebhookDlq?.open ?? observability?.goNoGo?.paymentDlqOpen ?? 0)
-  const dlqEnvios = Number(observability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0)
+  const dlqEnvios = observability?.queues?.sendDlq?.backend === 'bullmq' ? Number(observability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0) : 0
   const filaOfertas = asPlainObject(observability?.queues?.offerQueueItems)
   const dependencias = asPlainObject(observability?.dependencies)
   const isInfra = kind === 'infra'
@@ -1406,8 +1406,8 @@ export default function AdminPage() {
               />
               <CommandCard
                 label="Trabalhos parados"
-                value={(systemObservability?.goNoGo?.paymentDlqOpen ?? 0) + (systemObservability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0)}
-                tone={severityTone((systemObservability?.goNoGo?.paymentDlqOpen ?? 0) + (systemObservability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0), 1, 3)}
+                value={(systemObservability?.goNoGo?.paymentDlqOpen ?? 0) + (systemObservability?.queues?.sendDlq?.backend === 'bullmq' ? (systemObservability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0) : 0)}
+                tone={severityTone((systemObservability?.goNoGo?.paymentDlqOpen ?? 0) + (systemObservability?.queues?.sendDlq?.backend === 'bullmq' ? (systemObservability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0) : 0), 1, 3)}
                 helper="Envios e avisos de pagamento"
                 help={CARD_HELP.filasDlq}
                 onClick={() => setTechDrilldown('filas')}
