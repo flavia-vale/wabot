@@ -628,3 +628,7 @@ na mesma tela).
 asserções de `test/admin-acoes-com-confirmacao.test.js` sobre `runReprocess` e
 `enviarIndividual` apontam para os arquivos novos (nunca apagar a garantia);
 menu = só 5 entradas. Custo: zero RAM, zero processo.
+
+## Design system: seção "Admin" em proposta (G5 passo 1, 2026-10-03)
+
+DS v2.1 (`docs/design-system/design-system-v2.html`, âncora `#admin`): tabela densa, chips, barra de ações, faixas de gravidade da caixa Hoje, KPI, bloco da Operação, voz e lista de divergências D1-D12. **Só documentação**: nenhuma tela migrada; o passo 2 só depois do OK da dona.
