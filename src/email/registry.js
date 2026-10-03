@@ -826,15 +826,20 @@ Assim que o grupo novo entrar, o link volta a mandar as pessoas para ele.`,
     category: 'transactional',
     trigger: 'auto',
     dedupDays: 0,
-    variables: [{ name: 'link_whatsapp', description: 'Endereço da tela de conexão', example: 'https://espelhagrupos.com.br/painel/whatsapp' }],
+    variables: [
+      { name: 'link_whatsapp', description: 'Endereço da tela de conexão', example: 'https://espelhagrupos.com.br/painel/whatsapp' },
+      { name: 'aviso_origens', description: 'Origens que o número que assumiu não recebe (vazio se estiver tudo certo)', example: 'Atenção: o número que assumiu não está nestes grupos de origem, então eles pararam de ser copiados:\n- Promoções da Ana' },
+    ],
     title: 'Seu número reserva assumiu',
     subject: 'O número reserva assumiu os envios do robô',
     body: `{{saudacao}} O WhatsApp principal do robô caiu, e o número reserva assumiu os envios para não deixar seus grupos parados.
 
-Ele só consegue enviar nos grupos em que também está. Confira no painel se algum grupo ficou de fora.
+Ele só envia nos grupos em que também está, e só copia dos grupos e canais de origem em que também está. Confira no painel se algum ficou de fora.
+
+{{aviso_origens}}
 
 1. Abra o painel na tela do WhatsApp.
-2. Veja quais grupos estão sem o número reserva e adicione ele.
+2. Veja quais grupos e canais estão sem o número reserva e adicione ele.
 3. Quando o número principal voltar, use "Voltar para o número 1".
 
 [[botao:Ver meus números|{{link_whatsapp}}]]

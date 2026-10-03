@@ -6624,7 +6624,9 @@ if (registerProcessHandlers) process.once('SIGINT', () => { void shutdown(0) })
 
 // Prontidão só atende o ciclo de vida do socket; comando de negócio (envio,
 // broadcast, canais…) vai sempre para o processo ativo (chave = userId).
-const STANDBY_IPC_TYPES = new Set(['stop', 'requestPairingCode', 'listGroups', 'metrics'])
+// Canal: a reserva precisa SEGUIR os canais de origem para receber depois da
+// troca (Fase 2.1). Consultar/seguir canal não espelha nem envia nada.
+const STANDBY_IPC_TYPES = new Set(['stop', 'requestPairingCode', 'listGroups', 'metrics', 'channel:metadata', 'channel:follow'])
 
 const handleMessage = async msg => {
   if (IS_STANDBY && msg?.type && !STANDBY_IPC_TYPES.has(msg.type)) {
@@ -6932,7 +6934,8 @@ const handleMessage = async msg => {
         inFlight: inFlightChannelJids,
         logger,
       })
-      rememberChannelJid(msg.jid)
+      // A prontidão não grava na lista de canais da conta (arquivo é do ativo).
+      if (!IS_STANDBY) rememberChannelJid(msg.jid)
       sendIpc({ type: 'channel:followResult', requestId: msg.requestId, data })
     } catch (err) {
       logger.warn({ err: err?.message, jid: msg.jid }, 'channel:follow falhou')
