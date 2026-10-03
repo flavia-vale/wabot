@@ -59,6 +59,8 @@ import { selectShardPocCandidates, presentShardRuntimeMetrics } from '../../ops/
 import { resolveFinancePeriod, FINANCE_PERIODS } from '../../domain/admin/financePeriod.js'
 import { combineRevenueTotals, countDistinctPayingUsers, computeAverageLtv, computeMercadoPagoFees, computeNetRevenue } from '../../domain/admin/financeOverview.js'
 import { loadTestAccountUserIds, excludeUserIdsWhere, resolveTestAccountEmails } from '../../domain/admin/testAccounts.js'
+import { buildLtvReport } from '../../domain/admin/ltvRetention.js'
+import { classifyNonRenewals, buildChurnReport } from '../../domain/admin/churnReason.js'
 import { buildRoiReport } from '../../domain/admin/roi.js'
 import { costForMonth, monthIndex, monthKeyFromIndex, monthKeyOf, normalizeCostOverrides, resolveCostConfig, COST_CATEGORY_LABELS } from '../../domain/admin/operatingCosts.js'
 import { DEFAULT_OWNER_ADMIN_EMAILS, PRIMARY_OWNER_ADMIN_EMAIL } from '../../auth/reservedAdminEmails.js'
@@ -911,10 +913,12 @@ async function buildFleetScenarios(now = new Date()) {
       where: { type: { in: ['disconnect', 'disconnect_terminal'] }, occurredAt: { gte: since24h, lte: now } },
       _count: { _all: true },
     }).catch(() => []),
-    db.waConnectionEvent.findMany({
+    // groupBy (agregação no SQLite) em vez de `distinct` do Prisma, que traz
+    // todas as linhas para a memória da API e deduplica lá.
+    db.waConnectionEvent.groupBy({
+      by: ['userId'],
       where: { type: { in: ['manual_reconnect_requested', 'manual_pairing_requested'] }, occurredAt: { gte: since24h, lte: now } },
-      select: { userId: true },
-      distinct: ['userId'],
+      _max: { occurredAt: true },
     }).catch(() => []),
     // Sem `distinct` de propósito: precisamos do `metadata` para separar quem
     // parou agora de quem está cega há dias, e com `distinct` a linha que
@@ -924,10 +928,10 @@ async function buildFleetScenarios(now = new Date()) {
       where: { event: 'ops_wa_reception_blind', createdAt: { gte: blindSince, lte: now } },
       select: { userId: true, metadata: true },
     }).catch(() => []),
-    db.analyticsEvent.findMany({
+    db.analyticsEvent.groupBy({
+      by: ['userId'],
       where: { event: 'ops_wa_group_desync_unresolved', createdAt: { gte: since7d, lte: now } },
-      select: { userId: true },
-      distinct: ['userId'],
+      _max: { createdAt: true },
     }).catch(() => []),
     db.waConnectionEvent.findMany({
       where: { type: { in: OFFLINE_EPISODE_EVENT_TYPES }, occurredAt: { gte: addDays(now, -2), lte: now } },
@@ -2499,6 +2503,56 @@ export async function adminRoutes(app) {
   async function loadCostOverrides() {
     return db.operatingCostSettings.findUnique({ where: { id: 1 } }).catch(() => null)
   }
+
+  // G3 (item 13): LTV por coorte e churn com motivo. Rotas finas sobre os
+  // módulos puros `ltvRetention.js` e `churnReason.js` — a MESMA conta dos
+  // scripts `diag-ltv-retencao.mjs` / `diag-motivo-nao-renovou.mjs`. Só leitura
+  // em lote (2 a 4 consultas, teto de linhas), conta de teste fora, zero RAM nova.
+  const LTV_PAYMENT_ROW_LIMIT = 20_000
+  async function loadLtvReport() {
+    const testAccounts = await loadTestAccountUserIds(db)
+    const payments = await db.payment.findMany({
+      where: { status: 'approved', ...excludeUserIdsWhere(testAccounts.ids) },
+      select: { userId: true, plan: true, amount: true, status: true, createdAt: true, expiresAt: true, daysGranted: true },
+      orderBy: { createdAt: 'asc' },
+      take: LTV_PAYMENT_ROW_LIMIT,
+    })
+    const userIds = [...new Set(payments.map(p => p.userId))]
+    const users = userIds.length
+      ? await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, plan: true, createdAt: true } })
+      : []
+    const now = new Date()
+    return {
+      now,
+      userIds,
+      truncated: payments.length >= LTV_PAYMENT_ROW_LIMIT,
+      report: buildLtvReport({ users, payments, now }),
+    }
+  }
+
+  app.get('/finance/ltv', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+    const { report, truncated } = await loadLtvReport()
+    await writeAdminAuditLog(req, { action: 'admin.finance.ltv.read', resource: 'finance' })
+    // Sem e-mail por cliente: a tela mostra coorte, não pessoa.
+    const { customers: _customers, ...rest } = report
+    return { ...rest, truncated }
+  })
+
+  app.get('/finance/churn', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+    const months = Math.min(24, Math.max(1, Number.parseInt(req.query?.months, 10) || 6))
+    const { report, userIds, now, truncated } = await loadLtvReport()
+    const [subscriptions, charges] = userIds.length
+      ? await Promise.all([
+        db.subscription.findMany({ where: { userId: { in: userIds } }, select: { userId: true, status: true, cancelledAt: true } }),
+        db.subscriptionCharge.findMany({ where: { userId: { in: userIds } }, select: { userId: true, status: true, attemptedAt: true } }),
+      ])
+      : [[], []]
+    const classified = classifyNonRenewals(report.customers, { subscriptions, charges })
+    await writeAdminAuditLog(req, { action: 'admin.finance.churn.read', resource: 'finance', after: { months } })
+    return { ...buildChurnReport(classified, { now, months, monthKey: monthKeyOf }), truncated }
+  })
 
   /**
    * Edita os gastos fixos mensais (Claude + servidor) e a cotação do dólar do

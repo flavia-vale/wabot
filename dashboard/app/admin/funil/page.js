@@ -145,6 +145,12 @@ export default function AdminFunilPage() {
 
       {!loading && data && (
         <>
+          {data.truncated && (
+            <Alert
+              type="warning"
+              message={`Período grande demais: mostrando só os ${data.cohortLimit} cadastros mais recentes. Escolha um período menor para ver tudo.`}
+            />
+          )}
           {data.biggestDrop && (
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <p className="text-sm font-semibold text-amber-900">
