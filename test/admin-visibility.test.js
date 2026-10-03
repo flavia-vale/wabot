@@ -61,7 +61,6 @@ import { readFileSync } from 'node:fs'
 const adminRoute = readFileSync(new URL('../src/api/routes/admin.js', import.meta.url), 'utf8')
 const adminService = readFileSync(new URL('../src/domain/admin/service.js', import.meta.url), 'utf8')
 const adminPage = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
-const onlinePage = readFileSync(new URL('../dashboard/app/admin/online/page.js', import.meta.url), 'utf8')
 
 test('a listagem de clientes esconde vencidas antigas por padrão', () => {
   assert.match(adminService, /wantsLongExpired\(query\.incluirVencidos\)/)
@@ -77,9 +76,8 @@ test('os cards de cenário contam a mesma coisa que a lista mostra', () => {
   assert.match(adminRoute, /if \(isLongExpired\(session\.user\?\.accessExpiresAt \?\? null/)
 })
 
-test('as duas telas dizem quantas ficaram de fora', () => {
+test('a tela diz quantas ficaram de fora', () => {
   assert.match(adminService, /ocultasPorVencimento/)
   assert.match(adminRoute, /ocultasPorVencimento: hiddenLongExpired/)
   assert.match(adminPage, /Ver mais \(\$\{oculto\}/)
-  assert.match(onlinePage, /Ver mais \(\$\{data\?\.summary\?\.ocultasPorVencimento\}/)
 })

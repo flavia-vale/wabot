@@ -34,6 +34,20 @@ import { listProFeaturesInUse, buildProFeaturesNotice } from '../../domain/payme
 import { tryCreateAffiliateCommission, reconcileAffiliateCommissions, promoteEligibleAffiliateCommissions, reverseAffiliateCommissionForPayment, checkStuckPromotions } from '../../domain/affiliate/service.js'
 import { hasConfiguredStepUpMfa, safeEqualString } from '../adminMfa.js'
 import { resolveAdminAccess } from './admin.js'
+import { stopBot as stopSessionBot } from '../../manager.js'
+import {
+  EXTRA_NUMBER_PLAN,
+  EXTRA_NUMBER_PRICE,
+  EXTRA_NUMBER_TITLE,
+  PLAN_SUBSCRIPTION_WHERE,
+  buildExtraNumberReference,
+  parseExtraNumberReference,
+  isExtraNumberSubscription,
+  extraNumbersForStatus,
+} from '../../domain/payments/extraNumberBilling.js'
+import { extraNumberAccess } from '../../domain/session/extraNumberAccess.js'
+import { multiNumberEnabled } from '../../domain/session/multiNumberFlag.js'
+import { standbyProcessKey, STANDBY_PROCESS_SLOT } from '../../domain/session/workerIdentity.js'
 export { resolvePlanForPayment }
 
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
@@ -473,7 +487,7 @@ async function cancelMercadoPagoSubscription(preapprovalId) {
   }
 }
 
-async function createMercadoPagoSubscription({ userId, plan, payerEmail, startDate = null }) {
+async function createMercadoPagoSubscription({ userId, plan, payerEmail, startDate = null, product = null }) {
   if (!payerEmail) {
     const err = new Error('payer_email obrigatório para criar assinatura')
     err.code = 'MISSING_PAYER_EMAIL'
@@ -487,12 +501,16 @@ async function createMercadoPagoSubscription({ userId, plan, payerEmail, startDa
     throw err
   }
 
-  const plans = await getBillingPlans()
+  // `product`: assinatura que não é de plano (hoje, o número reserva). Leva
+  // título, valor e external_reference próprios — o webhook separa por ela.
+  const plans = product ? {} : await getBillingPlans()
   const planInfo = plans[plan]
-  const normalizedPlan = {
-    title: String(planInfo?.title ?? '').trim() || DEFAULT_PLANS[plan]?.title,
-    price: Number(planInfo?.price),
-  }
+  const normalizedPlan = product
+    ? { title: product.title, price: Number(product.price) }
+    : {
+      title: String(planInfo?.title ?? '').trim() || DEFAULT_PLANS[plan]?.title,
+      price: Number(planInfo?.price),
+    }
   if (!normalizedPlan.title || !Number.isFinite(normalizedPlan.price) || normalizedPlan.price <= 0) {
     const err = new Error('Configuração de plano inválida para assinatura')
     err.code = 'INVALID_PLAN_CONFIG'
@@ -515,7 +533,7 @@ async function createMercadoPagoSubscription({ userId, plan, payerEmail, startDa
       'https://api.mercadopago.com/preapproval',
       {
         reason: normalizedPlan.title,
-        external_reference: userId,
+        external_reference: product?.externalReference ?? userId,
         payer_email: payerEmail,
         auto_recurring: {
           frequency: 1,
@@ -833,6 +851,24 @@ async function reagirACobrancaRecusada({ charge, subscription, log }) {
  * Só ESTENDE acesso, nunca encurta (`decideAccessExtensionFromSubscription`).
  * Roda no mesmo tick da reconciliação de pagamento — sem processo PM2 novo.
  */
+// Número reserva (docs/rca/multi-numero.md): o status da assinatura do
+// adicional decide `User.extraNumbers`. Sem assinatura ativa, a prontidão é
+// desligada — a troca automática deixa de valer junto.
+export async function applyExtraNumberStatus({ userId, status, log } = {}) {
+  const extraNumbers = extraNumbersForStatus(status)
+  const updated = await db.user.updateMany({ where: { id: String(userId), extraNumbers: { not: extraNumbers } }, data: { extraNumbers } })
+  if (!updated.count) return { changed: false, extraNumbers }
+  log?.warn?.({ userId, status, extraNumbers }, 'Número reserva: número extra atualizado pela assinatura do adicional')
+  if (extraNumbers === 0) {
+    await Promise.resolve(stopSessionBot(standbyProcessKey(String(userId)))).catch(() => false)
+    await db.waExtraSession.updateMany({
+      where: { userId: String(userId), slot: STANDBY_PROCESS_SLOT },
+      data: { status: 'disconnected', lifecycle: 'stopped_by_user' },
+    }).catch(() => {})
+  }
+  return { changed: true, extraNumbers }
+}
+
 async function runSubscriptionReconciliation({ log } = {}) {
   const subscriptions = await db.subscription.findMany({
     where: { status: { in: SUBSCRIPTION_OPEN_STATUSES } },
@@ -863,6 +899,14 @@ async function runSubscriptionReconciliation({ log } = {}) {
       synced++
     } catch (err) {
       log?.warn?.({ err: err?.message, userId: subscription.userId }, 'subscription_reconciliation_upsert_failed')
+      continue
+    }
+
+    // Número reserva (assinatura separada): só acompanha o status no número
+    // extra. NUNCA estende o acesso do plano nem dispara aviso de cobrança do
+    // plano (docs/rca/multi-numero.md).
+    if (isExtraNumberSubscription(subscription)) {
+      await applyExtraNumberStatus({ userId: subscription.userId, status: snapshot.status, log })
       continue
     }
 
@@ -1025,7 +1069,27 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
         const snapshot = await fetchMercadoPagoSubscriptionSnapshot(summary.dataResourceId)
         reconciliation = { ok: snapshot.ok, status: snapshot.status, transactionAmount: snapshot.transactionAmount }
 
-        if (snapshot.ok) {
+        const extraNumberUserId = snapshot.ok ? parseExtraNumberReference(snapshot.externalReference) : null
+        if (extraNumberUserId) {
+          // Assinatura do número reserva: caminho próprio, antes de qualquer
+          // regra do plano (o valor de R$29 nunca pode virar "plano basic").
+          try {
+            await db.$transaction(async (tx) =>
+              paymentsService.upsertSubscription(tx, {
+                userId: extraNumberUserId,
+                mpSubscriptionId: String(summary.dataResourceId),
+                plan: EXTRA_NUMBER_PLAN,
+                status: snapshot.status,
+                nextChargeAt: snapshot.nextChargeAt ?? null,
+              })
+            )
+            await applyExtraNumberStatus({ userId: extraNumberUserId, status: snapshot.status, log })
+            activation = { triggered: false, reason: 'extra_number_subscription_upserted', status: snapshot.status }
+          } catch (upsertErr) {
+            activation = { triggered: false, error: upsertErr?.message }
+            log?.warn?.({ err: upsertErr?.message, mpSubscriptionId: summary.dataResourceId }, 'Falha ao gravar assinatura do número reserva no webhook')
+          }
+        } else if (snapshot.ok) {
           const plans = await getBillingPlans()
           const plan = resolvePlanForPayment({ amount: snapshot.transactionAmount, plans })
 
@@ -1078,7 +1142,7 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
               nextRetryAt: authorizedSnapshot.nextRetryAt,
               source: 'webhook',
             }, { log })
-            await reagirACobrancaRecusada({
+            if (!isExtraNumberSubscription(subscriptionForCharge)) await reagirACobrancaRecusada({
               charge: {
                 id: null,
                 userId: subscriptionForCharge.userId,
@@ -1098,7 +1162,12 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
         if (authorizedSnapshot.ok && (authorizedSnapshot.status === 'approved' || authorizedSnapshot.status === 'processed') && authorizedSnapshot.preapprovalId) {
           const subscription = await paymentsService.findSubscriptionByMpId(String(authorizedSnapshot.preapprovalId))
 
-          if (subscription?.userId) {
+          if (isExtraNumberSubscription(subscription)) {
+            // Cobrança do número reserva aprovada: mantém o número extra. Não
+            // mexe em plano nem em acesso.
+            await applyExtraNumberStatus({ userId: subscription.userId, status: 'authorized', log })
+            activation = { triggered: false, reason: 'extra_number_charge_approved' }
+          } else if (subscription?.userId) {
             const plans = await getBillingPlans()
             const plan = resolvePlanForPayment({ preferredPlan: subscription.plan, amount: authorizedSnapshot.transactionAmount, plans }) ?? subscription.plan
             const subscriptionMpPaymentId = `sub_${String(summary.dataResourceId)}`
@@ -1400,7 +1469,7 @@ export async function paymentsRoutes(app) {
       // vezes por mês. `pending` de propósito NÃO bloqueia (é checkout aberto e
       // abandonado; barrar por causa dele travaria a conta para sempre).
       const activeSubscription = await db.subscription.findFirst({
-        where: { userId, status: 'authorized' },
+        where: { userId, status: 'authorized', ...PLAN_SUBSCRIPTION_WHERE },
         orderBy: { createdAt: 'desc' },
       })
       if (blocksNewSubscription(activeSubscription)) {
@@ -1419,7 +1488,7 @@ export async function paymentsRoutes(app) {
       // cobrança duplicada e recusa ("Seu pagamento foi recusado"). Ver
       // `decidePendingSubscriptionReuse`.
       const pendingSubscription = await db.subscription.findFirst({
-        where: { userId, status: 'pending' },
+        where: { userId, status: 'pending', ...PLAN_SUBSCRIPTION_WHERE },
         orderBy: { createdAt: 'desc' },
       }).catch(() => null)
 
@@ -1456,7 +1525,7 @@ export async function paymentsRoutes(app) {
       // é limitada e o pagamento avulso segue aberto — ver
       // `decideSubscriptionAttemptCooldown`.
       const recentSubscriptions = await db.subscription.findMany({
-        where: { userId },
+        where: { userId, ...PLAN_SUBSCRIPTION_WHERE },
         orderBy: { createdAt: 'desc' },
         take: 20,
       }).catch(() => null)
@@ -1549,7 +1618,7 @@ export async function paymentsRoutes(app) {
     const userId = req.user.sub
 
     const subscription = await db.subscription.findFirst({
-      where: { userId, status: { in: SUBSCRIPTION_OPEN_STATUSES } },
+      where: { userId, status: { in: SUBSCRIPTION_OPEN_STATUSES }, ...PLAN_SUBSCRIPTION_WHERE },
       orderBy: { createdAt: 'desc' },
     })
 
@@ -1591,6 +1660,82 @@ export async function paymentsRoutes(app) {
       accessExpiresAt: user?.accessExpiresAt ?? null,
       message: 'Renovação automática desligada. Seu acesso continua até o fim do período já pago.',
     }
+  })
+
+  // ---------------------------------------------------------------------------
+  // Número reserva (docs/rca/multi-numero.md): assinatura SEPARADA do adicional
+  // (R$29/mês). Nunca encosta na assinatura do plano: external_reference
+  // próprio e plan = 'extra_number'.
+  // ---------------------------------------------------------------------------
+  app.post('/extra-number/subscribe', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!multiNumberEnabled()) return sendError(reply, 404, 'NOT_AVAILABLE', 'Recurso indisponível.')
+    const userId = req.user.sub
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, plan: true, accessExpiresAt: true } })
+    // Mesma regra de acesso da reserva, só que antes de pagar (extraNumbers 1).
+    const access = extraNumberAccess({ ...user, extraNumbers: 1 })
+    if (!access.allowed) {
+      const message = access.reason === 'requires_pro'
+        ? 'O número reserva é do plano PRO.'
+        : 'Seu acesso venceu. Renove o plano antes de contratar o número reserva.'
+      return sendError(reply, 403, 'EXTRA_NUMBER_NOT_ALLOWED', message)
+    }
+    const existing = await db.subscription.findFirst({
+      where: { userId, plan: EXTRA_NUMBER_PLAN, status: 'authorized' },
+      select: { id: true },
+    })
+    if (existing) return sendError(reply, 409, 'EXTRA_NUMBER_ALREADY_ACTIVE', 'O número reserva já está contratado.')
+
+    const payer = resolveSubscriptionPayerEmail({ accountEmail: user?.email, informedEmail: req.body?.payerEmail })
+    if (payer.issue) {
+      return reply.code(400).send({
+        code: 'SUBSCRIPTION_EMAIL_REQUIRED',
+        needsEmailUpdate: true,
+        error: { code: 'SUBSCRIPTION_EMAIL_REQUIRED', message: payer.issue.message },
+      })
+    }
+    try {
+      const result = await createMercadoPagoSubscription({
+        userId,
+        plan: EXTRA_NUMBER_PLAN,
+        payerEmail: payer.email,
+        product: { title: EXTRA_NUMBER_TITLE, price: EXTRA_NUMBER_PRICE, externalReference: buildExtraNumberReference(userId) },
+      })
+      await db.$transaction(async (tx) =>
+        paymentsService.upsertSubscription(tx, {
+          userId, mpSubscriptionId: result.mpSubscriptionId, plan: EXTRA_NUMBER_PLAN, status: 'pending', nextChargeAt: null,
+        })
+      )
+      trackAnalyticsEventSafe({ userId, event: 'subscription_started', metadata: { plan: EXTRA_NUMBER_PLAN } })
+      return { checkout_url: result.initPoint }
+    } catch (err) {
+      req.log.error({ err: err?.message, code: err?.code, userId }, 'Falha ao criar assinatura do número reserva')
+      return sendError(reply, 502, 'EXTRA_NUMBER_SUBSCRIBE_FAILED', 'Não conseguimos abrir a contratação agora. Tente de novo em alguns minutos.')
+    }
+  })
+
+  app.post('/extra-number/cancel', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user.sub
+    const subscription = await db.subscription.findFirst({
+      where: { userId, plan: EXTRA_NUMBER_PLAN, status: { in: SUBSCRIPTION_OPEN_STATUSES } },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (!subscription) {
+      await applyExtraNumberStatus({ userId, status: 'cancelled', log: req.log })
+      return { cancelled: false, message: 'Você não tem o número reserva contratado. Nada será cobrado.' }
+    }
+    if (subscription.mpSubscriptionId) {
+      const providerResult = await cancelMercadoPagoSubscription(subscription.mpSubscriptionId)
+      // Mesma regra do plano: só marca como cancelada depois que o MP aceita.
+      if (!providerResult.ok && providerResult.reason !== 'provider_not_found') {
+        req.log.error({ reason: providerResult.reason, userId }, 'Falha ao cancelar a assinatura do número reserva no Mercado Pago')
+        return sendError(reply, 502, 'EXTRA_NUMBER_CANCEL_FAILED', 'Não conseguimos cancelar agora. Tente de novo em alguns minutos — nada foi alterado.')
+      }
+    }
+    const now = new Date()
+    await db.subscription.update({ where: { id: subscription.id }, data: { status: 'cancelled', cancelledAt: now, updatedAt: now } })
+    await applyExtraNumberStatus({ userId, status: 'cancelled', log: req.log })
+    trackAnalyticsEventSafe({ userId, event: 'subscription_cancelled', metadata: { plan: EXTRA_NUMBER_PLAN } })
+    return { cancelled: true, message: 'Número reserva cancelado. Ele foi desconectado e não será mais cobrado.' }
   })
 
   // Webhook do MP — sem autenticação JWT
@@ -1843,7 +1988,7 @@ export async function paymentsRoutes(app) {
       db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } }),
       db.payment.findFirst({ where: { userId, status: 'approved' }, orderBy: { createdAt: 'desc' } }),
       db.subscription.findFirst({
-        where: { userId, status: { in: SUBSCRIPTION_OPEN_STATUSES } },
+        where: { userId, status: { in: SUBSCRIPTION_OPEN_STATUSES }, ...PLAN_SUBSCRIPTION_WHERE },
         orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
       }),
     ])

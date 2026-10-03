@@ -154,3 +154,9 @@ export function notifyPayoutPaid({ db, sendMail, affiliateUserId, user, amountCe
     vars: { valor: formatMoneyBR(amountCents) },
   })
 }
+
+// Vários números por conta (docs/rca/multi-numero.md): o número reserva
+// assumiu os envios porque o número ativo caiu ou foi bloqueado.
+export function notifyNumberSwitched({ db, sendMail, user, userId, logger } = {}) {
+  return fire({ db, sendMail, slug: 'whatsapp_reserva_assumiu', user, userId, logger, vars: { ...panelLinks() } })
+}

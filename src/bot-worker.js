@@ -23,7 +23,7 @@ import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { resolveCustomDomainLinks, findCandidateLinks, allCandidatesFailedBecauseOfferEnded } from './core/customDomainLinkResolver.js'
 import { convertLink } from './converters/index.js'
-import { AWIN_NOT_JOINED_ERROR } from './converters/awin.js'
+import { AWIN_MESSAGE_BUDGET_MS, AWIN_NOT_JOINED_ERROR } from './converters/awin.js'
 import { awinOfferOptions, loadAwinConversionContext, refineAwinOptionsForText } from './integrations/awin/conversionContext.js'
 import { RAKUTEN_NOT_JOINED_ERROR } from './converters/rakuten.js'
 import { loadRakutenConversionContext, rakutenOfferOptions } from './integrations/rakuten/conversionContext.js'
@@ -128,7 +128,9 @@ import { parseEnumEnv, logModeSummary } from './core/envModes.js'
 import { buildRedisOptions } from './core/redisFactory.js'
 import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
-import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
+import { loadWorkerIdentity } from './core/workerIdentity.js'
+import { STANDBY_PROCESS_SLOT } from './domain/session/workerIdentity.js'
+import { recordWaConnectionEventSafe as recordWaConnectionEventSafeBase } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
 import { shouldIgnoreOwnDeviceDm, isChatQuarantinable, createRecentInboundIndex, createChatDropQuarantine } from './core/outOfScopeChatGuard.js'
 import { ensureDeviceSignaturePrefix } from './core/deviceIdentitySignature.js'
@@ -177,6 +179,16 @@ export async function createBotSessionRuntime({
   sharedLimits = {},
   ownerInstance = process.env.NODE_APP_INSTANCE ?? '0',
 } = {}) {
+// Vários números por conta (docs/rca/multi-numero.md): BOT_USER_ID é a CHAVE
+// do processo. Para a conta de sempre ela é o próprio userId e nada muda.
+// O processo de prontidão (<userId>~n2) só mantém o outro número conectado.
+const SESSION_IDENTITY = await loadWorkerIdentity(userId, { db })
+userId = SESSION_IDENTITY.userId
+const IS_STANDBY = SESSION_IDENTITY.role === 'standby'
+// Eventos de conexão contam a história do número QUE ENVIA (admin, funil,
+// alertas). A prontidão não entra neles.
+const recordWaConnectionEventSafe = payload => { if (!IS_STANDBY) recordWaConnectionEventSafeBase(payload) }
+const AUTH_KEY = SESSION_IDENTITY.authKey
 const withLimit = (semaphore, task) => semaphore?.run ? semaphore.run(task) : task()
 const fetchProductImage = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchProductImageBase(...args))
 const fetchImageBuffer = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchImageBufferBase(...args))
@@ -578,7 +590,7 @@ let shuttingDown = false
 // AUTH_DIR para sobreviver a restart do worker e ao `del` interno do Baileys.
 const WA_MAX_MSG_RETRY_COUNT = 5
 const msgRetryCounterCache = createDurableStuckMessageRetryCache({
-  file: `${getAuthInfoDir(userId)}/stuck-message-quarantine.json`,
+  file: `${getAuthInfoDir(AUTH_KEY)}/stuck-message-quarantine.json`,
   maxRetryCount: WA_MAX_MSG_RETRY_COUNT,
   logger,
 })
@@ -594,7 +606,7 @@ const WA_IGNORE_OWN_DEVICE_DMS = String(process.env.WA_IGNORE_OWN_DEVICE_DMS ?? 
 const WA_CHAT_DROP_QUARANTINE = String(process.env.WA_CHAT_DROP_QUARANTINE ?? '1').trim() !== '0'
 const recentInboundChats = createRecentInboundIndex({ max: 5000 })
 const chatDropQuarantine = createChatDropQuarantine({
-  file: `${getAuthInfoDir(userId)}/chat-drop-quarantine.json`,
+  file: `${getAuthInfoDir(AUTH_KEY)}/chat-drop-quarantine.json`,
   logger,
 })
 // RCA 2026-09 ("Aguardando mensagem" nos membros do grupo de destino): quem
@@ -604,7 +616,7 @@ const chatDropQuarantine = createChatDropQuarantine({
 // disco (src/core/sentMessageStore.js), escopo de módulo para sobreviver a
 // reconexões. Ver docs/rca/whatsapp-sessao.md.
 const sentMessageStore = createSentMessageStore({
-  dir: getSentMessagesDir(userId),
+  dir: getSentMessagesDir(AUTH_KEY),
   encode: (message) => proto.Message.encode(proto.Message.fromObject(message)).finish(),
   decode: (bytes) => proto.Message.decode(bytes),
   logger,
@@ -724,7 +736,37 @@ async function persistWorkerHeartbeat(state, { reconnectScheduled = false } = {}
   })
 }
 
+// WaSession = estado do processo ATIVO (o número que envia — é o que o produto
+// inteiro lê). WaExtraSession slot 2 = estado do processo de PRONTIDÃO, seja
+// qual for o número dele (o `phone` diz qual). Ver workerIdentity.js.
+const STANDBY_SESSION_FIELDS = ['phone', 'status', 'lifecycle', 'lastHeartbeatAt', 'lastDisconnectCode', 'blockNotice']
+
+async function persistStandbySessionPatch(data = {}) {
+  const patch = Object.fromEntries(Object.entries(data).filter(([key]) => STANDBY_SESSION_FIELDS.includes(key)))
+  const slot = STANDBY_PROCESS_SLOT
+  await db.waExtraSession.upsert({
+    where: { userId_slot: { userId, slot } },
+    update: patch,
+    create: { userId, slot, ...patch },
+  }).catch(err => logger.warn({ err: String(err?.message ?? err) }, 'Falha ao persistir estado do número de prontidão'))
+}
+
+// Prontidão conectou. Recusa o MESMO número do ativo (conectar duas vezes o
+// mesmo celular não dá reserva nenhuma e derruba os dois — 440).
+async function handleStandbyOpen({ phone }) {
+  const active = await db.waSession.findUnique({ where: { userId }, select: { phone: true } }).catch(() => null)
+  if (phone && active?.phone && active.phone === phone) {
+    logger.warn({ processKey: SESSION_IDENTITY.processKey }, 'Número de prontidão é o mesmo do número ativo; desligando a prontidão')
+    await persistStandbySessionPatch({ status: 'disconnected', lifecycle: 'stopped_by_user', phone, blockNotice: JSON.stringify({ reason: 'same_number' }) })
+    await shutdown(0)
+    return
+  }
+  await persistStandbySessionPatch({ status: 'connected', phone, lifecycle: 'ready', lastHeartbeatAt: new Date(), lastDisconnectCode: null, blockNotice: null })
+  logger.info({ processKey: SESSION_IDENTITY.processKey, authSlot: SESSION_IDENTITY.authSlot }, 'Número de prontidão conectado')
+}
+
 async function persistSessionPatch(data = {}) {
+  if (IS_STANDBY) return persistStandbySessionPatch(data)
   const fallbackData = {
     ...(data.status ? { status: data.status } : {}),
     ...(Object.prototype.hasOwnProperty.call(data, 'phone') ? { phone: data.phone ?? null } : {}),
@@ -783,7 +825,7 @@ function stopHeartbeatIpc() {
   heartbeatTimer = null
 }
 
-const AUTH_DIR = getAuthInfoDir(userId)
+const AUTH_DIR = getAuthInfoDir(AUTH_KEY)
 // A credencial atual NÃO é apagada ao iniciar o pareamento — vai para um
 // backup e volta se o pareamento falhar antes de o código chegar ao usuário.
 // Sem isso, um clique em "conectar" durante uma recusa do WhatsApp (405)
@@ -1437,13 +1479,14 @@ async function checkScheduledMessages() {
   }
 }
 
-const scheduledMessagesTimer = setInterval(checkScheduledMessages, 30_000)
+// Prontidão (número reserva) não envia nada: sem agendados, sem watchdogs de envio.
+const scheduledMessagesTimer = IS_STANDBY ? null : setInterval(checkScheduledMessages, 30_000)
 
 // Watchdog de MessageLog preso em 'sending' (safety net): roda a cada 5min e
 // reclassifica como erro recuperável as linhas paradas em 'sending' há mais que
 // o cutoff. unref() para não segurar o processo. Ver src/jobs/stuckSendLogs.js.
 const STUCK_SEND_LOG_SWEEP_MS = Math.max(60_000, Number(process.env.STUCK_SEND_LOG_SWEEP_MS || 5 * 60_000))
-const stuckSendLogsTimer = setInterval(() => {
+const stuckSendLogsTimer = IS_STANDBY ? null : setInterval(() => {
   recoverStuckSendLogs({ userId })
     .then(({ recovered }) => {
       if (recovered > 0) logger.warn({ recovered, cutoffMs: STUCK_SEND_LOG_CUTOFF_MS }, 'Watchdog: MessageLog preso em sending reclassificado como erro')
@@ -1722,7 +1765,7 @@ const MONITOR_SILENCE_CHECK_INTERVAL_MS = Math.max(60_000, envNumber('MONITOR_SI
 const MONITOR_SILENCE_THRESHOLD_MS = Math.max(5 * 60_000, envNumber('MONITOR_SILENCE_THRESHOLD_MS', 30 * 60_000))
 const MONITOR_REFRESH_COOLDOWN_MS = Math.max(60_000, envNumber('MONITOR_REFRESH_COOLDOWN_MS', 60 * 60_000))
 
-const monitorSilenceTimer = setInterval(
+const monitorSilenceTimer = IS_STANDBY ? null : setInterval(
   () => {
     pruneTimestampMap(lastSendByDest)
     pruneTimestampMap(lastIncomingByMonitorJid)
@@ -1730,7 +1773,7 @@ const monitorSilenceTimer = setInterval(
   },
   MONITOR_SILENCE_CHECK_INTERVAL_MS,
 )
-monitorSilenceTimer.unref?.()
+monitorSilenceTimer?.unref?.()
 
 const WA_LIFECYCLE = Object.freeze({
   INITIALIZING: 'initializing',
@@ -3700,9 +3743,9 @@ async function startBot() {
 }
 
 async function startBotInner() {
-  if (!sendBackend) sendBackend = await createSendBackend()
+  if (!IS_STANDBY && !sendBackend) sendBackend = await createSendBackend()
   await getConfig()
-  if (!interruptedSendLogsMarked) {
+  if (!IS_STANDBY && !interruptedSendLogsMarked) {
     interruptedSendLogsMarked = true
     await markInterruptedSendLogs()
     await reprocessRestartFailures().catch(err => {
@@ -3999,6 +4042,9 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // durável de "esta conta já conectou alguma vez" (mesmo usado por
       // `waEverConnected` nos gatilhos de e-mail). Precisa vir antes, senão a
       // mensagem de boas-vindas do piloto reenviaria em toda reconexão.
+      if (IS_STANDBY) {
+        await handleStandbyOpen({ phone })
+      } else {
       const hadPhoneBeforeThisOpen = Boolean(
         (await db.waSession.findUnique({ where: { userId }, select: { phone: true } }).catch(() => null))?.phone,
       )
@@ -4019,6 +4065,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
       ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever no boot'))
       maybeSendSelfWelcomeMessage({ phone, sock, hadPhoneBefore: hadPhoneBeforeThisOpen }).catch(() => {})
+      }
     }
 
     if (connection === 'close') {
@@ -4918,6 +4965,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // core/conversionScheduler.js — não voltar a `Promise.all` sobre a lista
       // inteira. Ordem é preservada porque a substituição no texto casa por URL
       // original, não por índice em conversions[].
+      // Teto de tempo da Awin para a mensagem inteira (R2): vários links da
+      // Awin saem um de cada vez; passou do teto, o resto sai com link longo.
+      const awinDeadline = Date.now() + AWIN_MESSAGE_BUDGET_MS
       const linkResults = await convertPerPlatformSerially(links, async ({ platform, url }) => {
         if (!enabledPlatforms.has(platform)) {
           logger.info({ platform }, 'Plataforma desabilitada — pulando')
@@ -4945,7 +4995,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         }
 
         try {
-          const conversionResult = await convertLink(platform, url, cfg.credentials)
+          const conversionResult = await convertLink(platform, url, cfg.credentials, platform === 'awin' ? { deadline: awinDeadline } : undefined)
           if (!conversionResult) {
             await recordConversionIssue({ platform, url, jid, text, reason: `Conversor de ${credentialValidation.label} não retornou link convertido. Confira se as credenciais estão válidas.` })
             return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
@@ -5950,6 +6000,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     logger.info({ type, count: messages.length }, 'messages.upsert recebido')
     markUpsertReceived()
+    // Prontidão: o socket recebe (e o Baileys confirma), mas nada é espelhado.
+    if (IS_STANDBY) return
     connectionIntake = noteUpsert(connectionIntake, type, messages.length)
     if (type !== 'notify' && type !== 'append') return
     const cutoff = Date.now() - INCOMING_MAX_AGE_MS
@@ -6263,7 +6315,15 @@ async function shutdown(code = 0, { exit = registerProcessHandlers } = {}) {
 if (registerProcessHandlers) process.once('SIGTERM', () => { void shutdown(0) })
 if (registerProcessHandlers) process.once('SIGINT', () => { void shutdown(0) })
 
+// Prontidão só atende o ciclo de vida do socket; comando de negócio (envio,
+// broadcast, canais…) vai sempre para o processo ativo (chave = userId).
+const STANDBY_IPC_TYPES = new Set(['stop', 'requestPairingCode', 'listGroups', 'metrics'])
+
 const handleMessage = async msg => {
+  if (IS_STANDBY && msg?.type && !STANDBY_IPC_TYPES.has(msg.type)) {
+    if (msg.requestId) sendIpc({ type: msg.type, requestId: msg.requestId, data: null, error: 'Número de prontidão não executa este comando' })
+    return
+  }
   if (msg?.type === 'stop') {
     logger.info('Bot parando por solicitação do manager')
     await shutdown(0)

@@ -61,6 +61,9 @@ import { nodesWithoutHeartbeat } from '../supervisor/preflight.js'
 import { runSessionCapacityAlertSweep } from '../ops/sessionCapacityAlertSweep.js'
 import { runAdminOpsAlertSweep } from '../ops/adminOpsAlertSweep.js'
 import { sendMail, isEmailConfigured } from '../email/mailer.js'
+import * as sessionManager from '../manager.js'
+import { createNumberFailoverSweep } from '../jobs/numberFailover.js'
+import { notifyNumberSwitched } from '../emailTriggers/events.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
 import { emailPrefsRoutes } from './routes/emailPrefs.js'
 import { shopeeSalesRoutes } from './routes/shopeeSales.js'
@@ -356,6 +359,24 @@ async function runAdminOpsAlertTick() {
   } catch (err) {
     app.log.error({ err: err.message }, 'avisos operacionais da dona: passada falhou')
   }
+}
+
+// Vários números por conta (docs/rca/multi-numero.md): troca automática para o
+// número reserva. Passada de 1 min, in-process; MULTI_NUMBER_ENABLED desligado
+// = nem consulta o banco.
+const runNumberFailoverTick = createNumberFailoverSweep({
+  db,
+  manager: sessionManager,
+  logger: app.log,
+  notify: ({ user }) => (isEmailConfigured() ? notifyNumberSwitched({ db, sendMail, user, logger: app.log }) : Promise.resolve()),
+})
+function startNumberFailoverSweep() {
+  const timer = setInterval(() => {
+    runNumberFailoverTick()
+      .then(summary => { if (summary?.switched > 0) app.log.warn({ ...summary }, 'troca automática de número: passada concluída') })
+      .catch(err => app.log.error({ err: err.message }, 'troca automática de número: passada falhou'))
+  }, 60_000)
+  timer.unref?.()
 }
 
 function startSessionCapacityAlertSweep() {
@@ -923,6 +944,7 @@ startActivityCacheCleanup()
 startLeadNurtureSweep()
 startCredentialExpirySweep()
 startSessionCapacityAlertSweep()
+startNumberFailoverSweep()
 startNodeRoutingGuard()
 startEmailQueueJob()
 startLifecycleEmailSweep()
