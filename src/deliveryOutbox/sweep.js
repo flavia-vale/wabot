@@ -73,13 +73,19 @@ export async function runDeliveryOutboxTick({
   const caps = getDeliveryNetworkCapabilities(deliveryNetwork)
   const t0 = now()
 
-  // Item preso em "enviando" (processo caiu no meio): volta para a fila. A
-  // entrega pode ter saído — o aplicativo não confirma — mas perder a oferta
-  // em silêncio é pior; e só acontece em queda do processo.
-  await db.deliveryOutbox.updateMany({
+  // Item preso em "enviando" (processo caiu no meio do envio). A entrega pode
+  // ter saído — o aplicativo não confirma — e reenviar arrisca DUPLICAR no
+  // grupo da cliente (revisão crítica, item 4). Vira "entrega incerta" no
+  // histórico, com motivo próprio; nunca volta para a fila.
+  const stuck = await db.deliveryOutbox.findMany({
     where: { deliveryNetwork, status: OUTBOX_STATUS.SENDING, updatedAt: { lt: new Date(t0 - STUCK_SENDING_MS) } },
-    data: { status: OUTBOX_STATUS.PENDING },
+    take: BATCH_SIZE,
   })
+  for (const row of stuck) {
+    const errorMsg = buildDeliveryFailureCode(deliveryNetwork, 'entrega_incerta')
+    await db.deliveryOutbox.update({ where: { id: row.id }, data: { status: OUTBOX_STATUS.FAILED, lastError: errorMsg } }).catch(() => {})
+    await writeHistory(db, row, parseOffer(row), { status: 'error', errorMsg })
+  }
 
   // 1. Selecionar.
   const rows = await db.deliveryOutbox.findMany({
@@ -108,8 +114,13 @@ export async function runDeliveryOutboxTick({
   }
 
   for (const row of plan.send) {
+    // Em que ponto o item estava quando algo falhou. Depois que o aplicativo
+    // aceitou a oferta, o item NUNCA volta para a fila (revisão crítica,
+    // item 4): voltar significaria reenviar a cada minuto, por horas, se o
+    // banco estiver ocupado na hora de gravar "entregue".
+    const ctx = { entregue: false }
     try {
-      const outcome = await processRow(row, { db, adapter, caps, deliveryNetwork, allowed, health, track, now })
+      const outcome = await processRow(row, { db, adapter, caps, deliveryNetwork, allowed, health, track, now, ctx })
       summary[outcome.resumo]++
       if (outcome.pararTick) {
         summary.paradoCedo = true
@@ -117,9 +128,14 @@ export async function runDeliveryOutboxTick({
       }
     } catch (err) {
       // Isolamento por item: o lote segue.
-      summary.falhas++
-      logger.warn({ err: err?.message, outboxId: row.id }, 'caixa de saída: item falhou; lote segue')
-      await db.deliveryOutbox.update({ where: { id: row.id }, data: { status: OUTBOX_STATUS.PENDING, notBeforeAt: new Date(now() + 60_000) } }).catch(() => {})
+      logger.warn({ err: err?.message, outboxId: row.id, entregue: ctx.entregue }, 'caixa de saída: item falhou; lote segue')
+      if (ctx.entregue) {
+        summary.enviados++
+        await markDoneWithRetry(db, row.id)
+      } else {
+        summary.falhas++
+        await db.deliveryOutbox.update({ where: { id: row.id }, data: { status: OUTBOX_STATUS.PENDING, notBeforeAt: new Date(now() + 60_000) } }).catch(() => {})
+      }
     }
   }
 
@@ -140,7 +156,22 @@ async function drop(db, row, offer, errorMsg) {
   return { resumo: 'descartados' }
 }
 
-async function processRow(row, { db, adapter, caps, deliveryNetwork, allowed, health, track, now }) {
+// Gravar "entregue" com novas tentativas curtas (banco ocupado). Se mesmo
+// assim falhar, o item fica em "enviando" e a recuperação acima o marca como
+// "entrega incerta" — nunca é reenviado.
+async function markDoneWithRetry(db, id, attempts = 3) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      await db.deliveryOutbox.update({ where: { id }, data: { status: OUTBOX_STATUS.DONE, lastError: null } })
+      return true
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 200 * (i + 1)))
+    }
+  }
+  return false
+}
+
+async function processRow(row, { db, adapter, caps, deliveryNetwork, allowed, health, track, now, ctx = {} }) {
   const offer = parseOffer(row)
   const group = await db.group.findFirst({
     where: { userId: row.userId, waJid: row.destinationId, role: 'post', deliveryNetwork },
@@ -188,7 +219,8 @@ async function processRow(row, { db, adapter, caps, deliveryNetwork, allowed, he
   const result = await adapter.send(oferta, row.destinationId, { userId: row.userId })
 
   if (result?.ok) {
-    await db.deliveryOutbox.update({ where: { id: row.id }, data: { status: OUTBOX_STATUS.DONE, lastError: null } })
+    ctx.entregue = true
+    await markDoneWithRetry(db, row.id)
     await writeHistory(db, row, offer, { status: 'success', reducoes: reductions })
     health?.record(deliveryNetwork, HEALTH_SIGNAL.OK)
     if (reductions) {
