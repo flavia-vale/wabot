@@ -153,3 +153,22 @@ Risco K9: cada servidor sai para a internet por um endereço (IP) diferente; o W
 - Veredito leigo: **piora** (QR novo/bloqueio só no candidato, ou taxa ≥ 2× a da base com ≥ 3 eventos), **sem diferença gritante** ou **dados insuficientes** (janela < 72 h, sem conta no candidato ou sem base).
 - **Honestidade:** com 1 conta-teste só aparece problema grosseiro. "Sem diferença" NÃO prova que dá para mover muitas contas — aumente aos poucos e meça de novo.
 - Limites: os eventos ficam ~14 dias; o servidor usado é o ATUAL da conta (meça só depois de mover e de esperar a janela inteira).
+
+## Revisão crítica (2026-10-03) — correções antes de ligar a flag
+
+Tudo abaixo só age com `SUPERVISOR_NODE_ROUTING` ligado (ou em scripts manuais).
+Flag desligada = comportamento idêntico (testes em `test/multi-supervisor-revisao.test.js`).
+
+| Item | Problema | Correção |
+|---|---|---|
+| C1 | "parar"/"está rodando?" eram recusados no nó que não é o dono → robô em 2 servidores sem jeito de derrubar | respondem pelo processo LOCAL (`shouldActLocally`) |
+| C2 | cadeado de posse nascia desligado | ligado por padrão com a flag (`SUPERVISOR_OWNER_LEASE=0` desliga) |
+| C3 | dois servidores com o mesmo `SUPERVISOR_NODE_ID` religariam as mesmas contas | identidade da máquina no Redis; colisão = supervisor em ESPERA (`supervisor_boot_blocked`) |
+| C4 | nó ≠ n1 com SQLite local subia | mesma ESPERA (`sqlite_local`) |
+| C5 | API com flag + supervisor n1 no modo antigo = painel inteiro com erro | comandos do n1 vão pela fila legada (`node_routing_legacy_fallback`) |
+| C6 | mudar conta: desfazer não parava o destino nem religava a origem; rsync sem `--delete`; cliente podia religar no meio | `lifecycle=moving_node` (ligar/pedir código recusam), rsync `--delete`, desfazer completo, retomada |
+| C7 | `deploy_node.sh` rodava `npm ci` com robôs vivos e `restart --update-env` | instala ao lado e troca; só se o lock mudou; `delete`+`start`; trava de deploy |
+| C10 | "servidor não responde" virava 500 + alerta falso | 503 com frase leiga |
+
+**Desfazer a ativação SEMPRE na ordem: API primeiro, supervisor depois** (o C5
+segura o erro inverso, mas a ordem certa evita depender dele).
