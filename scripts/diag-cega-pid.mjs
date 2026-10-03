@@ -118,6 +118,7 @@ for (const { pid, uptimeSeg } of pids) {
   console.log(`  filtros no boot: ${r.filtros ? JSON.stringify(r.filtros) : '(linha de boot fora da cauda lida)'}`)
   console.log(`  aceitas=${r.aceitas} upserts=${r.upserts} (ao vivo=${r.upsertsNotify}) decrypt-fail=${r.decryptFails} (grupo=${r.decryptFailsGrupo}) retry-receipt=${r.retryReceipts}`)
   console.log(`  DM de outro aparelho: chegou=${r.outroAparelhoChegou} descartada=${r.dmOutroAparelhoDescartada} | escopo descartou (amostras)=${r.escopoDescartes} | freio=${r.freioEmergencia}`)
+  if (r.outroAparelhoChegou) console.log(`  destinos das cópias de outro aparelho: ${JSON.stringify(Object.fromEntries(Object.entries(r.outroAparelhoRecipients).sort((a, b) => b[1] - a[1]).slice(0, 3)))} | fila offline encerrada pelo servidor=${r.offlineHandled}x`)
   console.log(`  stream:error=${r.streamErrors} por tipo de ack=${JSON.stringify(r.streamErrorAcks)}`)
   if (r.censoLinhas) {
     console.log(`  CENSO (${r.censoLinhas} resumo(s)): grupo chegou=${r.censoGrupoChegou} descartado=${r.censoGrupoDescartado} falhou=${r.censoGrupoFalhou} abriu=${r.censoGrupoUpsert} | amostras de grupo=${r.amostrasGrupo}`)

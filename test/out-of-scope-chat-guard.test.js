@@ -107,7 +107,8 @@ test('patch: só DM de contato — nunca grupo, canal, status, a própria conta 
   const block = handleMessage.slice(0, handleMessage.indexOf('shouldIgnoreOwnDeviceDm?.('))
   assert.match(block, /!isJidGroup\(node\.attrs\.from\) && !isJidNewsletter\(node\.attrs\.from\) && !isJidStatusBroadcast\(node\.attrs\.from\)/)
   assert.match(block, /if \(isMe\(node\.attrs\.from\)\)/)
-  assert.match(block, /recipient && \(isJidUser\(recipient\) \|\| isLidUser\(recipient\)\) && !isMe\(recipient\)/)
+  // RCA 2026-10-03: a Meta AI (@bot) entra na regra A — mesma cópia fromMe do celular.
+  assert.match(block, /recipient && \(isJidUser\(recipient\) \|\| isLidUser\(recipient\) \|\| isJidMetaIa\(recipient\)\) && !isMe\(recipient\)/)
   // Censo de entrada (RCA 2026-10-03): o gancho leva também `offline` e o tipo de
   // cifra. Continua ANTES de qualquer decisão (ignore/ack/decrypt) e sem mudar fluxo.
   assert.match(block, /onIncomingMessageNode\?\.\(\{\s*id: node\.attrs\.id,\s*chatJid: ownDeviceDmRecipient \|\| node\.attrs\.from,\s*offline: !!node\.attrs\.offline,\s*encType: getBinaryNodeChild\(node, 'enc'\)\?\.attrs\?\.type \|\| null\s*\}\)/)

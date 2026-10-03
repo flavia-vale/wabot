@@ -77,3 +77,18 @@ test('veredito sem censo: usa o que o log antigo permite e diz que o censo falta
   assert.equal(verdictFromScan(scanPidLog(L(4, { msg: 'failed to decrypt message', key: { remoteJid: 'g@g.us' } }), 4)).nivel, 'nao_abre')
   assert.equal(verdictFromScan(scanPidLog('', 4)).nivel, 'sem_dado')
 })
+
+test('veredito: cópias de outro aparelho sem fim de fila offline e sem upsert = fila presa (caso Meta AI)', () => {
+  const linhas = []
+  for (let i = 0; i < 6; i++) linhas.push(L(5, { msg: 'wabot: mensagem de outro aparelho da conta chegou ao socket', id: `3A0${i}`, recipient: '867051314767696@bot', offline: '9' }))
+  const r = scanPidLog(linhas.join('\n'), 5)
+  assert.deepEqual(r.outroAparelhoRecipients, { '867051314767696@bot': 6 })
+  assert.equal(r.offlineHandled, 0)
+  const v = verdictFromScan(r, { conectado: true })
+  assert.equal(v.nivel, 'fila_offline_presa')
+  assert.match(v.texto, /867051314767696@bot ×6/)
+  // Com a fila encerrada pelo servidor, o veredito volta ao indeterminado.
+  const ok = scanPidLog([...linhas, L(5, { msg: 'handled 7 offline messages/notifications' })].join('\n'), 5)
+  assert.equal(ok.offlineHandled, 1)
+  assert.notEqual(verdictFromScan(ok).nivel, 'fila_offline_presa')
+})

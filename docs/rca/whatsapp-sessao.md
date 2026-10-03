@@ -1125,7 +1125,53 @@ Subir o Baileys exige refazer o patch. Não ampliar o ramo de DM para
 com ack' bot.log` > 0; `500 / conexões` por dia cai; `diag-frota-cega.mjs`
 estável. Isso NÃO é aceite do caso da cliente (segue cega).
 
-## Conectada e cega depois do ciclo de quedas: onde a mensagem de grupo some (RCA 2026-10-03 — EM ABERTO, instrumentado)
+## Conectada e cega depois do ciclo de quedas: `<ack>` sem `type` segurava a fila offline (RCA 2026-10-03 — causa medida; não regredir)
+
+**Causa medida (2026-10-03, `doritosmms@gmail.com`, pid 3519832, 3 h de log):**
+
+| Medida | Valor |
+|---|---|
+| nós de mensagem que chegaram ao socket | 225 — **todos** cópia `fromMe` do celular da cliente (ids `3A…`, iPhone) para a **Meta AI** (`recipient` `867051314767696@bot`) |
+| ids distintos | 15, cada um reentregue **5× em 8 s por conexão** (`offline` 9→8→6→5→3), 3 conexões |
+| `failed to decrypt` | 224, todos `No matching sessions found for message` (sessão com o próprio celular) |
+| ramo tomado | 224 `DM sem decifrar confirmada com ack, sem retry` (plain `<ack>`) |
+| "handled N offline messages" | **0** — o servidor nunca encerrou a fila offline |
+| `messages.upsert` / aceitas / decrypt de grupo | 0 / 0 / 0 |
+| `stream:error` | 2, a cada ~50 min, sempre `<ack class=message type=text id=3A056B4F70709D37B587/>` |
+
+Leitura: o servidor **não aceitou** o nosso `<ack>` dessas cópias (por isso
+reentrega 5×), a fila offline **nunca fecha**, e enquanto ela não fecha o
+WhatsApp **não entrega mais nada** ao aparelho — nem grupo. É a cegueira.
+Depois de 50 min ele derruba a conexão citando o ack que esperava — e esse ack
+vem **com `type`**. No Baileys 6.7.23 `sendMessageAck` só põe `type` no ack de
+`<message>` em erro/`unavailable` (`errorCode !== 0`); por isso o **nack 487** do
+caso glaucia (com `type`) era aceito e o **ack simples** do ramo de DM (sem
+`type`) não. O WA Web sempre manda `type` e `from`
+(`WAWebHandleMsgSendAck.sendAck/sendNack`); o Baileys 7.x (`Utils/stanza-ack.js`)
+também. Re-parear "curava" porque zera a fila offline do aparelho no servidor.
+O "outro sistema Baileys no mesmo número" **não existe**: era o iPhone da cliente
+conversando com a Meta AI.
+
+**Conserto (patch do Baileys, `sendMessageAck`):** `type` sempre que o nó tem
+`type`; `from = me.id` em todo ack de `<message>`. E a regra A passa a cobrir
+`recipient` `@bot` (`isJidMetaIa`): a cópia para a Meta AI é confirmada antes
+de abrir, sem os 224 erros de decrypt. Teste:
+`test/baileys-ack-type-patch.test.js`.
+
+**Aceite:** no pid da conta, depois do restart do `bot-supervisor`: aparece
+`handled N offline messages/notifications` na primeira conexão; cada id `3A…`
+chega **1×** por conexão (não 5×); `Censo de entrada do socket na janela` com
+`arrivals.grupo` > 0; zero `stream:error` com `<ack class=message type=text>`.
+`node scripts/diag-cega-pid.mjs doritosmms@gmail.com` deixa de dar
+`fila_offline_presa`.
+
+**Não regredir:** não voltar a condicionar `type` a erro/`unavailable` no ack;
+não tirar `@bot` da regra A sem medir; a mensagem travada da `stream:error` é o
+**ack esperado pelo servidor** — comparar os atributos dele com o ack que mandamos
+é o primeiro passo em qualquer repetição.
+
+### Histórico da investigação (antes da causa medida)
+
 
 Casos: `gabrielpontes@consultorfin.com` (2026-10-02) e `doritosmms@gmail.com`
 (2026-10-03): painel "conectado", 0 mensagens aceitas das origens por 19 h+,
