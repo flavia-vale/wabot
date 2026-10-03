@@ -6,8 +6,8 @@
 
 export const IS_PRODUCTION_BUILD = process.env.NEXT_PUBLIC_APP_ENV === 'production'
 
-// Plano Premium fora do /painel/plano em todos os ambientes.
-export const SHOW_PREMIUM_PLAN = false
+// Plano Premium fora do /painel/plano só na produção (staging segue mostrando).
+export const SHOW_PREMIUM_PLAN = !IS_PRODUCTION_BUILD
 
 // Tela Aplicativos (Telegram/Instagram) só fora da produção.
 export const SHOW_APPS_SCREEN = !IS_PRODUCTION_BUILD

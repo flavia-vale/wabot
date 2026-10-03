@@ -2,12 +2,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-// Pedido da dona do produto (2026-10-03): Premium fora do /painel/plano e tela
-// Aplicativos fora da produção. Só esconde a tela; o backend segue igual.
+// Pedido da dona do produto (2026-10-03): Premium e tela Aplicativos fora da
+// produção; staging (develop) segue mostrando os dois. Só esconde a tela; o backend segue igual.
 const read = (p) => readFileSync(new URL(`../dashboard/${p}`, import.meta.url), 'utf8')
 
-test('Premium escondido do /painel/plano', () => {
-  assert.match(read('lib/featureVisibility.js'), /export const SHOW_PREMIUM_PLAN = false/)
+test('Premium escondido do /painel/plano só na produção', () => {
+  assert.match(read('lib/featureVisibility.js'), /export const SHOW_PREMIUM_PLAN = !IS_PRODUCTION_BUILD/)
   assert.match(read('app/painel/plano/page.js'), /\.concat\(SHOW_PREMIUM_PLAN \? \[PREMIUM_PLAN_CARD\] : \[\]\)/)
 })
 

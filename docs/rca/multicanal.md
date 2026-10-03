@@ -23,8 +23,8 @@ dona do produto: `plan.md` §"Decisões registradas".
   de 2026-10-02). Na tela Aplicativos ele aparece como "tela própria".
 
 - **Escondido por enquanto (2026-10-03):** card do Premium fora do
-  `/painel/plano` (todos os ambientes) e tela Aplicativos fora do menu e da
-  rota em **produção** (staging segue com ela). Só tela; backend igual.
+  `/painel/plano` e tela Aplicativos fora do menu e da rota, só em
+  **produção** (build com `APP_ENV=production`); staging segue mostrando. Só tela; backend igual.
   Reverter: `dashboard/lib/featureVisibility.js`.
 
 ## Como funciona
