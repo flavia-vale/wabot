@@ -834,11 +834,19 @@ async function persistStandbySessionPatch(data = {}) {
 
 // Prontidão conectou. Recusa o MESMO número do ativo (conectar duas vezes o
 // mesmo celular não dá reserva nenhuma e derruba os dois — 440).
-async function handleStandbyOpen({ phone }) {
+async function handleStandbyOpen({ phone, sock = null }) {
   const active = await db.waSession.findUnique({ where: { userId }, select: { phone: true } }).catch(() => null)
   if (phone && active?.phone && active.phone === phone) {
-    logger.warn({ processKey: SESSION_IDENTITY.processKey }, 'Número de prontidão é o mesmo do número ativo; desligando a prontidão')
+    logger.warn({ processKey: SESSION_IDENTITY.processKey, authSlot: SESSION_IDENTITY.authSlot }, 'Número de prontidão é o mesmo do número ativo; desligando a prontidão')
     await persistStandbySessionPatch({ status: 'disconnected', lifecycle: 'stopped_by_user', phone, blockNotice: JSON.stringify({ reason: 'same_number' }) })
+    // Staging 2026-10-03: sem isto o login do mesmo número ficava guardado na
+    // pasta da prontidão — todo "Conectar número reserva" reconectava na hora
+    // (sem QR novo) e caía de novo aqui. `logout` remove só ESTE aparelho
+    // conectado (o do número ativo é outro aparelho e segue intacto); a pasta
+    // apagada é a da prontidão (`AUTH_DIR` = slot da prontidão).
+    await Promise.resolve(sock?.logout?.()).catch(() => {})
+    await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+    await rm(pairingAuthBackup.backupDir, { recursive: true, force: true }).catch(() => {})
     await shutdown(0)
     return
   }
@@ -4342,7 +4350,7 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // Pertença aos grupos (Fase 2) — com folga para a sessão assentar.
       setTimeout(() => { void syncGroupMembership('open') }, 20_000).unref?.()
       if (IS_STANDBY) {
-        await handleStandbyOpen({ phone })
+        await handleStandbyOpen({ phone, sock })
       } else {
       const hadPhoneBeforeThisOpen = Boolean(
         (await db.waSession.findUnique({ where: { userId }, select: { phone: true } }).catch(() => null))?.phone,
