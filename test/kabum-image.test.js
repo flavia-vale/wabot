@@ -41,3 +41,25 @@ test('fetchProductImage tenta a consulta da KaBuM antes da página; download usa
   assert.ok(kabum > 0 && page > kabum)
   assert.match(src, /if \(isKabumImageUrl\(rawUrl\)\) \{\s*return buildKabumImageUrlCandidates\(rawUrl\)/)
 })
+
+import { kabumIsBlocked, KABUM_BLOCK_MS, resetKabumBlock } from '../src/converters/kabumImage.js'
+
+test('R4: KaBuM bloqueou o servidor (403) → nenhuma chamada por 30 min, depois tenta de novo', async () => {
+  resetKabumBlock()
+  let clock = 1_000_000
+  let calls = 0
+  const blocked = async () => { calls++; return { ok: false, status: 403, body: { cancel: async () => {} } } }
+  const url = 'https://www.kabum.com.br/produto/931218/x'
+  assert.equal(await fetchKabumApiImage(url, { fetchFn: blocked, now: () => clock }), null)
+  assert.equal(kabumIsBlocked(clock), true)
+  assert.equal(await fetchKabumApiImage(url, { fetchFn: blocked, now: () => clock }), null)
+  assert.equal(calls, 1, 'bloqueada: não chama de novo')
+  clock += KABUM_BLOCK_MS + 1
+  const ok = async () => { calls++; return { ok: true, status: 200, json: async () => ({ sucesso: true, fotos: ['https://images8.kabum.com.br/produtos/fotos/1/x_g.jpg'] }) } }
+  assert.match(await fetchKabumApiImage(url, { fetchFn: ok, now: () => clock }), /images8\.kabum/)
+  assert.equal(calls, 2)
+  // 404/500 de UM produto não bloqueia a loja.
+  await fetchKabumApiImage(url, { fetchFn: async () => ({ ok: false, status: 500 }), now: () => clock })
+  assert.equal(kabumIsBlocked(clock), false)
+  resetKabumBlock()
+})

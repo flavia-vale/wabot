@@ -356,3 +356,26 @@ test('F6/F7: disparador usa a memória podada e teto maior para promoções', ()
   const offers = readFileSync(new URL('../src/offerAutomation/awinOffers.js', import.meta.url), 'utf8')
   assert.match(offers, /distinct: \['advertiserId'\]/, 'carga por loja: nenhuma loja fica de fora por teto global')
 })
+
+test('R1: promoção vencida por instabilidade da Awin que volta a valer NÃO sai de novo', async () => {
+  const { userId, account } = await setup()
+  try {
+    const automation = await db.offerAutomation.create({ data: { userId, keyword: '', intervalMinutes: 60, offersPerSend: 1, source: 'awin', awinAccountId: account.id, templateKey: AWIN_AUTOMATION_TEMPLATE_KEY, destGroupJid: 'grupo@g.us', useCoupons: true } })
+    const sends = []
+    const deps = { dbOverride: db, isRunningFn: async () => true, sendBroadcastFn: async (...args) => { sends.push(args) } }
+    const reload = () => db.offerAutomation.findUnique({ where: { id: automation.id } })
+    assert.equal((await runAutomation(automation, deps)).sent, 1)
+    assert.match(sends[0][1], /SSD do dia/)
+    // A Awin "some" com a enviada por uma leitura; a outra sai nesse meio tempo.
+    await db.awinPromotion.updateMany({ where: { accountId: account.id, promotionId: '1' }, data: { status: 'expired', expiredAt: new Date() } })
+    assert.equal((await runAutomation(await reload(), deps)).sent, 1)
+    // A enviada volta a valer, passadas as 24 h da trava por grupo.
+    await db.awinPromotion.updateMany({ where: { accountId: account.id }, data: { status: 'active', expiredAt: null } })
+    await db.offerAutomationSentLog.deleteMany({ where: { userId } })
+    const again = await runAutomation(await reload(), deps)
+    assert.equal(again.skipped, 'all_offers_filtered', 'a que já saiu não sai de novo')
+    assert.equal(sends.length, 2)
+  } finally {
+    await cleanup(userId)
+  }
+})

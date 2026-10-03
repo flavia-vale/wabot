@@ -794,6 +794,29 @@ Para resolver agora:
 Assim que o grupo novo entrar, o link volta a mandar as pessoas para ele.`,
   },
   {
+    slug: 'whatsapp_reserva_assumiu',
+    name: 'Número reserva assumiu os envios',
+    description: 'Sai quando o número principal cai ou é bloqueado e o número reserva passa a enviar (vários números por conta).',
+    group: 'saude',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [{ name: 'link_whatsapp', description: 'Endereço da tela de conexão', example: 'https://espelhagrupos.com.br/painel/whatsapp' }],
+    title: 'Seu número reserva assumiu',
+    subject: 'O número reserva assumiu os envios do robô',
+    body: `{{saudacao}} O WhatsApp principal do robô caiu, e o número reserva assumiu os envios para não deixar seus grupos parados.
+
+Ele só consegue enviar nos grupos em que também está. Confira no painel se algum grupo ficou de fora.
+
+1. Abra o painel na tela do WhatsApp.
+2. Veja quais grupos estão sem o número reserva e adicione ele.
+3. Quando o número principal voltar, use "Voltar para o número 1".
+
+[[botao:Ver meus números|{{link_whatsapp}}]]
+
+Se precisar de ajuda, me chama no {{whatsapp_suporte}}.`,
+  },
+  {
     slug: 'whatsapp_desconectado',
     name: 'WhatsApp caiu e não voltou',
     description: 'Sai quando o WhatsApp fica desconectado por mais de 24h com plano ativo.',

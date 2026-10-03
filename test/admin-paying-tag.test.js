@@ -51,15 +51,12 @@ test('a tag acompanha a cliente em TODA superfície de sucesso do cliente', () =
   // Lista e diálogo: onde o nome da cliente aparece, a tag aparece junto.
   // "Ajustar plano" é o caso que mais importa — mexer no plano de quem já pagou
   // não é a mesma coisa que liberar acesso de cortesia.
-  const filaCs = readFileSync(new URL('../dashboard/app/admin/sucesso-cliente/page.js', import.meta.url), 'utf8')
-  const ocorrencias = filaCs.match(/<PayingTag/g) ?? []
-  assert.ok(ocorrencias.length >= 3, `esperava a tag na lista e nos dois diálogos, achei ${ocorrencias.length}`)
-  assert.match(filaCs, /contactTarget\.payingStatus/)
-  assert.match(filaCs, /accessTarget\.payingStatus/)
+  const hoje = readFileSync(new URL('../dashboard/app/admin/hoje/page.js', import.meta.url), 'utf8')
+  assert.match(hoje, /<PayingTag status=\{item\.payingStatus\}/, 'caixa Hoje sem a tag')
+  const ficha = readFileSync(new URL('../dashboard/app/admin/clientes/[id]/page.js', import.meta.url), 'utf8')
+  assert.match(ficha, /<PayingTag status=\{history\.paying\?\.status\}/, 'ficha sem a tag')
 
   const painel = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
-  // As duas listas da aba "Sucesso do Cliente" do /admin.
-  assert.match(painel, /customer\?\.payingStatus/, 'fila proativa sem a tag')
   assert.match(painel, /user\?\.payingStatus/, 'gestão de clientes sem a tag')
 })
 

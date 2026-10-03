@@ -190,3 +190,38 @@ test('histórico guarda no máximo 50 execuções por conta', async () => {
     await cleanup(userId)
   }
 })
+
+test('R1: Awin devolve lista vazia ou bem menor → ninguém vence por ausência (sem reenvio em massa)', async () => {
+  const { userId, account } = await makeAccount()
+  try {
+    const make = (start, count) => Array.from({ length: count }, (_, i) => ({ ...fixture.data[1], promotionId: start + i }))
+    await syncAwinAccount(account.id, deps(fakeClient({ active: [{ data: make(1, 10), pagination: { total: 10 } }] })))
+    const empty = await syncAwinAccount(account.id, deps(fakeClient({ active: [{ data: [], pagination: { total: 0 } }] })))
+    assert.equal(empty.status, 'success')
+    assert.equal(empty.expired, 0)
+    assert.equal(empty.absenceSkipped, 10)
+    const shrunk = await syncAwinAccount(account.id, deps(fakeClient({ active: [{ data: make(1, 3), pagination: { total: 3 } }] })))
+    assert.equal(shrunk.expired, 0)
+    assert.equal(await db.awinPromotion.count({ where: { accountId: account.id, status: 'active' } }), 10)
+    // Metade ou mais voltou: sumiço normal vence como antes.
+    const half = await syncAwinAccount(account.id, deps(fakeClient({ active: [{ data: make(1, 5), pagination: { total: 5 } }] })))
+    assert.equal(half.expired, 5)
+    assert.equal(half.absenceSkipped, 0)
+  } finally {
+    await cleanup(userId)
+  }
+})
+
+test('R1: lista de lojas vazia não apaga as lojas guardadas (conversão segue ligada)', async () => {
+  const { userId, account } = await makeAccount()
+  try {
+    const programmes = [{ id: 17729, name: 'KaBuM', validDomains: [{ domain: 'kabum.com.br' }], displayUrl: 'https://www.kabum.com.br/' }]
+    const withStores = { ...fakeClient({ active: [fixture] }), listProgrammes: async () => programmes }
+    assert.equal((await syncAwinAccount(account.id, deps(withStores))).programmes, 1)
+    const emptyStores = { ...fakeClient({ active: [fixture] }), listProgrammes: async () => [] }
+    assert.equal((await syncAwinAccount(account.id, deps(emptyStores))).programmes, 1)
+    assert.equal(await db.awinProgramme.count({ where: { accountId: account.id } }), 1)
+  } finally {
+    await cleanup(userId)
+  }
+})

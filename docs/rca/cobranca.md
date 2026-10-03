@@ -38,6 +38,12 @@ sandbox no `.env` de staging.
 
 ## Assinatura recorrente (Mercado Pago `preapproval`) — canônico, 2026-09-01
 
+> **Número reserva (2026-10-03):** existe uma SEGUNDA assinatura possível por
+> conta, só do adicional (`plan = 'extra_number'`, R$29/mês). Ela não conta
+> como "a assinatura" do plano: toda consulta do plano filtra com
+> `PLAN_SUBSCRIPTION_WHERE` e o webhook desvia pela referência
+> `addon:extra_number:<conta>`. Detalhes em `docs/rca/multi-numero.md`.
+
 Até aqui todo cliente pagava **30 dias avulsos** e precisava refechar a compra
 todo mês. O caminho recorrente já existia no back (`POST /payments/create-subscription`,
 webhook tratando `subscription_preapproval` e `subscription_authorized_payment`)

@@ -24,6 +24,7 @@ import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpiso
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
 import { isSessionLive, RECEPTION_BLIND_WINDOW_MS } from '../../domain/session/sessionLiveness.js'
 import { withPayingStatus } from '../../domain/admin/payingStatus.js'
+import { loadCanonicalMrr } from '../../domain/admin/mrr.js'
 import { loadEverPaidUserIds, currentPayingWhere, formerPayingWhere, stalePayingWhere } from '../../domain/admin/payingLoader.js'
 import { resolvePayingStatus } from '../../domain/admin/payingStatus.js'
 import { classifyOutreachSegment } from '../../domain/admin/outreachSegments.js'
@@ -1253,6 +1254,7 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       plan: true,
       lastActivityAt: true,
       createdAt: true,
+      accessExpiresAt: true,
       waSession: {
         select: {
           status: true,
@@ -1315,10 +1317,31 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
   const offlineMetrics24h = summarizeEpisodes(offlineEpisodes, { since: since24h, now })
   const offlineMetrics7d = summarizeEpisodes(offlineEpisodes, { since: since7d, now })
 
+  // "Por que caiu" e "pode reconectar" na ficha do cliente (seção Robô): mesma
+  // regra da lista que o Início tinha (resolveSessionOwner + describeDisconnectReason).
+  const ownership = resolveSessionOwner({
+    status: user.waSession?.status ?? 'disconnected',
+    lifecycle: user.waSession?.lifecycle ?? null,
+    lastDisconnectCode: user.waSession?.lastDisconnectCode ?? null,
+    lastEventType: recentEvents[0]?.type ?? null,
+    workerRunning: await isRunningSafe(userId),
+    lastHeartbeatAt: user.waSession?.lastHeartbeatAt ?? null,
+    accessExpiresAt: user.accessExpiresAt ?? null,
+    now: now.getTime(),
+  })
+  const disconnectReason = describeDisconnectReason({
+    owner: ownership.owner,
+    hasSession: Boolean(user.waSession),
+    lastDisconnectCode: user.waSession?.lastDisconnectCode ?? null,
+  })
+
   return {
     checkedAt: now.toISOString(),
     user: sanitizeUser(user, adminRole),
     session: user.waSession,
+    sessionOwner: ownership.owner,
+    canAdminRetry: Boolean(ownership.canAdminRetry),
+    disconnectReason,
     online: isSessionOnline(user.waSession, now),
     connectionMetrics: {
       disconnects24h,
@@ -2088,7 +2111,6 @@ export async function adminRoutes(app) {
     const testAccounts = await loadTestAccountUserIds(db)
     const notTestUser = excludeUserIdsWhere(testAccounts.ids)
     const notTestReferred = excludeUserIdsWhere(testAccounts.ids, 'referredUserId')
-    const notTestAccount = excludeUserIdsWhere(testAccounts.ids, 'id')
 
     const [
       approvedOneTimePeriod,
@@ -2099,9 +2121,6 @@ export async function adminRoutes(app) {
       subscriptionPayingUsers,
       pendingPayments,
       failedPayments,
-      activeBasic,
-      activePro,
-      activePremium,
       trialsActive,
       expiring7d,
       expiring30d,
@@ -2120,11 +2139,6 @@ export async function adminRoutes(app) {
       db.subscriptionCharge.groupBy({ by: ['userId'], where: { ...subscriptionChargeApprovedWhere, ...notTestUser } }),
       db.payment.count({ where: { status: 'pending', ...notTestUser } }),
       db.payment.count({ where: { status: { notIn: ['approved', 'pending'] }, ...notTestUser } }),
-      // Assinaturas ativas = quem JÁ PAGOU e está em dia, por plano. Cortesia e
-      // liberação manual têm `plan` preenchido e não entram no MRR.
-      db.user.count({ where: { ...currentPayingWhere(now), plan: 'basic', ...notTestAccount } }),
-      db.user.count({ where: { ...currentPayingWhere(now), plan: 'pro', ...notTestAccount } }),
-      db.user.count({ where: { ...currentPayingWhere(now), plan: 'premium', ...notTestAccount } }),
       db.user.count({ where: { status: 'active', plan: 'trial', OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: now } }] } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 30) } } }),
@@ -2142,8 +2156,10 @@ export async function adminRoutes(app) {
       db.refund.aggregate({ where: { ...notTestUser }, _sum: { amount: true, gatewayFeeLoss: true }, _count: { _all: true } }),
     ])
 
+    // MRR canônico (src/domain/admin/mrr.js): só pagante pela regra de
+    // payingLoader × preço atual do plano. Mesma conta do ROI.
     const currentPrices = await getCurrentPlanPrices()
-    const activeMrr = activeBasic * currentPrices.basic + activePro * currentPrices.pro + activePremium * currentPrices.premium
+    const { activeMrr, activeBasic, activePro, activePremium, paidActiveUsers } = await loadCanonicalMrr(db, { now, prices: currentPrices, testAccountIds: testAccounts.ids })
 
     // Payment.amount e SubscriptionCharge.amount estão em reais (Float);
     // comissões em centavos (Int) → /100. Combinação em módulo puro e testado
@@ -2217,7 +2233,7 @@ export async function adminRoutes(app) {
       activeBasic,
       activePro,
       activePremium,
-      paidActiveUsers: activeBasic + activePro + activePremium,
+      paidActiveUsers,
       trialsActive,
       expiring7d,
       expiring30d,
@@ -2338,7 +2354,7 @@ export async function adminRoutes(app) {
     // horária).
     const agora = new Date()
     const [assinaturasAtivas, ultimaCobranca, ultimaSincronizacao, recusadas7d, aprovadas7d] = await Promise.all([
-      db.subscription.count({ where: { status: 'authorized' } }).catch(() => null),
+      db.subscription.count({ where: { status: 'authorized', plan: { not: 'extra_number' } } }).catch(() => null),
       db.subscriptionCharge.findFirst({ orderBy: { attemptedAt: 'desc' }, select: { attemptedAt: true } }).catch(() => null),
       db.subscriptionCharge.findFirst({ orderBy: { syncedAt: 'desc' }, select: { syncedAt: true } }).catch(() => null),
       db.subscriptionCharge.count({ where: { status: { in: ['rejected', 'cancelled', 'expired'] }, attemptedAt: { gte: addDays(agora, -7) } } }).catch(() => null),
@@ -2462,7 +2478,7 @@ export async function adminRoutes(app) {
       ],
     }
 
-    const [payments, charges, commissions, refunds, activeBasic, activePro, activePremium, prices] = await Promise.all([
+    const [payments, charges, commissions, refunds, prices] = await Promise.all([
       db.payment.findMany({
         where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser },
         select: { userId: true, amount: true, provider: true, createdAt: true },
@@ -2486,9 +2502,6 @@ export async function adminRoutes(app) {
         orderBy: { refundedAt: 'asc' },
         take: ROI_ROW_LIMIT,
       }),
-      db.user.count({ where: { ...currentPayingWhere(now), plan: 'basic', ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
-      db.user.count({ where: { ...currentPayingWhere(now), plan: 'pro', ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
-      db.user.count({ where: { ...currentPayingWhere(now), plan: 'premium', ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
       getCurrentPlanPrices(),
     ])
 
@@ -2540,7 +2553,7 @@ export async function adminRoutes(app) {
       revenueByMonth,
       now,
       projectionMonths,
-      activeMrr: activeBasic * prices.basic + activePro * prices.pro + activePremium * prices.premium,
+      activeMrr: (await loadCanonicalMrr(db, { now, prices, testAccountIds: testAccounts.ids })).activeMrr,
       costOverrides,
     })
 
