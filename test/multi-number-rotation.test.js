@@ -135,3 +135,12 @@ test('estrutural: só o ativo roteia; prontidão só envia com o rodízio; fila 
   // Reprocessar falhas da conta continua só no ativo.
   assert.match(src, /if \(!IS_STANDBY && !interruptedSendLogsMarked\)/)
 })
+
+test('painel: divisão dos envios dentro do bloco da reserva, some sem o recurso', () => {
+  const card = readFileSync(new URL('../dashboard/components/ReserveNumberCard.js', import.meta.url), 'utf8')
+  assert.match(card, /<RotationCard \/>/)
+  const rot = readFileSync(new URL('../dashboard/components/RotationCard.js', import.meta.url), 'utf8')
+  assert.match(rot, /\.catch\(\(\) => \{ if \(alive\) setState\(null\) \}\)/)
+  assert.match(rot, /if \(!state\) return null/)
+  assert.doesNotMatch(rot, /anti-?ban/i)
+})
