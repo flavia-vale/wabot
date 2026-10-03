@@ -550,3 +550,19 @@ Auditoria (`admin.user.block|unblock`) grava o motivo. Ficha 360
 
 **Não regredir:** não baixar para `support:write`; não aceitar motivo curto nem
 pular o e-mail no servidor "porque a tela já pede". Custo: zero RAM.
+
+## Consultas em lote no admin (item 11, 2026-10-03)
+
+**Era:** `buildFleetScenarios` usava `distinct: ['userId']` do Prisma (deduplica
+em memória da API, a cada polling); `GET /batches` (adminEmails) fazia 4
+`count` por lote (até 120 consultas); o funil lia `user.findMany` sem `take`.
+
+**Agora:** `groupBy userId` nas duas buscas de `buildFleetScenarios` (a de
+`ops_wa_reception_blind` continua sem `distinct`, de propósito, por causa do
+`metadata`); `/batches` faz UM `groupBy (batchId, status)` e distribui em
+memória; funil limitado a `FUNNEL_COHORT_LIMIT` (5.000, os mais recentes) com
+`truncated` na resposta e aviso na tela `/admin/funil`. Números iguais.
+Guarda: `test/admin-consultas-em-lote.test.js`.
+
+**Não regredir:** não voltar `distinct` nessas rotas, nem `await` dentro de
+`for` em `/batches`, nem tirar o `take` do funil. Custo: zero RAM.
