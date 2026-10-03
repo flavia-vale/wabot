@@ -27,7 +27,7 @@ export default function ShardPocPage() {
   useEffect(() => {
     if (!canRead) return
     const firstLoad = window.setTimeout(() => { void load() }, 0)
-    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void load() }, 5_000)
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void load() }, 60_000)
     return () => {
       window.clearTimeout(firstLoad)
       window.clearInterval(timer)
