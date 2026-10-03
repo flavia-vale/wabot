@@ -93,14 +93,14 @@ const require = createRequire(import.meta.url)
 const recv = readFileSync(require.resolve('@whiskeysockets/baileys/lib/Socket/messages-recv.js'), 'utf8')
 const handleMessage = recv.slice(recv.indexOf('const handleMessage = async (node) => {'))
 
-test('patch: DM fora do escopo é confirmada com <ack> antes do decrypt', () => {
+test('patch: DM fora do escopo é confirmada com nack 500 antes do decrypt (RCA 2026-10-03)', () => {
   const idxHook = handleMessage.indexOf('shouldIgnoreOwnDeviceDm?.(ownDeviceDmRecipient)')
   const idxDecrypt = handleMessage.indexOf('decryptMessageNode(')
   assert.ok(idxHook > 0, 'patch não aplicado: falta o gancho shouldIgnoreOwnDeviceDm (rode `npx patch-package`)')
   assert.ok(idxDecrypt > idxHook)
   const branch = handleMessage.slice(idxHook, handleMessage.indexOf('return;', idxHook))
-  assert.match(branch, /await sendMessageAck\(node\);/)
-  assert.match(branch, /wabot: DM de outro aparelho da conta fora do escopo confirmada com ack, sem abrir/)
+  assert.match(branch, /await sendMessageAck\(node, NACK_REASONS\.UnhandledError\);/)
+  assert.match(branch, /wabot: DM de outro aparelho da conta fora do escopo confirmada com nack, sem abrir/)
 })
 
 test('patch: só DM de contato — nunca grupo, canal, status, a própria conta ou mensagem interna', () => {

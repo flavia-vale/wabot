@@ -23,7 +23,7 @@ index f4458db..e6912a6 100644
              const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid));
              await cipher.initOutgoing(session);
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
-index c46b096..716642d 100644
+index c46b096..4d4c698 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 +++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 @@ -7,11 +7,12 @@ import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaul
@@ -141,7 +141,7 @@ index c46b096..716642d 100644
                                  }
                                  catch (error) {
                                      logger.error({ key, ids, trace: error.stack }, 'error in sending message again');
-@@ -608,6 +656,51 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -608,16 +656,69 @@ export const makeMessagesRecvSocket = (config) => {
          }
      };
      const handleMessage = async (node) => {
@@ -185,15 +185,35 @@ index c46b096..716642d 100644
 +            });
 +        }
 +        catch { }
++        // wabot patch (RCA 2026-10-03, medido): para <message> o servidor NAO aceita <ack> de
++        // sucesso como resposta - so <receipt> ou <ack error=...> (nack). Com ack simples a
++        // mensagem era reentregue 5x por conexao, a fila offline nunca fechava, o buffer de
++        // eventos do Baileys nunca era liberado (conta cega) e 50 min depois vinha o
++        // stream:error 500. O 7.x responde nack 500 (UnhandledError) a mensagem ignorada.
 +        if (ownDeviceDmRecipient && shouldIgnoreOwnDeviceDm?.(ownDeviceDmRecipient)) {
-+            await sendMessageAck(node);
-+            logger.info({ id: node.attrs.id, recipient: ownDeviceDmRecipient, offline: node.attrs.offline }, 'wabot: DM de outro aparelho da conta fora do escopo confirmada com ack, sem abrir');
++            await sendMessageAck(node, NACK_REASONS.UnhandledError);
++            logger.info({ id: node.attrs.id, recipient: ownDeviceDmRecipient, offline: node.attrs.offline, nack: NACK_REASONS.UnhandledError }, 'wabot: DM de outro aparelho da conta fora do escopo confirmada com nack, sem abrir');
 +            return;
 +        }
          if (shouldIgnoreJid(node.attrs.from) && node.attrs.from !== '@s.whatsapp.net') {
              logger.debug({ key: node.attrs.key }, 'ignored message');
-             await sendMessageAck(node);
-@@ -650,11 +743,44 @@ export const makeMessagesRecvSocket = (config) => {
+-            await sendMessageAck(node);
++            // wabot patch (RCA 2026-10-03): mensagem ignorada leva nack 500, como no Baileys 7.x
++            // (ack de sucesso para <message> e ignorado pelo servidor -> reentrega sem fim).
++            await sendMessageAck(node, NACK_REASONS.UnhandledError);
+             return;
+         }
+         const encNode = getBinaryNodeChild(node, 'enc');
+         // TODO: temporary fix for crashes and issues resulting of failed msmsg decryption
+         if (encNode && encNode.attrs.type === 'msmsg') {
+             logger.debug({ key: node.attrs.key }, 'ignored msmsg');
+-            await sendMessageAck(node);
++            // wabot patch (RCA 2026-10-03): como no Baileys 7.x, msmsg sem segredo leva nack 495.
++            await sendMessageAck(node, NACK_REASONS.MissingMessageSecret);
+             return;
+         }
+         let response;
+@@ -650,11 +751,47 @@ export const makeMessagesRecvSocket = (config) => {
                      // message failed to decrypt
                      if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
                          if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
@@ -209,9 +229,12 @@ index c46b096..716642d 100644
 +                        // fila seguravam as ofertas dos grupos monitorados atras delas. O robo
 +                        // so espelha GRUPO/CANAL: DM sem conteudo legivel nao tem uso aqui.
 +                        // Grupo, canal e status seguem o caminho original (retry).
++                        // RCA 2026-10-03: a resposta e nack 500 (como o 7.x apos o retry), nunca ack
++                        // de sucesso - medido: o ack simples era ignorado pelo servidor e a mensagem
++                        // voltava 5x por conexao, segurando a fila offline e cegando a conta.
 +                        if (isJidUser(msg.key.remoteJid) || isLidUser(msg.key.remoteJid)) {
-+                            await sendMessageAck(node);
-+                            logger.info({ key: msg.key, fromMe: !!msg.key.fromMe, stub: msg.messageStubParameters?.[0] }, 'wabot: DM sem decifrar confirmada com ack, sem retry');
++                            await sendMessageAck(node, NACK_REASONS.UnhandledError);
++                            logger.info({ key: msg.key, fromMe: !!msg.key.fromMe, stub: msg.messageStubParameters?.[0], nack: NACK_REASONS.UnhandledError }, 'wabot: DM sem decifrar confirmada com nack, sem retry');
 +                            return;
 +                        }
 +                        // wabot patch (status que nao decifra): o robo nao le status (status so e
@@ -220,8 +243,8 @@ index c46b096..716642d 100644
 +                        // <stream:error><ack class=status/></stream:error> (500) - 10 em 24h na
 +                        // medicao de 2026-09-24. Confirma com <ack> e descarta, sem retry.
 +                        if (isJidStatusBroadcast(msg.key.remoteJid)) {
-+                            await sendMessageAck(node);
-+                            logger.info({ key: msg.key, stub: msg.messageStubParameters?.[0] }, 'wabot: status sem decifrar confirmado com ack, sem retry');
++                            await sendMessageAck(node, NACK_REASONS.UnhandledError);
++                            logger.info({ key: msg.key, stub: msg.messageStubParameters?.[0], nack: NACK_REASONS.UnhandledError }, 'wabot: status sem decifrar confirmado com nack, sem retry');
 +                            return;
 +                        }
 +                        respondedMessageNodes.add(node);
@@ -232,13 +255,13 @@ index c46b096..716642d 100644
 +                                    // decifra saia daqui sem ack nem retry -> reentregue a cada
 +                                    // reconexao. Sem enc o ack ja foi enviado no topo de handleMessage.
 +                                    if (getBinaryNodeChild(node, 'enc')) {
-+                                        await sendMessageAck(node);
-+                                        logger.info({ key: msg.key }, 'wabot: unavailable com enc sem decifrar confirmado com ack');
++                                        await sendMessageAck(node, NACK_REASONS.UnhandledError);
++                                        logger.info({ key: msg.key, nack: NACK_REASONS.UnhandledError }, 'wabot: unavailable com enc sem decifrar confirmado com nack');
 +                                    }
                                      return;
                                  }
                                  const encNode = getBinaryNodeChild(node, 'enc');
-@@ -668,6 +794,16 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -668,6 +805,16 @@ export const makeMessagesRecvSocket = (config) => {
                              }
                          });
                      }
@@ -255,7 +278,7 @@ index c46b096..716642d 100644
                      else {
                          // no type in the receipt => message delivered
                          let type = undefined;
-@@ -680,14 +816,22 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -680,14 +827,22 @@ export const makeMessagesRecvSocket = (config) => {
                              // message was sent by us from a different device
                              type = 'sender';
                              // need to specially handle this case
@@ -279,7 +302,7 @@ index c46b096..716642d 100644
                          // send ack for history message
                          const isAnyHistoryMsg = getHistoryMsg(msg.message);
                          if (isAnyHistoryMsg) {
-@@ -702,6 +846,33 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -702,6 +857,33 @@ export const makeMessagesRecvSocket = (config) => {
          }
          catch (error) {
              logger.error({ error, node }, 'error in handling message');
@@ -313,7 +336,7 @@ index c46b096..716642d 100644
          }
      };
      const fetchMessageHistory = async (count, oldestMsgKey, oldestMsgTimestamp) => {
-@@ -846,7 +1017,7 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -846,7 +1028,7 @@ export const makeMessagesRecvSocket = (config) => {
      };
      const makeOfflineNodeProcessor = () => {
          const nodeProcessorMap = new Map([
@@ -322,7 +345,7 @@ index c46b096..716642d 100644
              ['call', handleCall],
              ['receipt', handleReceipt],
              ['notification', handleNotification]
-@@ -867,7 +1038,14 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -867,7 +1049,14 @@ export const makeMessagesRecvSocket = (config) => {
                          onUnexpectedError(new Error(`unknown offline node type: ${type}`), 'processing offline node');
                          continue;
                      }
@@ -338,7 +361,7 @@ index c46b096..716642d 100644
                  }
                  isProcessing = false;
              };
-@@ -1020,7 +1198,7 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -1020,7 +1209,7 @@ export const makeMessagesRecvSocket = (config) => {
      }
      // recv a message
      ws.on('CB:message', (node) => {

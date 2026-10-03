@@ -75,7 +75,7 @@ export function scanPidLog(text, pid) {
       const dest = m ? m[1] : '(sem recipient)'
       r.outroAparelhoRecipients[dest] = (r.outroAparelhoRecipients[dest] || 0) + 1
     } else if (line.includes('handled ') && line.includes(' offline messages')) r.offlineHandled += 1
-    else if (line.includes('fora do escopo confirmada com ack, sem abrir')) r.dmOutroAparelhoDescartada += 1
+    else if (line.includes('fora do escopo confirmada com ack, sem abrir') || line.includes('fora do escopo confirmada com nack, sem abrir')) r.dmOutroAparelhoDescartada += 1
     else if (line.includes('Conversa fora da lista de escolhidos')) r.escopoDescartes += 1
     else if (line.includes('FREIO DE EMERG')) r.freioEmergencia += 1
     else if (line.includes('"msg":"stream errored out"')) {
