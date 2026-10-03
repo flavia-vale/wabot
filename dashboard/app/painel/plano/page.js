@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
+import { SHOW_PREMIUM_PLAN } from '@/lib/featureVisibility'
 import { DEFAULT_LANDING_PLANS, SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
 import { usePainel, usePainelHeader } from '../PainelShell'
 import { BASIC_FEATURE_LIST, PRO_FEATURE_LIST } from '@/lib/planFeatures'
@@ -57,7 +58,7 @@ const PREMIUM_PLAN_CARD = {
 const FALLBACK_PLAN_CARDS = DEFAULT_LANDING_PLANS
   .filter((plan) => PAID_PLAN_IDS.includes(plan.id))
   .map((plan) => ({ id: plan.id, name: `Plano ${plan.name}`, price: plan.price, period: plan.period, description: plan.desc, features: plan.features }))
-  .concat(PREMIUM_PLAN_CARD)
+  .concat(SHOW_PREMIUM_PLAN ? [PREMIUM_PLAN_CARD] : [])
 
 function formatDate(value) {
   if (!value) return null
