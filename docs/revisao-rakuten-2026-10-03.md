@@ -1,6 +1,6 @@
 # Revisão crítica da integração Rakuten — 2026-10-03
 
-> **Status (2026-10-03):** PR 1 implementado em `fix/rakuten-revisao` (testes em `test/rakuten-revisao.test.js`). O R6 ficou mais estreito do que o planejado (ver tabela) para não quebrar um caso que funciona hoje.
+> **Status (2026-10-03):** PR 1 e PR 2 implementados em `fix/rakuten-revisao` (um só PR, dois commits, um só reinício do robô). Testes em `test/rakuten-revisao.test.js`. O R6 ficou mais estreito do que o planejado (ver tabela) para não quebrar um caso que funciona hoje. Padrões adotados para as decisões em aberto (seção 4), fáceis de mudar: R12 = plano vencido há mais de 3 dias ou conta banida/suspensa (sem data de vencimento continua); R9 = e-mail pelo motor (modelo `rakuten_dados_recusados`, editável na aba E-mails), barrado para conta parada como os outros avisos; R2b = 7 dias. R17 não foi implementado (precisa de decisão). A1 (Awin) fica para depois, como planejado.
 
 > Escopo: tudo o que está no `develop` em 2026-10-03 — ofertas automáticas
 > (V1) e conversão de links (V2, `afa37fe3`). Leitura de código + testes que
