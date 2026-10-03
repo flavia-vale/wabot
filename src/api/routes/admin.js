@@ -26,6 +26,7 @@ import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipe
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
+import { parseAuditQuery, buildAuditWhere, buildAuditRows, canReadAudit } from '../../domain/admin/auditLabels.js'
 import { buildErrorObservability, buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
@@ -41,6 +42,7 @@ import { resolveQueueBackend, dlqDisponivel, buildFilasRows, validateReprocessRe
 import { recoverStuckSendLogs } from '../../jobs/stuckSendLogs.js'
 import { wasStoppedByUser } from '../../email/accountActivity.js'
 import { SUBSCRIPTION_ACTIVE_STATUS } from '../../domain/payments/subscriptionPolicy.js'
+import { createMpGet, planSync, applySync, checkRenewal } from '../../domain/payments/subscriptionSync.js'
 import { sendAdminAlert } from '../../email/adminAlerts.js'
 import { resolveDashboardUrl } from '../../email/layout.js'
 import { createProbeTracker, buildProbeAlertVars, PROBE_ALERT_SLUG, PROBE_WINDOW_MS } from '../../domain/admin/adminProbePolicy.js'
@@ -1635,13 +1637,8 @@ export async function adminRoutes(app) {
 
   app.get('/online', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
-    const result = await buildAdminOnlineOverview({ query: req.query ?? {}, adminRole: req.admin.role })
-    await writeAdminAuditLog(req, {
-      action: 'admin.online.read',
-      resource: 'waConnectionEvent',
-      after: { totalSessions: result.summary.totalSessions, disconnectedAlerts: result.summary.disconnectedAlerts },
-    })
-    return result
+    // Leitura periódica: NÃO grava AdminAuditLog (RCA admin Q1b) — só escrita é auditada.
+    return buildAdminOnlineOverview({ query: req.query ?? {}, adminRole: req.admin.role })
   })
 
   // Botão "Tentar reconectar" da aba online. Sobe o robô da cliente sem que
@@ -1750,6 +1747,47 @@ export async function adminRoutes(app) {
       after: { lifecycle: 'stopped_by_user', wasRunning: rodando, stopBot: typeof parado === 'string' ? parado : Boolean(parado), reason: check.reason },
     })
     return { ok: true, wasRunning: rodando, message: 'Robô parado. Só volta quando a cliente conectar de novo (ou você usar Tentar reconectar).' }
+  })
+
+  // Ficha 360 > Financeiro (M3). Sincronizar com o Mercado Pago em DUAS etapas:
+  // o GET mostra o diff (só leitura), o POST grava o que o admin viu e confirmou
+  // (relê o MP e recusa o que mudou no meio). Regra em
+  // src/domain/payments/subscriptionSync.js — a mesma do script de SSH.
+  const mpGetAdmin = () => createMpGet({ token: process.env.MP_ACCESS_TOKEN })
+
+  app.get('/users/:id/assinatura/diff', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+    const userId = String(req.params.id || '')
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    return planSync({ db, userId, mpGet: mpGetAdmin() })
+  })
+
+  app.post('/users/:id/assinatura/sincronizar', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:write'))) return
+    const userId = String(req.params.id || '')
+    // Sem o diff mostrado e o "confirmo" explícito, nada grava.
+    if (req.body?.confirm !== true || !Array.isArray(req.body?.diff?.items)) {
+      return reply.code(400).send({ error: 'Mostre a diferença primeiro e confirme: envie o diff exibido e confirm=true.' })
+    }
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    const result = await applySync({ db, userId, shown: req.body.diff, mpGet: mpGetAdmin() })
+    await writeAdminAuditLog(req, {
+      action: 'admin.assinatura.sincronizar',
+      resource: 'subscription',
+      targetUserId: userId,
+      after: { applied: result.applied, stale: result.stale, results: result.results },
+    })
+    return { ok: true, ...result }
+  })
+
+  app.get('/users/:id/assinatura/testar-renovacao', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+    const userId = String(req.params.id || '')
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, accessExpiresAt: true } }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    return checkRenewal({ db, user, mpGet: mpGetAdmin() })
   })
 
   // "Por que não envia", elo por elo, em frases leigas. Só banco e Redis (nunca
@@ -3933,6 +3971,29 @@ app.get('/sessions', async (req, reply) => {
         user: sanitizeUser(session.user, req.admin.role),
       })),
     }
+  })
+
+  // ---- Operação → Auditoria (M8): quem fez o quê. Só owner/admin. ----
+  // A leitura NÃO é auditada (viraria ruído na própria trilha). Payload redigido.
+  app.get('/audit', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    if (!canReadAudit(req.admin.role)) return reply.code(403).send({ error: 'Só dono e admin veem a auditoria' })
+    const q = parseAuditQuery(req.query)
+    const where = buildAuditWhere(q)
+    const [total, rows] = await Promise.all([
+      db.adminAuditLog.count({ where }),
+      db.adminAuditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (q.page - 1) * q.take,
+        take: q.take,
+        include: {
+          actorUser: { select: { id: true, email: true, name: true } },
+          targetUser: { select: { id: true, email: true, name: true } },
+        },
+      }),
+    ])
+    return { total, page: q.page, take: q.take, days: q.days, rows: buildAuditRows(rows, redactAdminPayload) }
   })
 
   // ---- Operação → Filas (M5): envios presos em 'sending', por cliente ----

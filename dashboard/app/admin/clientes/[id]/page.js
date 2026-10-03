@@ -108,7 +108,151 @@ function CadastroTab({ cadastro }) {
   )
 }
 
-function FinanceiroTab({ financeiro }) {
+// Cobranças recorrentes DESTA cliente (mesma fonte do Financeiro > Cobranças
+// recorrentes, filtrada pelo e-mail e depois pelo id). Carrega ao abrir a aba.
+function CobrancasDaCliente({ userId, email }) {
+  const [state, setState] = useState(null)
+  useEffect(() => {
+    let active = true
+    Promise.resolve().then(() => api.adminSubscriptionCharges({ q: email || '', days: 365, limit: 100 }))
+      .then(data => { if (active) setState({ rows: asArray(data?.charges).filter(c => c.userId === userId), error: '' }) })
+      .catch(err => { if (active) setState({ rows: [], error: err?.message || 'Não consegui carregar as cobranças.' }) })
+    return () => { active = false }
+  }, [userId, email])
+  const rows = state?.rows ?? []
+  const aprovadas = rows.filter(r => r.outcome === 'aprovada')
+  const recusadas = rows.filter(r => r.outcome === 'recusada')
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-bold text-slate-800">Cobranças da assinatura (últimos 12 meses)</h3>
+      {!state && <p className="text-sm text-slate-500">Carregando…</p>}
+      {state?.error && <Alert type="error" title="Cobranças" message={state.error} />}
+      {state && !state.error && (
+        <>
+          <div className="mb-3 grid gap-3 sm:grid-cols-3">
+            <Card label="Tentativas" value={formatNumber(rows.length)} />
+            <Card label="Cobrou" value={formatNumber(aprovadas.length)} helper={formatCurrency(aprovadas.reduce((t, r) => t + Number(r.amount ?? 0), 0))} />
+            <Card label="Recusadas" value={formatNumber(recusadas.length)} />
+          </div>
+          {rows.length === 0 ? <p className="text-sm text-slate-500">Nenhuma cobrança de assinatura registrada.</p> : (
+            <ExpandableList
+              items={rows}
+              emptyLabel="Nenhuma."
+              render={(c) => (
+                <Row key={c.id}>
+                  <span className="font-bold text-slate-900">{c.amount == null ? '—' : formatCurrency(c.amount)}</span> · {c.statusLabel}
+                  <span className="block text-xs text-slate-500">{formatDate(c.attemptedAt)}{c.returnMessage ? ` · ${c.returnMessage}` : ''}{c.returnCode ? ` (${c.returnCode})` : ''}</span>
+                </Row>
+              )}
+            />
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+const ACAO_LABELS = {
+  update: 'Vai mudar',
+  none: 'Já bate com o Mercado Pago',
+  unreachable: 'Não consegui consultar o Mercado Pago',
+}
+
+// Sincronizar com o Mercado Pago em duas etapas: 1) "Ver diferença" só lê;
+// 2) "Aplicar" pede confirmação e manda de volta o diff que está na tela.
+function SincronizarMP({ userId, onApplied }) {
+  const [diff, setDiff] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  async function ver() {
+    setBusy(true); setMsg('')
+    try { setDiff(await api.adminAssinaturaDiff(userId)) }
+    catch (err) { setMsg(err?.message || 'Não consegui consultar o Mercado Pago.') }
+    finally { setBusy(false) }
+  }
+
+  async function aplicar() {
+    if (!diff) return
+    if (!window.confirm(`Gravar aqui o que o Mercado Pago respondeu (${diff.pending} assinatura(s) vão mudar)? A cliente não precisa fazer nada. Fica registrado na auditoria.`)) return
+    setBusy(true); setMsg('')
+    try {
+      const r = await api.adminAssinaturaSincronizar(userId, diff)
+      setMsg(r.stale > 0 ? `Gravado: ${r.applied}. ${r.stale} mudou(aram) no meio do caminho e não foi/foram gravada(s) — veja a diferença de novo.` : `Gravado: ${r.applied}.`)
+      setDiff(null)
+      await onApplied?.()
+    } catch (err) { setMsg(err?.message || 'Não consegui gravar.') }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-4">
+      <h3 className="mb-1 text-sm font-bold text-slate-800">Sincronizar com o Mercado Pago</h3>
+      <p className="mb-3 text-xs text-slate-500">Primeiro mostra o que mudaria; só grava depois que você confirmar.</p>
+      <button type="button" disabled={busy} onClick={ver} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+        {busy && !diff ? 'Consultando…' : 'Ver diferença'}
+      </button>
+      {msg && <p className="mt-3 text-sm text-slate-700">{msg}</p>}
+      {diff && (
+        <div className="mt-3 space-y-2">
+          {!diff.hasSubscriptions && <p className="text-sm text-slate-500">Nenhuma assinatura recorrente (só pagamento avulso).</p>}
+          {asArray(diff.items).map(item => (
+            <Row key={item.subscriptionId}>
+              <span className="font-bold text-slate-900">{item.plan}</span> · {ACAO_LABELS[item.action] ?? item.action}
+              <span className="block text-xs text-slate-500">Aqui: {item.storedStatus} · próxima {formatDate(item.storedNextChargeAt)}</span>
+              {item.action === 'unreachable'
+                ? <span className="block text-xs text-slate-500">{item.reason}</span>
+                : <span className="block text-xs text-slate-500">Mercado Pago: {item.mpStatus || '?'} · próxima {formatDate(item.mpNextChargeAt)}</span>}
+              {item.action === 'update' && <span className="block text-xs font-bold text-amber-700">Depois: {item.newStatus} · próxima {formatDate(item.newNextChargeAt)}</span>}
+            </Row>
+          ))}
+          {diff.pending > 0 && (
+            <button type="button" disabled={busy} onClick={aplicar} className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
+              {busy ? 'Gravando…' : `Aplicar ${diff.pending} mudança(s)`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// "Testar renovação": os 6 elos da cobrança automática, só leitura.
+function TestarRenovacao({ userId }) {
+  const [res, setRes] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [erro, setErro] = useState('')
+  async function testar() {
+    setBusy(true); setErro('')
+    try { setRes(await api.adminAssinaturaTestarRenovacao(userId)) }
+    catch (err) { setErro(err?.message || 'Não consegui testar agora.') }
+    finally { setBusy(false) }
+  }
+  const marca = (ok) => (ok === true ? '✓' : ok === false ? '✗' : '?')
+  return (
+    <div className="rounded-xl border border-slate-200 p-4">
+      <h3 className="mb-1 text-sm font-bold text-slate-800">Testar renovação</h3>
+      <p className="mb-3 text-xs text-slate-500">Confere os 6 passos da cobrança automática. Só lê, não altera nada.</p>
+      <button type="button" disabled={busy} onClick={testar} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+        {busy ? 'Testando…' : 'Testar renovação'}
+      </button>
+      {erro && <p className="mt-3 text-sm text-rose-700">{erro}</p>}
+      {res && (
+        <div className="mt-3 space-y-2">
+          {asArray(res.elos).map((elo, i) => (
+            <Row key={elo.id}>
+              <span className="font-bold text-slate-900">{marca(elo.ok)} {i + 1}. {elo.title}</span>
+              {asArray(elo.lines).map(l => <span key={l} className="block text-xs text-slate-500">{l}</span>)}
+            </Row>
+          ))}
+          <p className={`text-sm font-bold ${res.verdict?.armed ? 'text-emerald-700' : 'text-amber-700'}`}>{res.verdict?.text}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FinanceiroTab({ financeiro, userId, email, onChanged }) {
   const trial = financeiro?.trial ?? {}
   return (
     <div className="space-y-5">
@@ -151,6 +295,13 @@ function FinanceiroTab({ financeiro }) {
           />
         </div>
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SincronizarMP userId={userId} onApplied={onChanged} />
+        <TestarRenovacao userId={userId} />
+      </div>
+
+      <CobrancasDaCliente userId={userId} email={email} />
 
       {asArray(financeiro?.manualGrants).length > 0 && (
         <div>
@@ -966,7 +1117,7 @@ export default function AdminClienteHistoricoPage() {
               ))}
             </nav>
             {tab === 'cadastro' && <CadastroTab cadastro={history.cadastro} />}
-            {tab === 'financeiro' && <FinanceiroTab financeiro={history.financeiro} />}
+            {tab === 'financeiro' && <FinanceiroTab financeiro={history.financeiro} userId={history.id} email={history.cadastro?.email} onChanged={reload} />}
             {tab === 'tecnico' && <TecnicoTab tecnico={history.tecnico} />}
             {tab === 'uso' && <UsoTab uso={history.uso} userId={history.id} onSaved={reload} />}
             {tab === 'robo' && <RoboTab userId={history.id} />}
