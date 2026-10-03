@@ -1227,6 +1227,11 @@ async function maybeSendTrialDecisionMessage() {
   }
 }
 
+// Último contexto Rakuten lido com sucesso (poucos KB): rede de segurança do
+// loadConfig quando a leitura falha (revisão 2026-10-03, R8).
+const RAKUTEN_CONTEXT_FALLBACK_MS = 10 * 60_000
+let lastGoodRakutenContext = null
+
 async function loadConfig() {
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -1273,11 +1278,19 @@ async function loadConfig() {
   }
   // Rakuten: mesmo caminho (lojas aprovadas + id dos links dela). Falhou →
   // segue sem Rakuten. docs/rca/afiliados-rakuten.md.
+  // Falha de leitura (ex.: banco ocupado) usa o último contexto bom por até
+  // 10 min, em vez de apagar os links Rakuten daquele minuto (revisão
+  // 2026-10-03, R8). Leitura que diz "sem conta/sem loja" (null) vale na hora.
   try {
     const rakuten = await loadRakutenConversionContext(userId, { db })
+    lastGoodRakutenContext = { value: rakuten, at: Date.now() }
     if (rakuten) credentials.rakuten = rakuten
   } catch (err) {
-    logger.warn({ err: err?.message }, 'Falha ao carregar contas Rakuten; links dessas lojas seguem sem conversão até a próxima carga')
+    const fallback = lastGoodRakutenContext && Date.now() - lastGoodRakutenContext.at <= RAKUTEN_CONTEXT_FALLBACK_MS
+      ? lastGoodRakutenContext.value
+      : null
+    if (fallback) credentials.rakuten = fallback
+    logger.warn({ err: err?.message, usouAnterior: Boolean(fallback) }, 'Falha ao carregar contas Rakuten; usando a última leitura boa (até 10 min) ou seguindo sem conversão')
   }
 
   Object.defineProperty(credentials, '__onCredentialPatch', {

@@ -22,6 +22,10 @@ import {
 import { decryptRakutenCreds, isRakutenAccountSyncing, syncRakutenAccount } from '../../integrations/rakuten/syncService.js'
 
 const MAX_ACCOUNTS_PER_USER = 10
+// "Atualizar agora" espera no máximo isto; depois responde 202 e a sync segue
+// em segundo plano (revisão 2026-10-03, R13 — a sync podia levar minutos e
+// segurar a requisição).
+const MANUAL_SYNC_WAIT_MS = 20_000
 const LABEL_MAX = 60
 const SID_ERROR = 'Digite só os números do SID (aparece no canto de cima da Rakuten, abaixo do seu nome).'
 const CLIENT_ID_ERROR = 'Esse Client ID não parece certo. Copie de novo no portal de desenvolvedores da Rakuten.'
@@ -42,6 +46,7 @@ export async function rakutenRoutes(app, opts = {}) {
   const sync = opts.syncFn ?? syncRakutenAccount
   const decrypt = opts.decrypt
   const now = opts.now ?? (() => new Date())
+  const manualSyncWaitMs = opts.manualSyncWaitMs ?? MANUAL_SYNC_WAIT_MS
 
   async function ownedAccount(req) {
     return db.rakutenAccount.findFirst({ where: { id: String(req.params.id), userId: req.user.sub } })
@@ -178,7 +183,17 @@ export async function rakutenRoutes(app, opts = {}) {
     if (!existing) return reply.code(404).send({ error: 'Conta Rakuten não encontrada.' })
     if (existing.status === RAKUTEN_ACCOUNT_STATUS.INVALID_CREDENTIAL) return reply.code(400).send({ error: RAKUTEN_MESSAGES.auth })
     if (isRakutenAccountSyncing(existing.id)) return reply.code(409).send({ error: 'Essa conta já está sendo atualizada. Espere um pouco.' })
-    const result = await sync(existing.id, { db, client, now, trigger: 'manual', ...(decrypt ? { decrypt } : {}) })
+    const running = Promise.resolve()
+      .then(() => sync(existing.id, { db, client, now, trigger: 'manual', ...(decrypt ? { decrypt } : {}) }))
+      .catch((error) => {
+        req.log?.warn?.({ accountId: existing.id, err: error?.message }, 'rakuten: atualização manual falhou')
+        return { status: 'failed', errors: [{ message: RAKUTEN_MESSAGES.unavailable }] }
+      })
+    let timer
+    const waited = new Promise((resolve) => { timer = setTimeout(() => resolve(null), manualSyncWaitMs) })
+    const result = await Promise.race([running, waited])
+    clearTimeout(timer)
+    if (result === null) return reply.code(202).send({ started: true, result: null, account: presentRakutenAccount(existing) })
     if (result?.skipped === 'busy') return reply.code(409).send({ error: 'Essa conta já está sendo atualizada. Espere um pouco.' })
     const row = await db.rakutenAccount.findFirst({ where: { id: existing.id, userId: req.user.sub } })
     const counts = await activeCounts(req.user.sub)

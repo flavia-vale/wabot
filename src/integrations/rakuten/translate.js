@@ -82,6 +82,18 @@ function httpUrl(value) {
   }
 }
 
+// Logo da loja: o robô baixa esta imagem. Só https e host público — nunca
+// endereço interno do servidor (revisão 2026-10-03, R16).
+const PRIVATE_HOST_RE = /^(localhost|.*\.local|.*\.internal|0\.0\.0\.0|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|169\.254\.\d+\.\d+|\[.*\])$/i
+
+export function publicHttpsUrl(value) {
+  const url = httpUrl(value)
+  if (!url) return null
+  const parsed = new URL(url)
+  if (parsed.protocol !== 'https:' || PRIVATE_HOST_RE.test(parsed.hostname)) return null
+  return url
+}
+
 // "2029-06-21T03:00Z" (medido) ou com segundos/fuso. Sem fuso = UTC.
 export function parseRakutenDate(value) {
   const text = String(value ?? '').trim()
@@ -152,6 +164,6 @@ export function extractAdvertiser(body) {
   return {
     name: plainText(advertiser.name, NAME_MAX),
     storeUrl: httpUrl(advertiser.url),
-    logoUrl: httpUrl(advertiser.logo_url),
+    logoUrl: publicHttpsUrl(advertiser.logo_url),
   }
 }
