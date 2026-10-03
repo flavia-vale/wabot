@@ -109,7 +109,7 @@ import { getAdvancedPreservationAccess, isPreservationActive } from './billing/p
 // é o único ponto que fala com o socket do WhatsApp, movido para o adaptador
 // de WhatsApp com o corpo INALTERADO (test/delivery-whatsapp-send-inalterado.test.js).
 import { sendPreparedPayload } from './delivery/whatsapp/send.js'
-import { DELIVERY_NETWORK } from './core/delivery/networks.js'
+import { DELIVERY_NETWORK, deliveryNetworkOfDestinationId } from './core/delivery/networks.js'
 import { enqueueDeliveryOutbox } from './deliveryOutbox/enqueue.js'
 import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
@@ -1349,6 +1349,27 @@ async function checkScheduledMessages() {
       const state = { remaining: jids.length, hasError: false }
 
       for (const jid of jids) {
+        // Feature 017 (revisão crítica, item 1): destino de outro aplicativo
+        // vai para a caixa de saída (drenada na API), nunca para o socket.
+        const scheduledDeliveryNetwork = deliveryNetworkOfDestinationId(jid)
+        if (scheduledDeliveryNetwork !== DELIVERY_NETWORK.WHATSAPP) {
+          const handedOff = await enqueueDeliveryOutbox({
+            userId,
+            deliveryNetwork: scheduledDeliveryNetwork,
+            destinationId: jid,
+            sourceId: 'scheduled',
+            offer: {
+              texto: msg.text,
+              linkConvertido: '',
+              imagem: msg.imageUrl ? { url: msg.imageUrl } : null,
+              produto: { titulo: null, preco: null },
+              historico: { origem: 'scheduled', loja: 'scheduled' },
+            },
+          }).catch(() => null)
+          if (!handedOff) state.hasError = true
+          state.remaining--
+          continue
+        }
         let log
         try {
           log = await db.messageLog.create({
@@ -1423,10 +1444,12 @@ async function checkScheduledMessages() {
         }
       }
 
+      // Chega a zero aqui só quando nenhum envio do WhatsApp ficou pendente:
+      // ou todos falharam (hasError) ou todos foram para outro aplicativo.
       if (state.remaining === 0) {
         await db.scheduledMessage.update({
           where: { id: msg.id },
-          data: { status: 'failed', sentAt: new Date() },
+          data: { status: state.hasError ? 'failed' : 'sent', sentAt: new Date() },
         })
       }
     }
@@ -2978,6 +3001,20 @@ async function processSendJob(job) {
     if (isQueueClearedLog(current)) {
       logger.info({ destJid: job.destJid, logId: job.logId }, 'Envio cancelado: a cliente limpou a fila de envios')
       await finishSendJob(job, { ok: false, error: 'queue_cleared' })
+      return
+    }
+    // Feature 017 (revisão crítica, item 1): destino de OUTRO aplicativo
+    // (`tg:`) nunca é enviado pelo WhatsApp. Sem esta trava ele falhava aqui
+    // dentro com 3 tentativas e espera, segurando a fila serial e a vez dos
+    // outros grupos. Descarta na hora, sem tentar de novo e sem reservar vez.
+    // Destino do WhatsApp nunca entra neste ramo.
+    if (deliveryNetworkOfDestinationId(job.destJid) !== DELIVERY_NETWORK.WHATSAPP) {
+      logger.warn({ destJid: job.destJid, logId: job.logId, type: job.type }, 'Destino de outro aplicativo chegou à fila do WhatsApp; descartado sem envio')
+      await db.messageLog.update({
+        where: { id: job.logId },
+        data: { status: 'skipped', errorMsg: 'skip:destino_outro_aplicativo', sentAt: new Date() },
+      }).catch(() => {})
+      await finishSendJob(job, { ok: false, error: 'other_delivery_network' })
       return
     }
     await db.messageLog.update({
@@ -6402,6 +6439,28 @@ const handleMessage = async msg => {
     let queued = 0
     const errors = []
     for (const jid of msg.jids) {
+      // Feature 017 (revisão crítica, item 1): defesa em profundidade — a API
+      // já separa por aplicativo, mas destino de outro aplicativo que chegue
+      // aqui vai para a caixa de saída, nunca para o socket.
+      const broadcastDeliveryNetwork = deliveryNetworkOfDestinationId(jid)
+      if (broadcastDeliveryNetwork !== DELIVERY_NETWORK.WHATSAPP) {
+        const handedOff = await enqueueDeliveryOutbox({
+          userId,
+          deliveryNetwork: broadcastDeliveryNetwork,
+          destinationId: jid,
+          sourceId: broadcastSourceGroup(msg.options),
+          offer: {
+            texto: msg.text,
+            linkConvertido: '',
+            imagem: msg.options?.imageUrl ? { url: msg.options.imageUrl } : null,
+            produto: { titulo: null, preco: null },
+            historico: { origem: broadcastSourceGroup(msg.options), loja: 'broadcast' },
+          },
+        }).catch(() => null)
+        if (handedOff) queued++
+        else errors.push({ jid, error: 'error:delivery_outbox_unavailable' })
+        continue
+      }
       let log
       try {
         log = await db.messageLog.create({

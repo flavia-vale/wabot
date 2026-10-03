@@ -1,5 +1,6 @@
 import { detectKind, ensureJid, JID_KIND } from '../../core/jid.js'
 import { buildFeatureGateError, canUseChannels } from '../../billing/plans.js'
+import { DELIVERY_NETWORK, canonicalDestinationId, deliveryNetworkOfDestinationId } from '../../core/delivery/networks.js'
 
 export const MAX_BROADCAST_TARGETS = Math.max(1, Number(process.env.MAX_BROADCAST_TARGETS || 50))
 export const MAX_BROADCAST_TEXT_CHARS = Math.max(1, Number(process.env.MAX_BROADCAST_TEXT_CHARS || 12_000))
@@ -7,6 +8,10 @@ export const MAX_BROADCAST_TEXT_CHARS = Math.max(1, Number(process.env.MAX_BROAD
 export function normalizeTargetJids(jids) {
   const input = Array.isArray(jids) ? jids : []
   return [...new Set(input.map((jid) => {
+    // Feature 017 (revisão crítica): grupo de outro aplicativo (`tg:`) NÃO
+    // passa pelo normalizador do WhatsApp — ele acrescentava "@g.us" e o
+    // destino virava um endereço de WhatsApp inexistente.
+    if (deliveryNetworkOfDestinationId(jid) !== DELIVERY_NETWORK.WHATSAPP) return canonicalDestinationId(jid)
     const normalized = ensureJid(jid, JID_KIND.GROUP)
     if (!normalized) return null
     return detectKind(normalized) === JID_KIND.CHANNEL ? ensureJid(jid, JID_KIND.CHANNEL) : normalized
