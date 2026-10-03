@@ -237,6 +237,26 @@ const nichePages = [
     title: 'Divulgador Magalu no WhatsApp: 7 dias grátis',
     description: 'Para quem já divulga Magalu, onde o código vale inclusive em cupom e campanha.',
   },
+  {
+    href: '/netshoes-afiliados-whatsapp',
+    title: 'Afiliado Netshoes: ofertas no WhatsApp, 7 dias grátis',
+    description: 'Como entrar no programa da Netshoes pela Rakuten e publicar com o seu link.',
+  },
+  {
+    href: '/kabum-afiliados-whatsapp',
+    title: 'Afiliado KaBuM: ofertas no WhatsApp, 7 dias grátis',
+    description: 'Como entrar no programa da KaBuM pela Awin e publicar as promoções do dia.',
+  },
+  {
+    href: '/rakuten-afiliados-whatsapp',
+    title: 'Rakuten Afiliados: ofertas no WhatsApp, 7 dias grátis',
+    description: 'Uma conta, várias lojas: o robô converte as que aprovaram você.',
+  },
+  {
+    href: '/grupo-whatsapp-lotado',
+    title: 'Limite de membros do grupo de WhatsApp e grupo lotado',
+    description: 'O limite de 1.024 membros e um link só que manda cada pessoa para o grupo com vaga.',
+  },
 ]
 
 /* As dez LPs de "dor" (painSlugs em lib/seo-registry.mjs). Estavam no sitemap e

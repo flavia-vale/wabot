@@ -20,7 +20,10 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR
 // 27/09/2026: 248 impressões e 1 clique na posição 7,4 — "A conta real, sem
 // promessa" não dava motivo para clicar. A pergunta literal fica, e o número
 // da tabela oficial entra no título (3% na venda padrão, até 30% na Extra).
-const title = 'Quanto ganha afiliado Shopee? 3% por venda, até 30%'
+// 03/10/2026 (Frente 2, item 7 da análise SEO+GEO): 312 impressões e 2
+// cliques para um termo de 500 buscas/mês. A consulta exata fica no começo e
+// o ano entra no título, como pedem as respostas que mais clicam.
+const title = 'Quanto ganha afiliado Shopee em 2026: 3% a 30%'
 const description = 'A Shopee paga 3% na venda padrão e até 30% em produtos de Comissão Extra. Veja o prazo de atribuição e como fazer a conta do quanto dá para ganhar por mês.'
 const slug = '/quanto-ganha-afiliado-shopee'
 const dates = getEditorialDates(slug)

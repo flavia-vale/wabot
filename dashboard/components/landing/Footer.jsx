@@ -18,7 +18,7 @@ const s = {
     [x.k]: x.v, [y.k]: y.v,
   }),
   foot: { padding: '64px 0 40px' },
-  footGrid: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 40 },
+  footGrid: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: 40 },
   brand: { fontSize: 14, color: 'var(--ink-soft)', lineHeight: 1.6, marginTop: 12, maxWidth: 280 },
   colTitle: { fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink)', marginBottom: 16 },
   colLink: { display: 'block', fontSize: 14, color: 'var(--ink-soft)', textDecoration: 'none', marginBottom: 10 },
@@ -79,6 +79,19 @@ function Footer() {
             <a style={s.colLink} href="#features">Recursos</a>
             <a style={s.colLink} href="#planos">Planos</a>
             <a style={s.colLink} href="#faq">Perguntas</a>
+          </div>
+          {/* Frente 2 da análise SEO+GEO de 02/10/2026: as páginas de loja e de
+            * rede (Awin/Rakuten) e a do grupo lotado ganham link em toda página
+            * que usa este rodapé — "página nova nunca nasce órfã". */}
+          <div>
+            <div style={s.colTitle}>Lojas e redes</div>
+            <Link style={s.colLink} href="/shopee-afiliados-whatsapp">Shopee</Link>
+            <Link style={s.colLink} href="/mercado-livre-afiliados-whatsapp">Mercado Livre</Link>
+            <Link style={s.colLink} href="/amazon-afiliados-whatsapp">Amazon</Link>
+            <Link style={s.colLink} href="/netshoes-afiliados-whatsapp">Netshoes</Link>
+            <Link style={s.colLink} href="/kabum-afiliados-whatsapp">KaBuM</Link>
+            <Link style={s.colLink} href="/rakuten-afiliados-whatsapp">Rakuten</Link>
+            <Link style={s.colLink} href="/grupo-whatsapp-lotado">Grupo lotado</Link>
           </div>
           <div>
             <div style={s.colTitle}>Empresa</div>
