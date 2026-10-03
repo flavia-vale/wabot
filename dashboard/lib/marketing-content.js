@@ -162,6 +162,23 @@ export const PRODUCT_DEFINITION ='O Espelha Grupos é um software web para afili
 // FAQ pública ainda diziam 4 lojas enquanto o produto já cobria 6.
 export const SUPPORTED_STORES = ['Shopee', 'Mercado Livre', 'Amazon', 'Magalu', 'SHEIN', 'AliExpress']
 
+// Redes de afiliados (Awin e Rakuten): a conversão vale para as lojas em que a
+// afiliada foi APROVADA na rede, já no Basic (src/converters/awin.js e
+// rakuten.js). Os nomes são exemplos de lojas dessas redes, não lista fechada.
+// Por que existe (análise SEO+GEO de 02/10/2026, G1): site e llms.txt diziam
+// só "6 lojas", a Visão geral de IA do Google repetia "6 lojas" e ignorava
+// Awin/Rakuten, e `afiliado netshoes` (5.000/mês) e `afiliado kabum` (500)
+// não tinham resposta nossa.
+export const AWIN_STORE_EXAMPLES = ['KaBuM', 'C&A', 'Casas Bahia']
+export const RAKUTEN_STORE_EXAMPLES = ['Netshoes']
+
+const juntarComE = (itens) => (itens.length > 1 ? `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}` : itens[0])
+
+// O fato "lojas" em UMA frase — a mesma no llms.txt, no pricing.md, na ficha
+// técnica, na home, em /quem-somos, em /precos e no hub de automação.
+// Guarda: test/fato-lojas-awin-rakuten.test.js.
+export const STORES_FACT_PT = `${SUPPORTED_STORES.length} lojas com código próprio (${SUPPORTED_STORES.join(', ')}) + as lojas em que você é aprovada na Awin (${juntarComE(AWIN_STORE_EXAMPLES)}) e na Rakuten (${juntarComE(RAKUTEN_STORE_EXAMPLES)})`
+
 // Definição da marca em UMA frase auto-contida — a MESMA em todo lugar que
 // define o produto: primeira frase de corpo da home (Hero), de /quem-somos, do
 // llms.txt, e também a da ficha técnica (FICHA_DEFINICAO = esta constante), de
@@ -176,7 +193,7 @@ export const SUPPORTED_STORES = ['Shopee', 'Mercado Livre', 'Amazon', 'Magalu', 
 // mantém os três modelos e o limite exato do automático (só Shopee, só Pro),
 // para nunca prometer ao Basic o que ele não entrega. Sem "não bane", sem
 // promessa de ganho, sem o nome antigo. Guarda: test/ficha-tecnica-canonica.test.js.
-export const BRAND_DEFINITION_PT = `${BRAND_NAME} é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em ${SUPPORTED_STORES.length} lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.`
+export const BRAND_DEFINITION_PT = `${BRAND_NAME} é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em ${SUPPORTED_STORES.length} lojas e nas lojas em que você é aprovada na Awin e na Rakuten, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.`
 
 // Sites-irmãos da mesma fundadora, citados em /quem-somos com link normal
 // (sem nofollow: é relação real, declarada dos dois lados).
@@ -184,7 +201,7 @@ export const SISTER_SITES = [
   { name: 'Cuponito', url: `${CUPONITO_URL}/`, description: `site brasileiro de cupons de desconto verificados para ${SUPPORTED_STORES.join(', ')}` },
 ]
 
-export const PRICING_PRODUCT_DESCRIPTION = `Robô que converte links de afiliado de ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}) para o código da afiliada e publica as ofertas em grupos e canais do WhatsApp.`
+export const PRICING_PRODUCT_DESCRIPTION = `Robô que converte links de afiliado de ${STORES_FACT_PT} para o código da afiliada e publica as ofertas em grupos e canais do WhatsApp.`
 
 export const PRODUCT_LIMITATIONS = [
   'Não prometemos ganho financeiro, comissão ou aumento garantido de vendas.',
@@ -233,7 +250,7 @@ export const DEFAULT_LANDING_PLANS = [
     period: '30 dias',
     desc: 'Espelhamento, conversão de links, criação de ofertas e agendamento.',
     cta: 'Assinar Basic',
-    features: ['Espelhamento de grupos', 'Conversão de links de 6 lojas (Shopee, Mercado Livre, Amazon, SHEIN, Magalu e AliExpress)', 'Card de oferta clicável', 'Mensagem reescrita do seu jeito', 'Envio imediato ou agendado', 'Relatórios com histórico completo', 'Uma mensagem do Espelha Grupos a cada 50 envios no seu grupo (o Pro não tem)'],
+    features: ['Espelhamento de grupos', 'Conversão de links de 6 lojas (Shopee, Mercado Livre, Amazon, SHEIN, Magalu e AliExpress) + lojas aprovadas na Awin e na Rakuten', 'Card de oferta clicável', 'Mensagem reescrita do seu jeito', 'Envio imediato ou agendado', 'Relatórios com histórico completo', 'Uma mensagem do Espelha Grupos a cada 50 envios no seu grupo (o Pro não tem)'],
   },
   {
     id: 'pro',
@@ -267,7 +284,7 @@ export const CORE_FAQ_ITEMS = [
   {
     id: 'faq_seed_programs',
     question: 'Funciona com quais programas de afiliados?',
-    answer: 'Hoje o fluxo é focado em links suportados de seis lojas: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Cadastre as credenciais exigidas para as lojas que você usa e revise cada oferta antes de divulgar.',
+    answer: 'Seis lojas com código próprio: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Além delas, as lojas em que você é aprovada na Awin (como KaBuM, C&A e Casas Bahia) e na Rakuten (como Netshoes). Cadastre as credenciais das lojas e redes que você usa e revise cada oferta antes de divulgar.',
   },
   {
     id: 'faq_seed_text',

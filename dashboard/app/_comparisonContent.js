@@ -23,6 +23,7 @@ import {
   TrialCta,
 } from '@/components/marketing/ComparisonSections'
 import { DifferentialGrid, InteractiveComparisonTable, TrustStrip } from '@/components/marketing/ComparisonInteractive'
+import { ModelToolsTable } from '@/components/marketing/ModelToolsTable'
 
 /*
  * Links por LOJA, em todas as páginas de comparativo.
@@ -722,14 +723,14 @@ export const COMPARISON_PAGES = {
   '/melhores-bots-para-afiliados-whatsapp': {
     format: 'alternative-plural',
     eyebrow: 'Critérios · Avaliação de ferramentas',
-    title: 'Melhores bots de afiliados no WhatsApp: como comparar',
-    description: 'Lista de critérios para avaliar bots e ferramentas de WhatsApp para afiliados sem ranking falso, promessa de ganho ou prova social inventada.',
+    title: 'Melhores bots de afiliados no WhatsApp: 8 comparados',
+    description: 'Os 6 critérios para escolher bot de afiliados no WhatsApp (API da Shopee, trava de link, grupos, intervalo, garimpo, rastreio) e 8 bots com ficha datada.',
     tldr: 'Não escolha por promessa de ganho: escolha por processo confiável, rastreabilidade e aderência às políticas das plataformas. E confira qual dos dois modos você precisa — espelhar grupos que já segue ou deixar o robô buscar oferta sozinho —, porque o mercado divide isso em ferramentas diferentes.',
     // 23/09/2026: "bot para afiliados" é lido por IA como "robô que busca oferta
     // sozinho". O critério dos dois modos entra aqui para a página responder
     // essa leitura — e o Espelha Grupos cobre os dois (busca automática só na
     // Shopee, plano Pro).
-    directAnswer: 'Os melhores bots para afiliados no WhatsApp devem ser avaliados por critérios de processo, não por promessa de comissão. Priorize revisão de link monetizado, controle de grupos, filtros, cadência, logs, limites contra spam, clareza de preço e suporte a plataformas realmente usadas pela operação. Antes disso, decida o modo: há bots que espelham os grupos que você já segue (repassam a oferta com o seu link) e bots que buscam oferta sozinhos na loja por tema. O Espelha Grupos faz os dois na mesma conta: espelha em 6 lojas e, no plano Pro, busca ofertas da Shopee sozinho por tema e desconto mínimo. Confira também se a ferramenta publica a política de reembolso.',
+    directAnswer: 'Os melhores bots para afiliados no WhatsApp devem ser avaliados por critérios de processo, não por promessa de comissão. Priorize revisão de link monetizado, controle de grupos, filtros, cadência, logs, limites contra spam, clareza de preço e suporte a plataformas realmente usadas pela operação. Antes disso, decida o modo: há bots que espelham os grupos que você já segue (repassam a oferta com o seu link) e bots que buscam oferta sozinhos na loja por tema. O Espelha Grupos faz os dois na mesma conta: espelha em 6 lojas e nas lojas em que você é aprovada na Awin e na Rakuten e, no plano Pro, busca ofertas da Shopee sozinho por tema e desconto mínimo. Confira também se a ferramenta publica a política de reembolso.',
     guides: [
       // 27/09/2026 (PLANO_SEO_GEO, B7): o hub dos 3 modelos é a página
       // canônica da categoria; esta fica no ar (67 impressões, posição 7,5) e
@@ -747,6 +748,19 @@ export const COMPARISON_PAGES = {
       ['Cadência', 'Há intervalos, filtros e controle para evitar repetição?', 'Ajuda a proteger experiência dos grupos.'],
       ['Logs', 'A operação consegue auditar envio, falha e campanha?', 'Permite aprender e corrigir processo.'],
     ],
+    // Frente 1, item 3 da análise SEO+GEO de 02/10/2026 (G3): os 6 critérios
+    // que o ChatGPT usa para recomendar, cada um com a resposta do Espelha
+    // Grupos — inclusive o "não" (Sub-ID por grupo não existe: o link da
+    // Shopee sai com SHOPEE_SUB_ID fixo, src/converters/shopee.js).
+    ownCriteriaAnswers: [
+      ['API oficial da Shopee', 'Sim. O link da Shopee é gerado pela API oficial de afiliados da Shopee, com a sua chave.', 'Link gerado pela API credita a comissão na sua conta, sem depender de truque de URL.'],
+      ['Trava se a conversão falhar', 'Sim, em todos os planos. Se a troca do link falhar, a oferta não é publicada.', 'É o que impede o link de outra pessoa de sair no seu grupo.'],
+      ['Quantos grupos acompanha', 'Sem teto de grupos de origem nem de destino, no Basic e no Pro.', 'Ferramenta que cobra por grupo fica cara quando a operação cresce.'],
+      ['Controle de intervalo', 'Pro: intervalo entre envios, horário de descanso e limite por hora e por dia, por grupo. Basic: envio imediato ou agendado.', 'Ritmo controlado reduz repetição e ruído no grupo; nenhum software garante que o número não será bloqueado.'],
+      ['Garimpo próprio além de espelhar', 'Pro: busca ofertas da Shopee sozinho por tema e desconto mínimo, e traz as promoções da Awin e da Rakuten das lojas em que você é aprovada.', 'Sem garimpo, a ferramenta depende de você ter bons grupos de origem.'],
+      ['Rastreio por grupo (Sub-ID)', 'Não por Sub-ID: o link da Shopee sai com um Sub-ID fixo. O que existe é o histórico de envios por grupo e o painel de vendas e comissão da Shopee (Pro).', 'Se você precisa separar a comissão de cada grupo no painel da Shopee, hoje isso não sai daqui.'],
+    ],
+    showToolsTable: true,
     criteria: ['Modo: espelhar grupos, buscar oferta sozinho ou os dois', 'Transparência de preço', 'Política de reembolso publicada', 'Limites de uso responsável', 'Logs e auditoria', 'Suporte a afiliados', 'Ausência de promessa de ganho garantido'],
     bestFit: [
       'A melhor ferramenta será a que reduzir erros operacionais mantendo revisão humana e trilha de auditoria.',
@@ -758,7 +772,7 @@ export const COMPARISON_PAGES = {
     faq: [
       { q: 'Por que esta página não ranqueia marcas como primeiro, segundo e terceiro lugar?', a: 'Sem testes públicos equivalentes e consentimento de dados, ranking numérico seria pouco confiável. A página usa critérios para avaliação responsável.' },
       { q: 'Espelha Grupos entra nesses critérios?', a: 'Sim. O Espelha Grupos foi desenhado para grupos, links suportados, cadência e logs, mas ainda exige revisão humana e autorização dos grupos.' },
-      { q: 'O Espelha Grupos busca ofertas sozinho ou só espelha grupos?', a: 'Os dois. O espelhamento repassa, com o seu código, as ofertas dos grupos e canais que você acompanha, em 6 lojas. No plano Pro, as ofertas automáticas buscam na Shopee pelo tema e pelo desconto mínimo que você definir e publicam sozinhas, sem grupo de origem. Nas outras lojas não há busca automática.' },
+      { q: 'O Espelha Grupos busca ofertas sozinho ou só espelha grupos?', a: 'Os dois. O espelhamento repassa, com o seu código, as ofertas dos grupos e canais que você acompanha, em 6 lojas e nas lojas aprovadas na Awin e na Rakuten. No plano Pro, as ofertas automáticas buscam na Shopee pelo tema e pelo desconto mínimo que você definir e publicam sozinhas, sem grupo de origem. Nas outras lojas não há busca automática.' },
       { q: 'O Espelha Grupos tem reembolso?', a: 'Tem, publicado: valor integral em até 7 dias corridos depois do pagamento (direito de arrependimento, art. 49 do CDC), processado em até 5 dias úteis. Depois disso, o cancelamento evita a próxima cobrança.' },
       { q: 'O que evitar ao escolher um bot?', a: 'Evite promessa de comissão garantida, disparo sem consentimento, ausência de logs e ferramenta que não explica limites de uso.' },
       { q: 'Quais são os modelos de automação para afiliados no WhatsApp?', a: 'Três: espelhador de grupos (republica, com o seu código, o que aparece nos grupos que você segue), garimpo automático (o robô acha a oferta sozinho na loja por tema e desconto) e formatador (você cola o link e a oferta sai montada). O hub de automação para afiliadas explica cada um, diz para quem serve e compara 8 ferramentas com ficha datada.' },
@@ -1725,6 +1739,26 @@ export function ComparisonPage({ slug }) {
             )}
             <TrialCta slug={slug} content="tabela-register" variant="inline" label="Testar o Espelha Grupos 7 dias grátis" />
           </SectionCard>
+
+          {Array.isArray(page.ownCriteriaAnswers) && page.ownCriteriaAnswers.length > 0 && (
+            <SectionCard
+              eyebrow={`Resposta do ${BRAND_NAME}`}
+              title={`Como o ${BRAND_NAME} responde a cada critério`}
+              lead="Os critérios que as IAs usam para recomendar bot de afiliados, com o que o produto faz hoje em cada um — inclusive onde a resposta é não."
+            >
+              <ComparisonTable rows={page.ownCriteriaAnswers} headers={['Critério', `${BRAND_NAME} hoje`, 'Por que importa']} />
+            </SectionCard>
+          )}
+
+          {page.showToolsTable && (
+            <SectionCard
+              eyebrow="Ferramentas com ficha"
+              title={`${BRAND_NAME} e 8 bots do mercado, por modelo`}
+              lead="Só entram ferramentas com ficha própria, conferida na página de planos de cada uma na data indicada. Onde a ficha não informa, a célula fica com travessão (—)."
+            >
+              <ModelToolsTable ctaId="melhores-bots-tool-comparison" />
+            </SectionCard>
+          )}
 
           {/* 4. Decisão: quatro recortes lado a lado, com ícone em vez de bullet. */}
           <div id={SECTION_IDS.decisao} className="comparison-decision-grid">
