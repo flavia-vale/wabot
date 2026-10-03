@@ -86,7 +86,9 @@ test('o motivo do bloqueio chega à cliente no login e no painel', () => {
 test('a rota de bloqueio exige motivo escrito e é auditada', () => {
   const admin = ler('../src/api/routes/admin.js')
   assert.match(admin, /users\/:id\/block/)
-  assert.match(admin, /Escreva o motivo — ele é mostrado para a cliente/)
+  // A mensagem do motivo mora na regra pura (blockPolicy), que a rota chama.
+  assert.match(admin, /validateBlockRequest/)
+  assert.match(ler('../src/domain/admin/blockPolicy.js'), /Escreva o motivo com pelo menos[\s\S]{0,160}é mostrado para a cliente/)
   assert.match(admin, /admin\.user\.block/)
   assert.match(admin, /admin\.user\.unblock/)
 })
