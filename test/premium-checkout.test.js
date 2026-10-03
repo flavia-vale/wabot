@@ -66,12 +66,18 @@ test('gate do multicanal aponta para a compra do Premium em /painel/plano', () =
   assert.doesNotMatch(gate.error, /seu plano n[ãa]o permite|estará disponível/i)
 })
 
-test('financeiro do admin conta Premium no MRR e na lista de pagantes', () => {
+test('financeiro do admin conta Premium no MRR e na lista de pagantes', async () => {
+  // Desde o #2185 o MRR mora num helper único (src/domain/admin/mrr.js), usado
+  // pela visão geral e pelo ROI — a guarda olha lá, e confere o resultado.
   const admin = read('src/api/routes/admin.js')
   assert.match(admin, /premium: 99/)
-  assert.match(admin, /activePremium \* currentPrices\.premium/)
-  assert.match(admin, /activePremium \* prices\.premium/)
-  assert.match(admin, /paidActiveUsers: activeBasic \+ activePro \+ activePremium/)
+  assert.match(admin, /loadCanonicalMrr\(db, \{ now, prices: currentPrices/)
+  const mrr = read('src/domain/admin/mrr.js')
+  assert.match(mrr, /export const MRR_PLANS = \['basic', 'pro', 'premium'\]/)
+  const { computeCanonicalMrr } = await import('../src/domain/admin/mrr.js')
+  const total = computeCanonicalMrr({ basic: 1, pro: 1, premium: 2 }, { basic: 39, pro: 69, premium: 99 })
+  assert.equal(total.activeMrr, 39 + 69 + 2 * 99)
+  assert.equal(total.paidActiveUsers, 4)
 })
 
 test('tela de plano do painel mostra o Premium, R$ 99 e o que ele libera, sem jargão', () => {
