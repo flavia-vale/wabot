@@ -140,6 +140,11 @@ export const pior = itens => itens.some(i => i.nivel === '🔴') ? '🔴' : iten
 
 // ------------------------------------------------------------------- coleta
 
+// `NOT` sozinho descarta linhas com errorMsg NULO (NOT (NULL LIKE …) = NULL no
+// SQL) — e todo envio com sucesso tem errorMsg nulo. Sem o `errorMsg: null`
+// explícito o vigia contava 0 sucessos e 100% de erro (subida de 2026-10-03).
+export const SEM_MARCA_DE_RESTART = { OR: [{ errorMsg: null }, { NOT: { errorMsg: { startsWith: 'error:worker_restart' } } }] }
+
 const sh = promisify(execFile)
 const safe = async fn => { try { return await fn() } catch { return null } }
 
@@ -152,8 +157,8 @@ async function httpStatus(url) {
   try { return (await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(8_000) })).status } catch { return null }
 }
 
-async function coletar({ root, db, desde }) {
-  const now = Date.now()
+async function coletar({ root, db, desde, ate = null }) {
+  const now = ate ?? Date.now()
   const apiPort = process.env.API_PORT || 3001
   const painelPort = process.env.DASHBOARD_PORT || 3000
   const live = { status: { in: ['connected', 'connecting'] } }
@@ -167,7 +172,7 @@ async function coletar({ root, db, desde }) {
     safe(() => db.waSession.count({ where: { ...live, OR: [{ lastHeartbeatAt: null }, { lastHeartbeatAt: { lt: new Date(now - 5 * MIN) } }] } })),
     safe(() => db.messageLog.groupBy({
       by: ['userId', 'sourceGroup', 'status'],
-      where: { sentAt: { gte: new Date(desde) }, status: { in: ['success', 'error', 'failed'] }, NOT: { errorMsg: { startsWith: 'error:worker_restart' } } },
+      where: { sentAt: { gte: new Date(desde), lt: new Date(now) }, status: { in: ['success', 'error', 'failed'] }, ...SEM_MARCA_DE_RESTART },
       _count: { _all: true },
     })),
     safe(() => db.messageLog.count({ where: { sentAt: { lt: new Date(now - 15 * MIN), gte: new Date(now - 6 * 60 * MIN) }, status: { in: ['queued', 'sending', 'pending'] } } })),
@@ -206,7 +211,7 @@ async function main() {
   const [modo = 'agora', ...rest] = process.argv.slice(2)
   const args = new Map(rest.map(a => { const [k, v] = a.replace(/^--/, '').split('='); return [k, v ?? true] }))
   if (!['marco', 'acompanhar', 'agora'].includes(modo)) {
-    console.error('uso: vigia-subida.mjs marco | acompanhar [--minutos=60] [--intervalo=120] | agora [--desde=ISO]')
+    console.error('uso: vigia-subida.mjs marco [--refazer-envios] | acompanhar [--minutos=60] [--intervalo=120] | agora [--desde=ISO]')
     process.exit(2)
   }
   const root = path.resolve(String(args.get('root') || process.env.ROOT || process.cwd()))
@@ -216,6 +221,21 @@ async function main() {
 
   const dir = String(args.get('dir') || path.join(os.homedir(), 'wabot-pontos-de-retorno'))
   const marcoFile = path.join(dir, 'subida-marco.json')
+
+  // Refaz só os envios do marco a partir do histórico (a hora antes de marco.at),
+  // mantendo sessões/processos/commit do marco original.
+  if (modo === 'marco' && args.get('refazer-envios')) {
+    const m = JSON.parse(fs.readFileSync(marcoFile, 'utf8'))
+    const ate = Date.parse(m.at)
+    const r = await coletar({ root, db, desde: ate - 60 * MIN, ate })
+    if (!r.sends) { console.error('Não consegui ler o banco — marco NÃO alterado.'); process.exit(1) }
+    m.sends = { ...r.sends, stuck: m.sends?.stuck ?? 0 }
+    fs.writeFileSync(marcoFile, JSON.stringify(m, null, 2))
+    const u = Object.values(m.sends.porUsuario)
+    console.log(`Envios do marco refeitos (${m.at}, hora anterior): ${u.reduce((a, x) => a + x.mirror, 0)} espelhadas (${u.filter(x => x.mirror >= 3).length} contas ativas), ${u.reduce((a, x) => a + x.outros, 0)} outros, ${u.reduce((a, x) => a + x.erros, 0)} erros`)
+    await db.$disconnect?.()
+    return
+  }
 
   if (modo === 'marco') {
     const m = await coletar({ root, db, desde: Date.now() - 60 * MIN })
