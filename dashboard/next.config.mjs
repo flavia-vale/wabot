@@ -89,6 +89,11 @@ export const LEGACY_ROUTE_REDIRECTS = [
 const nextConfig = {
   // Não anunciar a tecnologia do servidor no cabeçalho x-powered-by (auditoria 2026-09-23).
   poweredByHeader: false,
+  // Ambiente no código do navegador (lib/featureVisibility.js). NODE_ENV é
+  // 'production' nos dois ambientes; APP_ENV vem dos scripts de deploy.
+  env: {
+    NEXT_PUBLIC_APP_ENV: process.env.APP_ENV || '',
+  },
   outputFileTracingRoot: __dirname,
   turbopack: {
     root: __dirname,

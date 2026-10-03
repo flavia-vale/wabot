@@ -909,10 +909,12 @@ async function buildFleetScenarios(now = new Date()) {
       where: { type: { in: ['disconnect', 'disconnect_terminal'] }, occurredAt: { gte: since24h, lte: now } },
       _count: { _all: true },
     }).catch(() => []),
-    db.waConnectionEvent.findMany({
+    // groupBy (agregação no SQLite) em vez de `distinct` do Prisma, que traz
+    // todas as linhas para a memória da API e deduplica lá.
+    db.waConnectionEvent.groupBy({
+      by: ['userId'],
       where: { type: { in: ['manual_reconnect_requested', 'manual_pairing_requested'] }, occurredAt: { gte: since24h, lte: now } },
-      select: { userId: true },
-      distinct: ['userId'],
+      _max: { occurredAt: true },
     }).catch(() => []),
     // Sem `distinct` de propósito: precisamos do `metadata` para separar quem
     // parou agora de quem está cega há dias, e com `distinct` a linha que
@@ -922,10 +924,10 @@ async function buildFleetScenarios(now = new Date()) {
       where: { event: 'ops_wa_reception_blind', createdAt: { gte: blindSince, lte: now } },
       select: { userId: true, metadata: true },
     }).catch(() => []),
-    db.analyticsEvent.findMany({
+    db.analyticsEvent.groupBy({
+      by: ['userId'],
       where: { event: 'ops_wa_group_desync_unresolved', createdAt: { gte: since7d, lte: now } },
-      select: { userId: true },
-      distinct: ['userId'],
+      _max: { createdAt: true },
     }).catch(() => []),
     db.waConnectionEvent.findMany({
       where: { type: { in: OFFLINE_EPISODE_EVENT_TYPES }, occurredAt: { gte: addDays(now, -2), lte: now } },

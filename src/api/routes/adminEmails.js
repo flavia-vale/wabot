@@ -332,14 +332,27 @@ export async function adminEmailsRoutes(app, opts = {}) {
   app.get('/batches', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!(await requireAdminAccess(req, reply, 'admin:read'))) return
     const batches = await db.emailBatch.findMany({ orderBy: { createdAt: 'desc' }, take: 30 })
+    // Um groupBy por (batchId, status) para os 30 lotes — não 4 contagens por lote.
+    const porLote = new Map()
+    if (batches.length) {
+      const grupos = await db.emailSendLog.groupBy({
+        by: ['batchId', 'status'],
+        where: { batchId: { in: batches.map(batch => batch.id) } },
+        _count: { _all: true },
+      })
+      for (const g of grupos) {
+        const atual = porLote.get(g.batchId) ?? {}
+        atual[g.status] = g._count._all
+        porLote.set(g.batchId, atual)
+      }
+    }
     const detalhado = []
     for (const batch of batches) {
-      const [enviados, naFila, descartados, erros] = await Promise.all([
-        db.emailSendLog.count({ where: { batchId: batch.id, status: 'sent' } }),
-        db.emailSendLog.count({ where: { batchId: batch.id, status: 'queued' } }),
-        db.emailSendLog.count({ where: { batchId: batch.id, status: 'skipped' } }),
-        db.emailSendLog.count({ where: { batchId: batch.id, status: 'error' } }),
-      ])
+      const contagem = porLote.get(batch.id) ?? {}
+      const enviados = contagem.sent ?? 0
+      const naFila = contagem.queued ?? 0
+      const descartados = contagem.skipped ?? 0
+      const erros = contagem.error ?? 0
       let descricao = ''
       try {
         descricao = JSON.parse(batch.filters ?? '{}')?.descricao ?? ''
