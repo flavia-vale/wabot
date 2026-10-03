@@ -603,3 +603,28 @@ imprime o `[VEREDITO]`. Teste: `test/admin-diagnostico-conexao.test.js`.
   pedir para a cliente parear de novo (ver `whatsapp-sessao.md`).
 - Sem jargão (`405`, `socket`, `handshake`, `pairing`) nas frases da tela.
 - Custo: 6 consultas pequenas por clique, zero processo novo, zero RAM.
+
+## Menu de 5 entradas: `/admin/observabilidade` e `/admin/emails` encaixados (2026-10-03)
+
+**O que era:** o cabeçalho do Início tinha 9 botões (Capacidade, Erros, Funil,
+Contato com cliente...) e duas páginas fora do eixo: `/admin/observabilidade`
+(texto de roadmap, 490 linhas) e `/admin/emails` (modelos + envio + WhatsApp
+na mesma tela).
+
+**Onde mora agora:**
+- Menu (`dashboard/app/admin/page.js`): Hoje, Clientes, Receita, Crescimento
+  (`/admin/funil`), Operação. Capacidade, Erros, Modelos e Experimentos
+  (teste-shard, só com a env ligada) são links DENTRO da Operação.
+- Operação → Saúde: `dashboard/components/SaudeSection.js` (GO/NO-GO em 4 chips,
+  alertas e fila de webhooks de pagamento com Reprocessar + `window.confirm`;
+  `runReprocess` mora aqui). `/admin/observabilidade` foi apagada.
+- `dashboard/components/AdminContato.js` é o ÚNICO componente de contato, com
+  duas rotas finas: Clientes → Contato em massa (`/admin/clientes/contato`:
+  e-mail com `confirmTotal`, histórico, WhatsApp) e Operação → Modelos
+  (`/admin/operacao/modelos`: edição de templates). `/admin/emails` foi apagada.
+- Teste: `test/admin-menu-cinco-entradas.test.js`.
+
+**Não regredir:** não recriar as duas páginas nem duplicar o componente; as
+asserções de `test/admin-acoes-com-confirmacao.test.js` sobre `runReprocess` e
+`enviarIndividual` apontam para os arquivos novos (nunca apagar a garantia);
+menu = só 5 entradas. Custo: zero RAM, zero processo.
