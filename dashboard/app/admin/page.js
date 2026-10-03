@@ -562,33 +562,8 @@ export default function AdminPage() {
         if (!active) return
         setAdmin(adminData)
         setAccessDenied(false)
-        return Promise.all([
-          Promise.resolve(adminData),
-          api.adminOverview(),
-          api.adminUsers({ limit: 20 }),
-          api.adminWaDisconnectedUsers({ limit: 12, minSuccess: 1 }).catch(() => null),
-          api.adminSuccessOverview().catch(() => null),
-          api.adminSuccessQueue({ limit: 8 }).catch(() => null),
-          api.adminSystemMetrics().catch(() => null),
-          api.adminSystemObservability().catch(() => null),
-          api.adminOnline({ limit: 120 }).catch(() => null),
-          api.adminQualidadeEntrega(48).catch(() => null),
-        ])
-      })
-      .then((result) => {
-        if (!active || !result) return
-        const [adminData, overviewData, usersData, waDisconnectedUsersData, successData, successQueueData, systemMetricsData, systemObservabilityData, onlineData, entregaData] = result
-        setAdmin(adminData)
-        setOverview(overviewData)
-        setUsers(usersData)
-        setWaDisconnectedUsers(waDisconnectedUsersData)
-        setSuccess(successData)
-        setSuccessQueue(successQueueData)
-        setSystemMetrics(systemMetricsData)
-        setSystemObservability(systemObservabilityData)
-        setOnline(onlineData)
-        setEntrega(entregaData)
-        setLoadedAt(new Date())
+        const painel = await fetchPainel('', '', false)
+        if (active) aplicarPainel(painel)
       })
       .catch((err) => {
         if (!active) return

@@ -17,7 +17,7 @@ wabot_deploy_lock() {
   if [[ "${WABOT_DEPLOY_LOCK_HELD:-0}" == "1" ]]; then return 0; fi
   # Janela de manutenção aberta (scripts/janela.sh): alguém está mexendo no
   # servidor à mão. O deploy não entra no meio — para com erro claro.
-  local janela="${WABOT_JANELA_FILE:-$HOME/.wabot-janela}"
+  local janela="${WABOT_JANELA_FILE:-${HOME:-/tmp}/.wabot-janela}"
   if [[ -f "$janela" && "${IGNORAR_JANELA:-0}" != "1" ]]; then
     echo "ERRO: janela de manutenção aberta ($(head -n 1 "$janela")). Deploy não executado."
     echo "Feche com scripts/janela.sh fechar e rode o deploy de novo."
@@ -27,7 +27,7 @@ wabot_deploy_lock() {
     echo "  Aviso: flock ausente; seguindo SEM a trava de deploy único."
     return 0
   fi
-  local lock="${WABOT_DEPLOY_LOCK:-$HOME/.wabot-deploy.lock}"
+  local lock="${WABOT_DEPLOY_LOCK:-${HOME:-/tmp}/.wabot-deploy.lock}"
   local wait_s="${WABOT_DEPLOY_LOCK_WAIT_S:-900}"
   export WABOT_DEPLOY_LOCK_HELD=1
   echo "  Trava de deploy: $lock (espera até ${wait_s}s se outro deploy estiver rodando)"

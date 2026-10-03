@@ -6,7 +6,7 @@
 // aqui é mandar e-mail para a pessoa errada.
 //
 // Filtros aceitos (todos opcionais; combinam entre si com "E"):
-//   plano            'trial' | 'basic' | 'pro'
+//   plano            'trial' | 'basic' | 'pro' | 'premium'
 //   acesso           'ativo' | 'vence_em' | 'vencido_ha' | 'sem_acesso'
 //   dias             número que acompanha 'vence_em' / 'vencido_ha'
 //   cadastradoNosUltimosDias
@@ -20,7 +20,7 @@
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
 export const AUDIENCE_FILTERS = Object.freeze([
-  { name: 'plano', label: 'Plano', options: ['trial', 'basic', 'pro'] },
+  { name: 'plano', label: 'Plano', options: ['trial', 'basic', 'pro', 'premium'] },
   { name: 'acesso', label: 'Situação do acesso', options: ['ativo', 'vence_em', 'vencido_ha', 'sem_acesso'] },
   { name: 'dias', label: 'Quantidade de dias (para "vence em" / "vencido há")' },
   { name: 'cadastradoNosUltimosDias', label: 'Cadastrado nos últimos N dias' },

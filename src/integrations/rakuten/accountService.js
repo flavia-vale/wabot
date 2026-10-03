@@ -17,6 +17,7 @@ export const RAKUTEN_MESSAGES = Object.freeze({
   auth: 'A Rakuten não aceitou esses dados. Confira o SID, o Client ID e o Client Secret e salve de novo.',
   unavailable: 'Não conseguimos falar com a Rakuten agora. Tente de novo em alguns minutos.',
   rateLimited: 'A Rakuten pediu uma pausa nas consultas. Tentamos de novo sozinhos daqui a pouco.',
+  accessDenied: 'A Rakuten não liberou as ofertas desta conta agora. Tentamos de novo sozinhos em 15 minutos.',
   ok: 'Conexão funcionando.',
 })
 

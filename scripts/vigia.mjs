@@ -119,6 +119,13 @@ if (redisUrl && mode === 'remote') {
       return flags.every(Boolean)
     })
     snapshot.supervisorAlive = alive
+    // Revisão C11: resultado da varredura da API (só com roteamento por nó).
+    if (routing) {
+      snapshot.dualOwners = await safe(async () => {
+        const raw = await redis.get(p.DUAL_OWNER_STATUS_KEY)
+        return raw ? JSON.parse(raw) : null
+      })
+    }
     snapshot.queueBacklog = await safe(async () => {
       const names = routing ? nodes.map(id => p.commandQueueName(id)) : [p.COMMAND_QUEUE]
       const sizes = await Promise.all(names.map(n => redis.llen(`bull:${n}:wait`)))

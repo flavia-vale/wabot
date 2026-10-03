@@ -7,8 +7,8 @@
 // (sem duplicar).
 
 import logger from '../logger.js'
-import { DELIVERY_NETWORK, deliveryNetworkOfDestinationId, isDeliveryNetworkEnabled } from '../core/delivery/networks.js'
-import { buildOfferQueueSource } from '../offerQueue/sourceTag.js'
+import { DELIVERY_NETWORK, canonicalDestinationId, deliveryNetworkOfDestinationId, isDeliveryNetworkEnabled } from '../core/delivery/networks.js'
+import { broadcastSourceGroup } from '../offerQueue/sourceTag.js'
 import { enqueueDeliveryOutbox } from './enqueue.js'
 
 export function splitTargetsByDeliveryNetwork(jids = []) {
@@ -17,7 +17,7 @@ export function splitTargetsByDeliveryNetwork(jids = []) {
   for (const jid of jids) {
     const deliveryNetwork = deliveryNetworkOfDestinationId(jid)
     if (deliveryNetwork === DELIVERY_NETWORK.WHATSAPP) whatsapp.push(jid)
-    else outros.push({ deliveryNetwork, destinationId: jid })
+    else outros.push({ deliveryNetwork, destinationId: canonicalDestinationId(jid) })
   }
   return { whatsapp, outros }
 }
@@ -28,9 +28,10 @@ export function needsWhatsappSession(jids = []) {
   return jids.some((jid) => deliveryNetworkOfDestinationId(jid) === DELIVERY_NETWORK.WHATSAPP)
 }
 
+// Mesmo rótulo de origem que o robô do WhatsApp grava (offerQueue:<id>,
+// offerAutomation, manual) — o histórico mostra igual nos dois aplicativos.
 function historySource(opts = {}) {
-  if (opts.source === 'offerQueue' && opts.queueId) return buildOfferQueueSource(opts.queueId)
-  return opts.source ?? null
+  return broadcastSourceGroup(opts)
 }
 
 /**
