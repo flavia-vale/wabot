@@ -297,6 +297,23 @@ segurança (os domínios são por cliente); `clickref` por grupo; loja que recus
 link direto (`deeplinkNotPermitted`) cai no longo (a Awin leva à página inicial
 da loja, ainda com comissão) — todas as 12 medidas aceitam.
 
+### Revisão de riscos 2026-10-03 — fila, robô e reenvio em massa (não regredir)
+
+| # | Risco | Efeito | Correção |
+|---|---|---|---|
+| R1 | Awin devolve lista vazia/menor por instabilidade = "leitura completa" | TODAS as promoções venciam e voltavam como novas → reenvio em massa | `syncService`: só vence por ausência se a leitura viu ≥ 50% das ativas (`absenceSkipped` no resultado); lista de lojas vazia não apaga as lojas guardadas |
+| R1 | Memória de enviados podada só pelas ATIVAS | promoção vencida que volta a valer saía de novo | `awinOffers.knownPromotions`: poda pelo que existe no banco (ativa ou vencida); sai da memória só quando a vencida é apagada (retenção) |
+| R2 | Vários links Awin na mesma mensagem + Awin lenta (8 s cada) | estourava os 25 s da fila → oferta sumia | teto de 10 s por mensagem (`AWIN_MESSAGE_BUDGET_MS`, `deadline` do bot-worker); gerar 4 s; tidd.ly 3 s para TODOS os saltos; tidd.ly que falhou fica guardado 5 min |
+| R7 | Awin fora do ar / código recusado | cada link esperava o tempo inteiro | disjuntor por conta: 3 falhas seguidas (tempo, rede, 5xx) → 5 min só link longo, sem chamada; 401/403 → 30 min. Limite por minuto e 4xx de um link não contam |
+| R3 | Corpo da resposta do tidd.ly nunca lido | conexão presa até o GC | `response.body.cancel()` |
+| R4 | KaBuM bloqueia o IP do servidor (403) | consulta + página da KaBuM em toda oferta até o tempo esgotar | 403/429 da consulta → nenhuma chamada à KaBuM por 30 min (`kabumIsBlocked`, diagnóstico `kabum_bloqueada`); sai o logo, como antes |
+| R5 | Quadro de imagem pequena valia para qualquer foto | foto de produto que falhou (Shopee…) era baixada 2× | `fetchSmallImageAsCard` só para logo de loja (`ui.awin.com`, `merchant.linksynergy.com`) |
+| R6 | Guarda do `tidd.ly` sem protocolo vale para toda cliente | — | mantido; medir em produção antes de mexer |
+
+Estado em memória (disjuntor, cache do tidd.ly, trava da KaBuM) é por
+processo do robô e some no restart — de propósito: sem banco, sem RAM
+relevante (< 1 MB).
+
 ## Diagnóstico
 
 ```bash

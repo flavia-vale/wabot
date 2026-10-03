@@ -8,7 +8,7 @@ import { readMagaluScraperConfig, buildMagaluScraperUrls, takeMagaluScraperQuota
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
 import { awinStorePageUrl } from './awin.js'
 import { rakutenStorePageUrl } from './rakuten.js'
-import { buildKabumImageUrlCandidates, fetchKabumApiImage, isKabumImageUrl, kabumProductId } from './kabumImage.js'
+import { buildKabumImageUrlCandidates, fetchKabumApiImage, isKabumImageUrl, kabumIsBlocked, kabumProductId } from './kabumImage.js'
 import {
   isMagaluBotWallHtml,
   isMagaluBlockedStatus,
@@ -647,6 +647,11 @@ export async function fetchProductImage(platform, productUrl, creds, { onDiagnos
       setCached(productUrl, kabum)
       return kabum
     }
+    // Servidor bloqueado pela KaBuM: a página também volta 403 — não abre.
+    if (kabumIsBlocked()) {
+      onDiagnostic?.({ stage: 'kabum_bloqueada', detail: null })
+      return null
+    }
     onDiagnostic?.({ stage: 'kabum_consulta_sem_foto', detail: null })
   }
 
@@ -1024,8 +1029,23 @@ export const SMALL_IMAGE_MIN_PX = 32
 const SMALL_IMAGE_CANVAS_PX = 800
 const SMALL_IMAGE_MAX_UPSCALE = 3
 
+// Só logos de loja das redes de afiliado (R5, revisão 2026-10-03): foto de
+// produto que falhou (Shopee, ML...) continua como antes — sem quadro e sem
+// baixar a mesma foto uma segunda vez. Awin: /programmes → logoUrl em
+// ui.awin.com; Rakuten: logo_url em merchant.linksynergy.com.
+const STORE_LOGO_HOSTS = ['ui.awin.com', 'merchant.linksynergy.com']
+
+export function isAffiliateStoreLogoUrl(url) {
+  try {
+    const parsed = new URL(String(url ?? ''))
+    return parsed.protocol === 'https:' && STORE_LOGO_HOSTS.includes(parsed.hostname.toLowerCase())
+  } catch {
+    return false
+  }
+}
+
 export async function fetchSmallImageAsCard(imageUrl, refererUrl) {
-  if (!imageUrl) return null
+  if (!isAffiliateStoreLogoUrl(imageUrl)) return null
   const image = await fetchImageBufferRaw(imageUrl, refererUrl, SMALL_IMAGE_MIN_PX)
   if (!image?.buffer) return null
   try {

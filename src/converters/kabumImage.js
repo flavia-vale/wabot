@@ -16,6 +16,22 @@ export const KABUM_PRODUCT_API = 'https://servicespub.prod.api.aws.grupokabum.co
 const KABUM_HOST_RE = /(^|\.)kabum\.com\.br$/i
 const KABUM_IMAGE_HOST_RE = /^images\d*\.kabum\.com\.br$/i
 const API_TIMEOUT_MS = 6_000
+// A KaBuM bloqueia o IP do servidor (medido em 2026-10-01: consulta e página
+// 403; só as fotos do images*.kabum.com.br abrem). Sem trava, cada oferta da
+// KaBuM gastava a consulta + a página até o tempo esgotar. 403/429 → nenhuma
+// chamada à KaBuM por 30 min (R4, revisão 2026-10-03); a oferta segue com o
+// logo da loja, como já acontecia.
+export const KABUM_BLOCK_MS = 30 * 60_000
+let blockedUntil = 0
+
+export function kabumIsBlocked(now = Date.now()) {
+  return now < blockedUntil
+}
+
+/** Só para testes. */
+export function resetKabumBlock() {
+  blockedUntil = 0
+}
 
 function hostOf(url) {
   try { return new URL(String(url ?? '')).hostname.toLowerCase() } catch { return '' }
@@ -51,14 +67,19 @@ export function buildKabumImageUrlCandidates(url) {
 }
 
 /** Primeira foto do produto pela consulta pública da KaBuM, ou null. */
-export async function fetchKabumApiImage(productUrl, { fetchFn = globalThis.fetch, timeoutMs = API_TIMEOUT_MS } = {}) {
+export async function fetchKabumApiImage(productUrl, { fetchFn = globalThis.fetch, timeoutMs = API_TIMEOUT_MS, now = Date.now } = {}) {
   const id = kabumProductId(productUrl)
-  if (!id) return null
+  if (!id || kabumIsBlocked(now())) return null
   try {
     const response = await fetchFn(`${KABUM_PRODUCT_API}${id}`, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(timeoutMs),
     })
+    if (response?.status === 403 || response?.status === 429) {
+      blockedUntil = now() + KABUM_BLOCK_MS
+      try { await response.body?.cancel?.() } catch { /* já fechado */ }
+      return null
+    }
     if (!response?.ok) return null
     const body = await response.json()
     if (!body || body.sucesso === false) return null
