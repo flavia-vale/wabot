@@ -1,0 +1,25 @@
+'use client'
+
+/* Vários números por conta na tela WhatsApp: com o número reserva liberado
+ * para a conta, mostra o controle da reserva; senão, a lista de espera. */
+
+import { useEffect, useState } from 'react'
+import { api } from '@/lib/api'
+import { MultiNumberWaitlistCard } from '@/components/MultiNumberWaitlistCard'
+import { ReserveNumberCard } from '@/components/ReserveNumberCard'
+
+export function MultiNumberSection() {
+  const [reserve, setReserve] = useState(undefined)
+
+  useEffect(() => {
+    let alive = true
+    api.reserveState()
+      .then((data) => { if (alive) setReserve(data) })
+      .catch(() => { if (alive) setReserve(null) })
+    return () => { alive = false }
+  }, [])
+
+  if (reserve === undefined) return null
+  if (reserve?.access?.allowed) return <ReserveNumberCard initialState={reserve} />
+  return <MultiNumberWaitlistCard />
+}
