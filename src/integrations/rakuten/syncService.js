@@ -26,6 +26,8 @@ import { RakutenAccessDeniedError, RakutenAuthError, RakutenRateLimitError, Raku
 import { extractAdvertiser, extractCouponPage, translateCoupon } from './translate.js'
 import { extractApprovedMerchants, extractRakutenLinkId, storeDomainsFromUrl } from './storeMatcher.js'
 import { RAKUTEN_ACCOUNT_STATUS, RAKUTEN_MESSAGES } from './accountService.js'
+import { notifyRakutenRefused } from './refusalAlert.js'
+import { isEmailConfigured, sendMail as defaultSendMail } from '../../email/mailer.js'
 
 export const RAKUTEN_MAX_PAGES = 20
 export const RAKUTEN_MAX_NEW_ADVERTISERS_PER_RUN = 30
@@ -202,6 +204,17 @@ async function syncProgrammes({ db, client, account, creds, runId, checkDeadline
   return merchants.length
 }
 
+async function discoverLinkIdByDeepLink({ db, client, account, creds }) {
+  const programme = await db.rakutenProgramme.findFirst({
+    where: { accountId: account.id, storeUrl: { not: null } },
+    orderBy: { advertiserId: 'asc' },
+    select: { advertiserId: true, storeUrl: true },
+  })
+  if (!programme) return null
+  const body = await client.generateDeepLink(creds, { advertiserId: programme.advertiserId, url: programme.storeUrl })
+  return extractRakutenLinkId(body?.advertiser?.deep_link?.deep_link_url) || null
+}
+
 function describeFailure(error) {
   if (error instanceof RakutenAuthError) return RAKUTEN_MESSAGES.auth
   if (error instanceof RakutenRateLimitError) return RAKUTEN_MESSAGES.rateLimited
@@ -272,6 +285,16 @@ export async function syncRakutenAccount(accountId, deps = {}) {
       } catch (error) {
         if (error instanceof RakutenAuthError || error instanceof RakutenTimeoutError) throw error
         programmesError = error
+      }
+      // R18: feed sem promoção nenhuma não dá o `id` dos links → conta não
+      // convertia. Pede um deep link oficial (1 chamada) só enquanto não há id.
+      if (!linkId && !account.linkId && typeof client.generateDeepLink === 'function') {
+        try {
+          checkDeadline()
+          linkId = await discoverLinkIdByDeepLink({ db, client, account, creds })
+        } catch (error) {
+          if (error instanceof RakutenAuthError || error instanceof RakutenTimeoutError) throw error
+        }
       }
     } catch (error) {
       failure = error
@@ -348,6 +371,13 @@ export async function syncRakutenAccount(accountId, deps = {}) {
       data: { status: runStatus, ...counters, errorsJson: JSON.stringify(errors.slice(0, MAX_ERRORS)), finishedAt },
     })
     await db.rakutenAccount.update({ where: { id: account.id }, data: accountUpdate })
+
+    // R9: avisa a cliente na PASSAGEM para recusada (uma vez; janela de 7 dias).
+    if (runStatus === 'invalid_credential' && account.status !== RAKUTEN_ACCOUNT_STATUS.INVALID_CREDENTIAL) {
+      const notify = deps.notifyRefused ?? notifyRakutenRefused
+      const sendMail = deps.sendMail ?? (isEmailConfigured() ? defaultSendMail : null)
+      await notify({ db, userId: account.userId, sendMail, now: finishedAt }).catch(() => {})
+    }
 
     const old = await db.rakutenSyncRun.findMany({
       where: { accountId: account.id },

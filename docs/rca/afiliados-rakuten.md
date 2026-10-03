@@ -193,6 +193,15 @@ Detalhes e testes: `docs/revisao-rakuten-2026-10-03.md`, `test/rakuten-revisao.t
 - Automação **Rakuten** que pulou por falta de promoção espera 15 min no cron.
   Shopee e Awin não mudaram.
 - Logo só `https` e host público.
+- Conta que passa a recusada → e-mail `rakuten_dados_recusados` (uma vez,
+  janela de 7 dias; conta parada é barrada pelo motor, como os outros avisos).
+- Cliente sem acesso (plano vencido há mais de 3 dias, banida/suspensa) não
+  sincroniza: a conta é reagendada para 6 h depois. Sem data de vencimento,
+  continua.
+- Seleção com as correções F5/F6/F7 da Awin: revezamento entre execuções,
+  candidatas por loja e memória de enviados podada pelo que está ativo.
+- Sem promoção no feed, o `id` dos links vem do deep link oficial
+  (`POST /v1/links/deep_links`, 1 chamada só enquanto não há `id`).
 
 ## Diagnóstico
 

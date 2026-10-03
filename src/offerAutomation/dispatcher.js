@@ -336,6 +336,7 @@ export async function runAutomation(automation, {
   } else if (source === 'rakuten') {
     // Link e logo já vêm do sync: nada a buscar na hora do envio.
     const loaded = await loadRakutenOffers({ db: dbInstance, automation, sentItemIds, now: now(), limit: automation.offersPerSend })
+    if (Array.isArray(loaded.sentItemIds)) sentItemIds = loaded.sentItemIds
     if (loaded.skipped) return { skipped: loaded.skipped }
     ;({ offers, rawCount } = loaded)
     if (!offers.length) return { skipped: 'all_offers_filtered' }

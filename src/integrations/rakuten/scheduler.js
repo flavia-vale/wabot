@@ -23,6 +23,20 @@ let tickingSince = 0
 // próximo roda mesmo assim (a mesma conta nunca roda duas vezes: syncService
 // segura por conta).
 export const RAKUTEN_TICK_STUCK_MS = 30 * 60_000
+// Cliente sem acesso (plano vencido há mais de 3 dias, conta banida/suspensa)
+// não gasta chamada à Rakuten nem gravação no banco: a conta é só reagendada
+// para daqui a 6 h e volta sozinha quando o plano renovar. Nada é apagado.
+// Sem data de vencimento = segue sincronizando (revisão 2026-10-03, R12).
+export const RAKUTEN_NO_ACCESS_GRACE_MS = 3 * 24 * 60 * 60_000
+export const RAKUTEN_NO_ACCESS_RECHECK_MS = 6 * 60 * 60_000
+
+export function userHasNoAccess(user, now = new Date()) {
+  if (!user) return false
+  if (user.status === 'banned' || user.status === 'suspended') return true
+  if (!user.accessExpiresAt) return false
+  const expiresAt = new Date(user.accessExpiresAt).getTime()
+  return Number.isFinite(expiresAt) && now.getTime() - expiresAt > RAKUTEN_NO_ACCESS_GRACE_MS
+}
 
 export function rakutenSyncEnabled(env = process.env) {
   return String(env.RAKUTEN_SYNC_ENABLED ?? 'true').toLowerCase() !== 'false'
@@ -49,10 +63,15 @@ export async function tickRakutenSync(deps = {}) {
       },
       orderBy: { nextSyncAt: 'asc' },
       take: deps.limit ?? ACCOUNTS_PER_TICK,
-      select: { id: true },
+      select: { id: true, user: { select: { status: true, accessExpiresAt: true } } },
     })
-    for (const { id } of due) {
+    for (const { id, user } of due) {
       summary.checked++
+      if (userHasNoAccess(user, at)) {
+        summary.skipped = (summary.skipped || 0) + 1
+        await db.rakutenAccount.update({ where: { id }, data: { nextSyncAt: new Date(at.getTime() + RAKUTEN_NO_ACCESS_RECHECK_MS) } }).catch(() => {})
+        continue
+      }
       try {
         const result = await sync(id, { db, now, trigger: 'schedule', client: deps.client })
         if (result?.status === 'success' || result?.status === 'partial') summary.synced++

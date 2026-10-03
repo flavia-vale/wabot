@@ -214,7 +214,7 @@ export function createRakutenClient({
   // Chamada autenticada. Token recusado (vencido antes da hora) → pede um
   // novo UMA vez; recusado de novo → RakutenAccessDeniedError (passageiro:
   // quem decide desligar a conta é a sync, depois de 3 seguidos — R2).
-  async function request(creds, { path, query = null, accept = 'application/json', parse = 'json' }) {
+  async function request(creds, { path, query = null, accept = 'application/json', parse = 'json', method = 'GET', body = undefined }) {
     const c = readCreds(creds)
     const url = new URL(path, baseUrl)
     for (const [key, value] of Object.entries(query || {})) {
@@ -223,7 +223,11 @@ export function createRakutenClient({
     for (let attempt = 0; attempt < 2; attempt++) {
       const token = await accessToken(c)
       await limiter.acquire(c.key)
-      const response = await send(url.toString(), { method: 'GET', headers: { Authorization: `Bearer ${token}`, Accept: accept } })
+      const response = await send(url.toString(), {
+        method,
+        headers: { Authorization: `Bearer ${token}`, Accept: accept, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      })
       if (response.status === 401 || response.status === 403) {
         tokens.delete(c.key)
         if (attempt === 0) continue
@@ -266,7 +270,16 @@ export function createRakutenClient({
     return request(creds, { path: '/linklocator/1.0/getMerchByAppStatus/approved', accept: 'application/xml', parse: 'text' })
   }
 
-  return { verify, listCoupons, getAdvertiser, listApprovedMerchants, cachedTokens: () => tokens.size }
+  // Deep link oficial (POST /v1/links/deep_links) — medido em 2026-10-03:
+  // devolve advertiser.deep_link.deep_link_url com o MESMO `id` dos links do
+  // feed. Usado só para descobrir o `id` da conta quando o feed não tem
+  // nenhuma promoção (revisão 2026-10-03, R18). Não abre nem conta clique.
+  async function generateDeepLink(creds, { advertiserId, url }) {
+    if (!/^\d{1,12}$/.test(String(advertiserId ?? ''))) throw new RakutenHttpError(400)
+    return request(creds, { path: '/v1/links/deep_links', method: 'POST', body: { url: String(url), advertiser_id: Number(advertiserId) } })
+  }
+
+  return { verify, listCoupons, getAdvertiser, listApprovedMerchants, generateDeepLink, cachedTokens: () => tokens.size }
 }
 
 let defaultClient = null

@@ -329,3 +329,103 @@ test('R16: logo só https e host público', () => {
   }
   assert.equal(extractAdvertiser({ advertiser: { name: 'X', url: 'https://x.com.br/', logo_url: 'http://127.0.0.1/logo' } }).logoUrl, null)
 })
+
+// ================= PR 2 =================
+
+test('R9: avisa a cliente UMA vez quando a conta passa a recusada', async () => {
+  __resetRakutenEmptyStreaks()
+  const { userId, account } = await makeAccount()
+  try {
+    const calls = []
+    const notifyRefused = async (args) => { calls.push(args.userId) }
+    const refuse = () => syncRakutenAccount(account.id, { ...deps({ couponsError: new RakutenAuthError(401) }), notifyRefused })
+    await refuse()
+    assert.deepEqual(calls, [userId])
+    await db.rakutenAccount.update({ where: { id: account.id }, data: { status: 'invalid_credential' } })
+    await refuse()
+    assert.equal(calls.length, 1, 'já estava recusada: não avisa de novo')
+  } finally {
+    await cleanup(userId)
+  }
+})
+
+test('R9: e-mail usa o modelo da Rakuten, grava a janela de 7 dias e conta parada é barrada pelo motor', async () => {
+  const { notifyRakutenRefused, RAKUTEN_REFUSED_TEMPLATE_SLUG } = await import('../src/integrations/rakuten/refusalAlert.js')
+  const registry = readFileSync(new URL('../src/email/registry.js', import.meta.url), 'utf8')
+  assert.match(registry, new RegExp(`slug: '${RAKUTEN_REFUSED_TEMPLATE_SLUG}'`))
+  const { userId } = await makeAccount()
+  try {
+    await db.user.update({ where: { id: userId }, data: { email: `cliente-${userId.slice(-6)}@gmail.com` } })
+    const sendMail = async () => ({ messageId: 'x' })
+    const slugs = []
+    const sendTemplate = async ({ slug }) => { slugs.push(slug); return { sent: true } }
+    assert.equal((await notifyRakutenRefused({ db, userId, sendMail, sendTemplate })).sent, true)
+    assert.deepEqual(slugs, [RAKUTEN_REFUSED_TEMPLATE_SLUG])
+    assert.equal((await notifyRakutenRefused({ db, userId, sendMail, sendTemplate })).reason, 'cooldown', 'janela de 7 dias')
+    await db.analyticsEvent.deleteMany({ where: { userId } })
+    // Motor real: conta sem uso do robô não recebe aviso operacional.
+    assert.equal((await notifyRakutenRefused({ db, userId, sendMail })).reason, 'account_idle')
+    assert.equal((await notifyRakutenRefused({ db, userId, sendMail: null })).reason, 'no_mailer')
+  } finally {
+    await db.analyticsEvent.deleteMany({ where: { userId } })
+    await cleanup(userId)
+  }
+})
+
+test('R12: conta de cliente sem acesso (plano vencido há >3 dias) é só reagendada, sem chamar a Rakuten', async () => {
+  const { userHasNoAccess } = await import('../src/integrations/rakuten/scheduler.js')
+  const now = new Date('2026-10-03T12:00:00Z')
+  assert.equal(userHasNoAccess({ accessExpiresAt: new Date('2026-09-25T00:00:00Z') }, now), true)
+  assert.equal(userHasNoAccess({ accessExpiresAt: new Date('2026-10-01T00:00:00Z') }, now), false, 'dentro dos 3 dias')
+  assert.equal(userHasNoAccess({ accessExpiresAt: null }, now), false, 'sem data = segue')
+  assert.equal(userHasNoAccess({ status: 'banned' }, now), true)
+  const updates = []
+  const synced = []
+  await tickRakutenSync({
+    db: { rakutenAccount: {
+      findMany: async () => [{ id: 'a1', user: { accessExpiresAt: new Date(Date.now() - 10 * 86_400_000) } }, { id: 'a2', user: { accessExpiresAt: null } }],
+      update: async (args) => { updates.push(args) },
+    } },
+    syncFn: async (id) => { synced.push(id); return { status: 'success' } },
+    logger: { warn() {}, error() {} },
+  })
+  assert.deepEqual(synced, ['a2'])
+  assert.equal(updates[0].where.id, 'a1')
+  assert.ok(updates[0].data.nextSyncAt > new Date())
+})
+
+test('R15: revezamento entre execuções e memória de enviados podada pelo que está ativo', async () => {
+  const { selectRakutenCandidates, rakutenItemId, pruneRakutenSentIds } = await import('../src/offerAutomation/rakutenOffers.js')
+  const promo = (id, store, endHours) => ({ id: `r${id}`, promotionId: `1.${id}`, advertiserId: String(store), advertiserName: `Loja ${store}`, title: `Promo ${id}`, couponCode: null, startDate: null, endDate: new Date(Date.now() + endHours * 3_600_000), status: 'active' })
+  const a1 = promo(1, 10, 5)
+  const b1 = promo(2, 20, 50)
+  // A loja 10 saiu por último → a loja 20 abre a rodada, mesmo vencendo depois.
+  const picked = selectRakutenCandidates([a1, promo(3, 10, 6), b1], { sentItemIds: [rakutenItemId(promo(9, 10, 1))], limit: 1 })
+  assert.equal(picked[0].advertiserId, '20')
+  const pruned = pruneRakutenSentIds(['shopee:123', rakutenItemId(a1), rakutenItemId(promo(99, 30, 1))], [a1])
+  assert.deepEqual(pruned, ['shopee:123', rakutenItemId(a1)])
+})
+
+test('R18: feed sem promoção → id dos links vem do deep link oficial, e a conta passa a converter', async () => {
+  __resetRakutenEmptyStreaks()
+  const { userId, account } = await makeAccount()
+  try {
+    let deepLinkCalls = 0
+    const client = {
+      ...fakeClient({ coupons: EMPTY_FEED }),
+      generateDeepLink: async (creds, { advertiserId, url }) => {
+        deepLinkCalls++
+        return { advertiser: { id: Number(advertiserId), deep_link: { deep_link_url: `https://click.linksynergy.com/deeplink?id=IdDaConta01&mid=${advertiserId}&murl=${encodeURIComponent(url)}` } } }
+      },
+    }
+    await syncRakutenAccount(account.id, { db, client, decrypt: (value) => value, trigger: 'manual' })
+    let row = await db.rakutenAccount.findUnique({ where: { id: account.id } })
+    assert.equal(row.linkId, 'IdDaConta01')
+    assert.equal(deepLinkCalls, 1)
+    assert.ok(await loadRakutenConversionContext(userId, { db }))
+    await syncRakutenAccount(account.id, { db, client, decrypt: (value) => value, trigger: 'manual' })
+    assert.equal(deepLinkCalls, 1, 'com id guardado, não pergunta de novo')
+  } finally {
+    await cleanup(userId)
+  }
+})
