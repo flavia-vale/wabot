@@ -168,7 +168,12 @@ Flag desligada = comportamento idêntico (testes em `test/multi-supervisor-revis
 | C5 | API com flag + supervisor n1 no modo antigo = painel inteiro com erro | comandos do n1 vão pela fila legada (`node_routing_legacy_fallback`) |
 | C6 | mudar conta: desfazer não parava o destino nem religava a origem; rsync sem `--delete`; cliente podia religar no meio | `lifecycle=moving_node` (ligar/pedir código recusam), rsync `--delete`, desfazer completo, retomada |
 | C7 | `deploy_node.sh` rodava `npm ci` com robôs vivos e `restart --update-env` | instala ao lado e troca; só se o lock mudou; `delete`+`start`; trava de deploy |
-| C10 | "servidor não responde" virava 500 + alerta falso | 503 com frase leiga |
+| C10 | "servidor não responde" virava 500 + alerta falso | erro nasce 503 e não conta como "FALHA DA API" |
+| C8 | por até 45 s após mudar a conta, comandos iam ao servidor antigo | recusa/"parar falso" → relê o dono e tenta UMA vez no novo |
+| C9 | conta nova presa a servidor fora do ar/lotado; cadastros simultâneos lotavam o mesmo nó | conta NUNCA pareada troca de nó ao ligar; reserva de vaga por 2 min |
+| C11 | "robô em 2 servidores" só aparecia se alguém contasse | varredura a cada 5 min (API), e-mail e linha no vigia; contador do /metrics corrigido |
+| C12 | vigia no servidor 2 exigiria api/dashboard | exige só o supervisor lá; pré-check de rede (latência, senha, TLS) já existia |
+| C13 | /metrics e aviso de vagas perguntavam a todos os nós a cada vez | cache de 15 s |
 
 **Desfazer a ativação SEMPRE na ordem: API primeiro, supervisor depois** (o C5
 segura o erro inverso, mas a ordem certa evita depender dele).

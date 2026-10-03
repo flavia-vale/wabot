@@ -28,11 +28,14 @@ import {
   heartbeatKey,
   isValidNodeId,
   lastEventKey,
+  PLACEMENT_RESERVATION_TTL_SECONDS,
+  DUAL_OWNER_STATUS_KEY,
+  placementReservationKey,
   resolveRedisUrl,
 } from './protocol.js'
 import { isNodeRoutingEnabled, resolveKnownNodeIds } from './nodeRouting.js'
 import { createRedisClock } from './redisClock.js'
-import { findDualOwners, pickNodeForNewSession, resolveSessionNodeId, shouldPlaceSession } from './placement.js'
+import { findDualOwners, pickNodeForNewSession, resolveSessionNodeId, shouldPlaceSession, shouldReplaceUnpaired, withReservations } from './placement.js'
 
 // P2-2: pub/sub é versionado (decodeEvent rejeita versão incompatível). Antes
 // isso era um descarte SILENCIOSO — num rolling deploy com PROTOCOL_VERSION
@@ -297,8 +300,29 @@ export function createSupervisorClient({
       return enqueue(queue, queueEvents, name, payload, timeoutMs)
     }
     // Comando sem userId (ex.: métricas do shard POC) vai para o 'n1'.
-    const target = nodeId ?? (payload?.userId ? await resolveNodeId(payload.userId) : DEFAULT_NODE_ID)
-    return sendToNode(target, name, payload, timeoutMs)
+    if (nodeId || !payload?.userId) return sendToNode(nodeId ?? DEFAULT_NODE_ID, name, payload, timeoutMs)
+    // Revisão C8: logo depois de uma conta mudar de servidor, o cache (até 45 s)
+    // ainda aponta o antigo — que recusa ("Session owner mismatch") ou diz que
+    // não há robô para parar. Relê o banco e, se o dono mudou, tenta UMA vez no
+    // certo. Sem risco de duplicar: a recusa acontece ANTES de executar.
+    const first = await resolveNodeId(payload.userId)
+    const retryOnNewOwner = async (fallback) => {
+      nodeOfUser.delete(payload.userId)
+      const second = await resolveNodeId(payload.userId)
+      if (second === first) return fallback()
+      return sendToNode(second, name, payload, timeoutMs)
+    }
+    let result
+    try {
+      result = await sendToNode(first, name, payload, timeoutMs)
+    } catch (err) {
+      if (!/Session owner mismatch/.test(String(err?.message))) throw err
+      return retryOnNewOwner(() => { throw err })
+    }
+    if ((name === COMMAND.STOP_BOT || name === COMMAND.IS_RUNNING) && result === false) {
+      return retryOnNewOwner(() => result)
+    }
+    return result
   }
 
   // Lê o último valor cacheado de um evento (QR/STATUS) gravado pelo supervisor
@@ -411,6 +435,33 @@ export function createSupervisorClient({
   // Sessão nova (sem nodeId): escolhe o nó vivo com mais vagas e GRAVA o
   // nodeId ANTES de enviar o START_BOT — assim um segundo comando concorrente
   // já enxerga o dono. Devolve null quando nenhum nó pode receber.
+  async function measureNodes() {
+    const counts = await listRunningBotsByNode()
+    const capacities = await getNodeCapacities()
+    const reserved = {}
+    await Promise.all(nodeIds.map(async id => {
+      try { reserved[id] = Number(await publisherCheck?.get(placementReservationKey(id))) || 0 } catch { reserved[id] = 0 }
+    }))
+    const nodes = await Promise.all(nodeIds.map(async id => ({
+      nodeId: id,
+      alive: await isSupervisorAlive(id),
+      running: counts[id] ?? null,
+      // Teto publicado pelo próprio nó; sem chave NÃO se presume (nó nunca é escolhido).
+      max: capacities[id] ?? null,
+    })))
+    return withReservations(nodes, reserved)
+  }
+
+  // Reserva a vaga escolhida por 2 min (C9): cadastros simultâneos não caem
+  // todos no mesmo nó só porque a contagem ainda não mudou. Best-effort.
+  async function reservePlacement(nodeId) {
+    try {
+      const key = placementReservationKey(nodeId)
+      await publisherCheck.incr(key)
+      await publisherCheck.expire(key, PLACEMENT_RESERVATION_TTL_SECONDS)
+    } catch {}
+  }
+
   async function ensureNodePlacement(userId) {
     // Número reserva nunca escolhe nó próprio: segue o nó da conta.
     if (isExtraSessionKey(userId)) return resolveNodeId(userId)
@@ -419,6 +470,24 @@ export function createSupervisorClient({
     // Regra única: nulo = 'n1'. Conta antiga (já pareada) NUNCA é recolocada.
     if (!shouldPlaceSession(row)) {
       const existing = resolveSessionNodeId(row)
+      // C9: conta nunca pareada presa a um nó fora do ar/lotado pode ir para outro.
+      if (nodeIds.length > 1 && row && !row.phone && row.status === 'disconnected') {
+        const nodes = await measureNodes()
+        const current = nodes.find(n => n.nodeId === existing)
+        if (shouldReplaceUnpaired({ row, node: current ?? { alive: false } })) {
+          const chosen = pickNodeForNewSession({ nodes: nodes.filter(n => n.nodeId !== existing) })
+          if (chosen) {
+            const r = await database.waSession.updateMany({ where: { userId, nodeId: row.nodeId }, data: { nodeId: chosen } })
+            if (r?.count) {
+              await reservePlacement(chosen)
+              logger.warn({ userId, from: existing, to: chosen, event: 'session_replaced_unpaired' }, 'conta nunca pareada trocou de servidor (o dela estava fora do ar ou lotado)')
+            }
+            const final = resolveSessionNodeId(await database.waSession.findUnique({ where: { userId }, select: { nodeId: true } }))
+            nodeOfUser.set(userId, { nodeId: final, expiresAt: now() + nodeCacheTtlMs })
+            return final
+          }
+        }
+      }
       nodeOfUser.set(userId, { nodeId: existing, expiresAt: now() + nodeCacheTtlMs })
       return existing
     }
@@ -426,16 +495,7 @@ export function createSupervisorClient({
     if (nodeIds.length === 1) {
       chosen = nodeIds[0] // um nó só: nada a decidir nem a medir
     } else {
-      const counts = await listRunningBotsByNode()
-      const capacities = await getNodeCapacities()
-      const nodes = await Promise.all(nodeIds.map(async id => ({
-        nodeId: id,
-        alive: await isSupervisorAlive(id),
-        running: counts[id] ?? null,
-        // Teto publicado pelo próprio nó; sem chave NÃO se presume (nó nunca é escolhido).
-        max: capacities[id] ?? null,
-      })))
-      chosen = pickNodeForNewSession({ nodes })
+      chosen = pickNodeForNewSession({ nodes: await measureNodes() })
     }
     if (!chosen) {
       logger.warn({ userId, nodeIds }, 'Nenhum nó do supervisor disponível para a sessão nova — start recusado')
@@ -454,6 +514,7 @@ export function createSupervisorClient({
       }
     }
     const final = resolveSessionNodeId(await database.waSession.findUnique({ where: { userId }, select: { nodeId: true } }))
+    if (nodeIds.length > 1 && final === chosen) await reservePlacement(final)
     nodeOfUser.set(userId, { nodeId: final, expiresAt: now() + nodeCacheTtlMs })
     return final
   }
@@ -489,6 +550,19 @@ export function createSupervisorClient({
     }
   }
 
+  // Revisão C11: varredura explícita (a API roda a cada 5 min, só com a flag).
+  // Grava o resultado no Redis para o vigia ler; nó sem resposta não conta.
+  async function checkDualOwners() {
+    const lists = await listRunningByNode()
+    const dual = findDualOwners(lists)
+    await reportDualOwners(lists)
+    try {
+      if (!publisherCheck) await init()
+      await publisherCheck.set(DUAL_OWNER_STATUS_KEY, JSON.stringify({ at: now(), count: dual.length, users: dual.slice(0, 10) }), 'EX', 900)
+    } catch {}
+    return dual
+  }
+
   // Fan-out aos nós VIVOS. Cada valor é a lista de userIds do nó, ou null se
   // aquele nó não respondeu. Nó morto (sem heartbeat) não entra: não roda robô.
   async function listRunningByNode() {
@@ -505,7 +579,17 @@ export function createSupervisorClient({
     return result
   }
   // Contagem por nó: { n1: 12, n2: null } (null = não medido; NUNCA 0).
+  // Revisão C13: com roteamento, /metrics, o aviso de vagas e a escolha de nó
+  // perguntam a TODOS os nós; um cache de 15 s evita uma rajada de comandos
+  // por raspagem. Só o resultado completo (sem nó "não medido") é guardado.
+  let byNodeCache = { at: 0, value: null }
   async function listRunningBotsByNode() {
+    if (nodeRouting && byNodeCache.value && now() - byNodeCache.at < 15_000) return { ...byNodeCache.value }
+    const value = await listRunningBotsByNodeFresh()
+    if (nodeRouting && Object.values(value).every(v => v !== null)) byNodeCache = { at: now(), value }
+    return value
+  }
+  async function listRunningBotsByNodeFresh() {
     if (!nodeRouting) {
       try {
         const list = await send(COMMAND.LIST_RUNNING_BOTS, {})
@@ -620,5 +704,8 @@ export function createSupervisorClient({
     moveSessionToShard, rollbackSessionFromShard, getShardMetrics,
     resolveNodeId, nodeIds, nodeRouting, getNodeCapacities,
     forgetNode: userId => { nodeOfUser.delete(userId) },
+    checkDualOwners,
+    // Antes não era exportado: o contador do /metrics ficava sempre 0.
+    getDualOwnerTotal: () => dualOwnerTotal,
   })
 }

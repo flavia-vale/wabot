@@ -47,8 +47,7 @@ import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
 import { BOTS_STALE_MS, decideBotsReadiness } from '../ops/botsReadiness.js'
-import { buildHealthPayload, withTimeout } from '../ops/healthPayload.js'
-import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, getSupervisorHeartbeatAtMs, listRunningBots, listRunningBotsByNode, getNodeCapacities, getSupervisorNodesSnapshot, getDualOwnerTotal, SUPERVISOR_MODE } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, listRunningBots, listRunningBotsByNode, getNodeCapacities, getSupervisorNodesSnapshot, getDualOwnerTotal, checkDualOwners, SUPERVISOR_MODE } from '../manager.js'
 import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
 import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/staleWorkerCodeGuard.js'
 import { getCodeChangedAtMs } from '../ops/codeVersion.js'
@@ -342,6 +341,37 @@ async function runNodeRoutingGuardTick() {
     app.log.warn({ err: err.message }, 'guarda do roteamento por nó: falha ao checar')
   }
 }
+// Revisão C11: varredura do "mesmo robô em 2 servidores" (dois sockets na mesma
+// credencial = conta caindo em loop e risco de bloqueio). Só com a flag de
+// roteamento. Detectou: log de erro + e-mail interno (cooldown 1 h). O resultado
+// também fica no Redis para o vigia. Nunca derruba nada sozinha.
+const DUAL_OWNER_SWEEP_INTERVAL_MS = Math.max(Number(process.env.DUAL_OWNER_SWEEP_INTERVAL_MS) || 5 * 60_000, 60_000)
+async function runDualOwnerSweepTick() {
+  try {
+    const dual = await checkDualOwners()
+    if (!dual?.length) return
+    sendAdminAlert({
+      db,
+      slug: 'admin_servidor_vigia',
+      key: 'dual_owner',
+      cooldownHours: 1,
+      vars: {
+        resumo: `🔴 ${dual.length} robô(s) ligado(s) em dois servidores ao mesmo tempo`,
+        detalhe: dual.map(d => `- conta ${d.userId}: ${d.nodes.join(' e ')}`).join('\n') + '\n\nO mesmo WhatsApp em dois servidores derruba a conta em loop. Pare o robô do servidor que NÃO é o dono (SUPERVISOR_DUAL_OWNER_AUTOSTOP=1 faz isso sozinho).',
+        quando: new Date().toISOString(),
+      },
+      logger: app.log,
+    }).catch(() => {})
+  } catch (err) {
+    app.log.warn({ err: err.message }, 'varredura de robô em dois servidores: falha ao checar')
+  }
+}
+function startDualOwnerSweep() {
+  if (SUPERVISOR_MODE !== 'remote' || !isNodeRoutingEnabled()) return
+  const timer = setInterval(runDualOwnerSweepTick, DUAL_OWNER_SWEEP_INTERVAL_MS)
+  timer.unref?.()
+}
+
 function startNodeRoutingGuard() {
   if (SUPERVISOR_MODE !== 'remote' || !isNodeRoutingEnabled()) return
   void runNodeRoutingGuardTick()
@@ -957,6 +987,7 @@ startCredentialExpirySweep()
 startSessionCapacityAlertSweep()
 startNumberFailoverSweep()
 startNodeRoutingGuard()
+startDualOwnerSweep()
 startEmailQueueJob()
 startLifecycleEmailSweep()
 startWeeklySummarySweep()
