@@ -100,6 +100,6 @@ Linhas citadas referem-se ao `HEAD` 788ca1a7.
 |---|---|---|
 | RAM real e teto de contas por processo (`TELEGRAM_LEITOR_MAX_ACCOUNTS`) | dona, com R13 | fim do PR-0 |
 | Seguir com processo separado ou plano B A1 (dentro da API) | dona | fim do PR-0 |
-| Limite de origens por conta (default proposto 10) | dona, com R12/R13 | PR-3 |
-| Portas internas definitivas do controle (propostas 3021/3024) | implementação; registrar em `docs/rca/deploy-e-infra.md` | PR-2 |
+| Limite de origens por conta = 10 | **APROVADO pela dona em 2026-10-03** (plan.md "Aprovações da dona") | PR-3 |
+| Portas internas do controle 3021 (prod) / 3024 (staging) | **APROVADAS em 2026-10-03**; documentar em `docs/rca/deploy-e-infra.md` e `ecosystem.config.cjs` | PR-2 |
 | Autor de post do robô em canal (confirma D5.a.2) | PR-0 | fim do PR-0 |
