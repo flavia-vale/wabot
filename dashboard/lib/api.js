@@ -375,6 +375,7 @@ export const api = {
     return apiFetch(`/api/admin/customers${query ? `?${query}` : ''}`)
   },
   adminCustomerHistory: (id) => apiFetch(`/api/admin/customers/${encodeURIComponent(id)}/history`),
+  adminTestarChaveLoja: (id, platform) => apiFetch(`/api/admin/customers/${encodeURIComponent(id)}/credenciais/${encodeURIComponent(platform)}/testar`, { method: 'POST' }),
 
   adminLogs: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()

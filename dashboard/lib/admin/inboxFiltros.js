@@ -8,6 +8,7 @@
 export const FILTROS_MOTIVO = Object.freeze([
   { chave: 'robo', rotulo: 'Robô caído', motivos: ['robo-caido-agora', 'robo-caido'] },
   { chave: 'cega', rotulo: 'Sem receber', motivos: ['cega-agora'] },
+  { chave: 'chave', rotulo: 'Chave de loja', motivos: ['chave-de-loja'] },
   { chave: 'cobranca', rotulo: 'Cobrança', motivos: ['cobranca-recusada'] },
   { chave: 'vencendo', rotulo: 'Vencendo', motivos: ['vence-em-breve', 'venceu-ate-3d', 'venceu-4-a-20d', 'venceu-mais-20d'] },
   { chave: 'sem-envio', rotulo: 'Sem envio', motivos: ['parou-de-enviar', 'sem-envio-ate-7d', 'sem-envio-8-a-20d', 'sem-loja'] },

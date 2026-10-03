@@ -31,6 +31,7 @@ export const GRAVIDADE = Object.freeze({
   'robo-caido-agora': 3,
   'cega-agora': 3,
   'cobranca-recusada': 3,
+  'chave-de-loja': 2.5,
   'robo-caido': 2.5,
   'parou-de-enviar': 2,
   'sem-loja': 2,
@@ -55,6 +56,11 @@ const MOTIVOS_OPERACIONAIS = Object.freeze({
     titulo: 'Conectada, mas sem receber',
     porque: 'Verde mentiroso: as ofertas dela não estão chegando.',
     acao: 'Reconectar; se repetir, é caso de re-pareamento.',
+  },
+  'chave-de-loja': {
+    titulo: 'Chave de loja vencida ou recusada',
+    porque: 'A sondagem diária confirmou: a loja recusa a chave dela. As ofertas dessa loja saem sem comissão ou não saem.',
+    acao: 'Abrir a ficha (aba Técnico), conferir "Chaves das lojas" e pedir para ela recadastrar.',
   },
 })
 
@@ -82,12 +88,15 @@ export function acoesPara(motivo, { canAdminRetry = false, telefone = '' } = {})
 
 /**
  * @param clientes [{ id, nome, email, telefone, payingStatus, everSent, segmento, canAdminRetry,
- *                    operacional?: 'robo-caido-agora'|'cega-agora', detalheMs?: number }]
+ *                    operacional?: 'robo-caido-agora'|'cega-agora', chaveDeLoja?: boolean, detalheMs?: number }]
  */
 export function buildInbox({ clientes = [], now = new Date() } = {}) {
   const linhas = []
   for (const c of clientes) {
-    const motivo = c.operacional || c.segmento
+    // Uma linha por cliente: operacional manda; entre o segmento comercial e a
+    // chave de loja ruim vence a de maior gravidade (empate = segmento).
+    let motivo = c.operacional || c.segmento
+    if (!c.operacional && c.chaveDeLoja && (!motivo || (GRAVIDADE[motivo] ?? 0) < GRAVIDADE['chave-de-loja'])) motivo = 'chave-de-loja'
     if (!motivo || !GRAVIDADE[motivo]) continue
     const peso = pesoFinanceiro(c)
     const prioridade = Math.round(peso * GRAVIDADE[motivo] * 10) / 10
