@@ -18,9 +18,11 @@
  * cadeado para quem não tem o PRO (PainelShell) e continuam clicáveis.
  */
 
+import { SHOW_APPS_SCREEN } from '@/lib/featureVisibility'
+
 const i = (paths) => paths // SVG children prontos para <svg>
 
-export const NAV_GROUPS = [
+const ALL_NAV_GROUPS = [
   {
     title: 'Início',
     items: [
@@ -102,6 +104,7 @@ export const NAV_GROUPS = [
       {
         label: 'Aplicativos',
         href: '/painel/aplicativos',
+        hidden: !SHOW_APPS_SCREEN,
         icon: i(<><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><path d="M17.5 14v7" /><path d="M14 17.5h7" /></>),
       },
       {
@@ -160,3 +163,9 @@ export const NAV_GROUPS = [
     ],
   },
 ]
+
+// Itens `hidden: true` saem do menu (ver lib/featureVisibility.js).
+export const NAV_GROUPS = ALL_NAV_GROUPS.map((group) => ({
+  ...group,
+  items: group.items.filter((item) => !item.hidden),
+}))
