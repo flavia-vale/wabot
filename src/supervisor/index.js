@@ -12,6 +12,8 @@
  * Acoplamento com API é apenas via Redis. Reiniciar API não toca os workers.
  */
 
+import { accountIdFromSessionKey } from '../domain/session/sessionKey.js'
+import { listResumableStandbySessions } from '../core/standbySessions.js'
 import 'dotenv/config'
 import { Worker } from 'bullmq'
 import Redis from 'ioredis'
@@ -37,6 +39,7 @@ import {
   createNodeOwnershipCache,
   isNodeRoutingEnabled,
   isOwnerLeaseEnabled,
+  nodeIdWhere,
   ownsLegacyQueue,
   resolveSupervisorNodeId,
 } from './nodeRouting.js'
@@ -267,7 +270,21 @@ const nodeOwnership = createNodeOwnershipCache({
 const OWNER_LEASE = isOwnerLeaseEnabled(process.env)
 const ownerLease = OWNER_LEASE ? createOwnerLease({ redis: publisher, nodeId: NODE_ID, logger }) : null
 
-function belongsToThisShard(userId) {
+// Número reserva (docs/rca/multi-numero.md): com roteamento por nó, só retoma a
+// prontidão de conta cujo número ativo mora neste nó.
+async function listStandbyForThisNode() {
+  return listResumableStandbySessions(db, {
+    includeReconnecting: RESURRECT_RECONNECTING,
+    accountSessionWhere: NODE_ROUTING ? nodeIdWhere(NODE_ID) : null,
+  }).catch(err => {
+    logger.warn({ err: err?.message, shard: SHARD_TAG }, 'Falha ao listar números de prontidão para retomar')
+    return []
+  })
+}
+
+function belongsToThisShard(sessionKey) {
+  // Número reserva (<conta>~n2) mora no shard/nó da CONTA.
+  const userId = accountIdFromSessionKey(sessionKey) ?? sessionKey
   if (!NODE_ROUTING) return shouldHandleUserOnShard(userId, SHARD_COUNT, SHARD_INDEX)
   const cached = nodeOwnership.peek(userId)
   return cached === null ? true : cached === NODE_ID
@@ -619,9 +636,12 @@ async function healthMonitorTick() {
       where: buildResumeWhere({ base: buildResurrectionWhere({ includeReconnecting: RESURRECT_RECONNECTING }), nodeId: NODE_ID, routing: NODE_ROUTING }),
       select: { userId: true, status: true, lifecycle: true, ownerInstance: true },
     })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: RESURRECT_RECONNECTING }))
+      .concat(await listStandbyForThisNode())
     for (const s of persisted) {
-      if (NODE_ROUTING) nodeOwnership.set(s.userId, NODE_ID) // o filtro do banco já provou a posse
-      if (!belongsToThisShard(s.userId)) continue
+      // Prontidão (<conta>~n2) segue o nó/shard da CONTA, nunca o hash da chave.
+      const shardKey = s.accountId ?? s.userId
+      if (NODE_ROUTING && !s.accountId) nodeOwnership.set(s.userId, NODE_ID) // o filtro do banco já provou a posse
+      if (!belongsToThisShard(shardKey)) continue
       if (String(s.lifecycle).startsWith('moving') || String(s.lifecycle).startsWith('restoring') || String(s.ownerInstance).startsWith('shard:')) continue
       if (sessionCore.isRunning(s.userId)) continue
       // Restart budget: sessão que morre repetidamente (auth_info corrompido,
@@ -705,12 +725,15 @@ async function boot() {
           where: buildResumeWhere({ base: buildResurrectionWhere({ includeReconnecting: RESURRECT_RECONNECTING }), nodeId: NODE_ID, routing: NODE_ROUTING }),
           select: { userId: true, status: true, lifecycle: true, ownerInstance: true },
         })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: RESURRECT_RECONNECTING }))
+          .concat(await listStandbyForThisNode())
       : []
     if (!AUTO_RESUME) logger.info({ shard: SHARD_TAG }, 'AUTO_START_WHATSAPP_SESSIONS=false — supervisor não faz auto-resume (só comandos manuais)')
     attempted = persisted.length
     for (const s of persisted) {
-      if (NODE_ROUTING) nodeOwnership.set(s.userId, NODE_ID) // o filtro do banco já provou a posse
-      if (!belongsToThisShard(s.userId)) continue
+      // Prontidão (<conta>~n2) segue o nó/shard da CONTA, nunca o hash da chave.
+      const shardKey = s.accountId ?? s.userId
+      if (NODE_ROUTING && !s.accountId) nodeOwnership.set(s.userId, NODE_ID) // o filtro do banco já provou a posse
+      if (!belongsToThisShard(shardKey)) continue
       if (String(s.lifecycle).startsWith('moving') || String(s.lifecycle).startsWith('restoring') || String(s.ownerInstance).startsWith('shard:')) continue
       try {
         if (await startBotWithBridge(s.userId)) started++

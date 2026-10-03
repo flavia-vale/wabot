@@ -31,7 +31,7 @@ receita de quem já paga duas contas.
 | Fase | Entrega | Meta para seguir |
 |---|---|---|
 | **0. Validar** ✅ em andamento | Lista de espera no painel (`/painel/whatsapp`, com robô conectado) + `scripts/diag-multi-numero-demanda.mjs` | ≥5 contas PRO na lista, ou ≥10% dos PROs (com ao menos 3) |
-| 1. Número reserva (spec abaixo) | 2º número assume se o 1º cair ou for banido | Quem usa reserva cancela menos que quem não usa |
+| 1. Número reserva ✅ implementado (ver "Fase 1 — como ficou") | 2º número assume se o 1º cair ou for banido | Quem usa reserva cancela menos que quem não usa |
 | 2. Rodízio | Envios alternados entre os números presentes em cada grupo, com teto por número | Menos bans por número, vazão igual ou maior |
 | 3. Plano Escala | Até 5 números, descanso automático, saúde por número, proxy opcional | Receita média do PRO +20% |
 
@@ -196,3 +196,90 @@ Segue o design system v2 (padrão PRO). Texto: "continuidade", nunca "anti-ban".
 ### Fora da Fase 1
 
 Rodízio de envio (Fase 2), mais de 1 reserva, proxy por número, plano Escala.
+
+## Fase 1 — como ficou (implementado em 2026-10-03, flavia-vale/wabot#2190)
+
+Tudo atrás de `MULTI_NUMBER_ENABLED` (padrão **desligado** = produto igual ao
+de antes). Duas mudanças em relação à especificação acima, ambas para reduzir
+risco:
+
+1. **Banco:** `WaSession` NÃO perdeu o `@unique` — a relação 1:1
+   `User.waSession` é usada em 30+ pontos. Os números extras moram em
+   `WaExtraSession` (slot 2) e a conta ganhou `extraNumbers`, `activeWaSlot` e
+   `waSlotSwitchedAt`. Migration só de acréscimos.
+2. **Processos:** o processo com chave = `userId` é SEMPRE o que envia (filas,
+   comandos, Redis e telas não mudaram); ele só passa a usar o **login** do
+   número ativo (`activeWaSlot`). O processo `<userId>~n2` é a prontidão e
+   usa o login do outro número. `WaSession` = estado de quem envia;
+   `WaExtraSession` slot 2 = estado de quem está de prontidão.
+
+| Peça | Onde |
+|---|---|
+| Chave e identidade do processo (qual login usa) | `src/domain/session/sessionKey.js`, `src/domain/session/workerIdentity.js`, `src/core/workerIdentity.js` |
+| Prontidão no robô (não espelha, não envia, só comandos de socket) | `IS_STANDBY` em `src/bot-worker.js` |
+| Religar a prontidão após restart | `src/core/standbySessions.js` (inline e supervisor) |
+| Troca automática | `src/domain/session/failoverPolicy.js`, `src/core/numberSwitch.js`, `src/jobs/numberFailover.js` (passada de 1 min na API) |
+| API da reserva | `/api/multi-number/reserve*` em `src/api/routes/multiNumber.js` |
+| Cobrança (assinatura separada) | `/api/payments/extra-number/*`, `src/domain/payments/extraNumberBilling.js` |
+| Painel | `dashboard/components/MultiNumberSection.js`, `ReserveNumberCard.js`, `ReservePurchaseCard.js` |
+| E-mail da troca | `whatsapp_reserva_assumiu` |
+
+**Envs** (todas opcionais):
+
+| Env | Padrão | O que faz |
+|---|---|---|
+| `MULTI_NUMBER_ENABLED` | desligado | liga tudo |
+| `MULTI_NUMBER_FAILOVER_MINUTES` | 10 (mín. 2) | queda comum antes de a reserva assumir |
+| `MULTI_NUMBER_MIN_SWITCH_MINUTES` | 30 (mín. 5) | intervalo mínimo entre trocas automáticas |
+| `MULTI_NUMBER_RESERVE_HEADROOM` | 5 | vagas guardadas para números principais |
+
+### Não regredir
+
+- **Nunca dois processos no mesmo login** (440 em loop). A troca é: reivindica
+  no banco → marca `switching` → para os dois e ESPERA saírem → inverte
+  `activeWaSlot` → troca os telefones de linha → religa. Não sair a tempo =
+  cancela sem mudar nada. Flag ligada + banco fora = o worker SAI (não chuta
+  o número).
+- **A prontidão não faz negócio nenhum**: sem agendados, sem watchdog de
+  envio, sem fila, sem espelhar, sem eventos de conexão, só `stop`,
+  `requestPairingCode`, `listGroups`, `metrics`. Teste estrutural em
+  `test/multi-number-standby.test.js`.
+- **Cobrança do adicional nunca toca no plano.** Webhook desvia pela
+  referência `addon:extra_number:<conta>` antes de resolver plano por valor;
+  toda consulta de assinatura do plano usa `PLAN_SUBSCRIPTION_WHERE`. Teste
+  estrutural em `test/multi-number-billing.test.js`.
+- **Reserva nunca tira vaga de principal**: só liga com
+  `MULTI_NUMBER_RESERVE_HEADROOM` vagas sobrando; sem dado de vaga, recusa.
+- Cancelar o adicional desliga a prontidão **na hora** (diferente do plano,
+  que vale até o fim do período pago) — decisão da Fase 1.
+- Ainda **não** existe gatilho de troca por "conectado mas cego": esse estado
+  não é gravado no banco. Fica para a Fase 2.
+
+### Validação em staging (nesta ordem)
+
+Staging com **token de sandbox do MP** (token de produção cobra de verdade).
+Ligar a flag exige `pm2 delete` + `start` (pegadinha #1) em `api-staging` e no
+supervisor de staging.
+
+1. Flag desligada: tela WhatsApp igual a antes (lista de espera); `GET
+   /api/multi-number/reserve` → 404.
+2. Ligar `MULTI_NUMBER_ENABLED=true`. Conta PRO sem o adicional vê
+   "Contratar número reserva"; Basic continua vendo a lista de espera.
+3. Contratar no sandbox → webhook → `User.extraNumbers = 1`; o painel mostra o
+   bloco "Número reserva".
+4. Conectar a reserva com OUTRO celular (QR ou código). Tentar o mesmo número
+   tem que recusar.
+5. "Conferir grupos da reserva" lista os destinos em que ela não está.
+6. Desconectar o número principal pelo celular (Dispositivos conectados →
+   sair): em até ~1 min a reserva assume (motivo `logged_out`), e chega o
+   e-mail. SQL de conferência:
+   `SELECT activeWaSlot, waSlotSwitchedAt FROM User WHERE email='<conta>';`
+7. Enviar uma oferta: tem que sair pelo número reserva.
+8. Reconectar o número antigo (ele volta como prontidão) e usar "Voltar para o
+   número de antes".
+9. Reiniciar `api-staging`: a prontidão volta sozinha.
+10. Cancelar o adicional: a prontidão desliga e `extraNumbers` volta a 0.
+
+**Antes de ligar em produção (Regra #1):** cada reserva = +1 vaga
+(~0,18 GB medidos, 0,35 GB para capacidade). Conferir folga com
+`diag-vagas-robos.mjs` e pedir OK explícito da dona do produto.
