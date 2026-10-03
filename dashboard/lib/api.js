@@ -421,6 +421,8 @@ export const api = {
   // corrente parcial) e futuro (projeção em cenários). Só busca quando a aba
   // é aberta — ver `roiLoading` em app/admin/page.js.
   adminFinanceRoi: (months) => apiFetch(`/api/admin/finance/roi${months ? `?months=${months}` : ''}`),
+  adminFinanceLtv: () => apiFetch('/api/admin/finance/ltv'),
+  adminFinanceChurn: (months = 6) => apiFetch(`/api/admin/finance/churn?months=${months}`),
   adminUpdateFinanceCosts: (costs) =>
     apiFetch('/api/admin/finance/costs', { method: 'PUT', body: JSON.stringify(costs) }),
   adminPayments: (params = {}) => {

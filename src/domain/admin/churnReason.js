@@ -64,3 +64,80 @@ export function classifyChurnReason({
   if (explicitCancel) return CHURN_REASONS.VOLUNTARIO
   return CHURN_REASONS.INDETERMINADO
 }
+
+/**
+ * Classifica quem NÃO renovou (pagou uma vez só e o acesso pago já venceu além
+ * da carência) — a MESMA conta de `scripts/diag-motivo-nao-renovou.mjs`, agora
+ * também usada pela rota `GET /finance/churn`. A decisão de cada cliente
+ * continua em `classifyChurnReason`; aqui só se monta a entrada dela.
+ *
+ * `customers` vem de `buildLtvReport(...).customers` (ltvRetention.js).
+ */
+export function classifyNonRenewals(customers = [], { subscriptions = [], charges = [] } = {}) {
+  const subsByUser = new Map()
+  for (const s of subscriptions) {
+    if (!subsByUser.has(s.userId)) subsByUser.set(s.userId, [])
+    subsByUser.get(s.userId).push(s)
+  }
+  const chargesByUser = new Map()
+  for (const c of charges) {
+    if (!chargesByUser.has(c.userId)) chargesByUser.set(c.userId, [])
+    chargesByUser.get(c.userId).push(c)
+  }
+  return customers
+    .filter((c) => !c.renewed && c.status === 'cancelada')
+    .map((c) => {
+      const subs = subsByUser.get(c.userId) || []
+      const everHadAutopay = subs.length > 0
+      const explicitCancel = subs.some((s) => s.status === 'cancelled' && s.cancelledAt)
+      const hadRejectedChargeAfterFirstPayment = (chargesByUser.get(c.userId) || [])
+        .some((ch) => ch.attemptedAt >= c.firstPaidAt && ch.status === 'rejected')
+      const reason = classifyChurnReason({ everHadAutopay, explicitCancel, hadRejectedChargeAfterFirstPayment })
+      return { ...c, reason }
+    })
+}
+
+/** Grupo leigo de cada motivo: voluntário × involuntário × sem como afirmar. */
+export function churnGroupOf(reason) {
+  if (reason === CHURN_REASONS.VOLUNTARIO) return 'voluntario'
+  if (reason === CHURN_REASONS.INVOLUNTARIO) return 'involuntario'
+  return 'incerto'
+}
+
+/**
+ * Resumo para a tela: total por motivo e, por mês em que o acesso pago venceu
+ * (`coverageEnd`), só dos últimos `months` meses. `monthKey` é injetado
+ * (`monthKeyOf`) para o módulo continuar sem dependências.
+ */
+export function buildChurnReport(classified = [], { now = new Date(), months = 6, monthKey } = {}) {
+  const keyOf = monthKey ?? ((d) => new Date(d).toISOString().slice(0, 7))
+  const nowDate = new Date(now)
+  const span = Math.min(24, Math.max(1, Math.floor(Number(months)) || 6))
+  const reasons = Object.values(CHURN_REASONS)
+  const zeros = () => Object.fromEntries(reasons.map((r) => [r, 0]))
+  const rows = []
+  for (let i = span - 1; i >= 0; i -= 1) {
+    const month = keyOf(new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth() - i, 15)))
+    rows.push({ month, voluntario: 0, involuntario: 0, incerto: 0, total: 0, byReason: zeros() })
+  }
+  const rowByMonth = new Map(rows.map((r) => [r.month, r]))
+  const byReason = zeros()
+  let total = 0
+  for (const c of classified) {
+    if (!c.coverageEnd) continue
+    const row = rowByMonth.get(keyOf(c.coverageEnd))
+    if (!row) continue
+    row[churnGroupOf(c.reason)] += 1
+    row.total += 1
+    row.byReason[c.reason] += 1
+    byReason[c.reason] += 1
+    total += 1
+  }
+  return {
+    months: span,
+    total,
+    byReason: reasons.map((reason) => ({ reason, count: byReason[reason], label: describeChurnReason(reason), group: churnGroupOf(reason) })),
+    monthly: rows,
+    note: 'Conta só quem pagou uma vez e deixou o acesso pago vencer (passada a carência). Involuntário = cobrança automática recusada; voluntário = cancelou a cobrança no painel; o resto não dá para afirmar.',
+  }
+}
