@@ -68,6 +68,9 @@ const storeAutomationPages = [
   { href: '/amazon-afiliados-whatsapp', label: 'Amazon no WhatsApp', note: 'a etiqueta viaja junto com o link curto.' },
   { href: '/shein-afiliados-whatsapp', label: 'SHEIN no WhatsApp', note: 'link encurtado pela própria loja, com a sua identidade.' },
   { href: '/magalu-afiliados-whatsapp', label: 'Magalu no WhatsApp', note: 'o código de parceiro entra em qualquer endereço da loja.' },
+  { href: '/netshoes-afiliados-whatsapp', label: 'Netshoes no WhatsApp', note: 'o programa roda na Rakuten; converte se a loja aprovou você.' },
+  { href: '/kabum-afiliados-whatsapp', label: 'KaBuM no WhatsApp', note: 'o programa roda na Awin; converte se a loja aprovou você.' },
+  { href: '/rakuten-afiliados-whatsapp', label: 'Rakuten Afiliados no WhatsApp', note: 'uma conta, várias lojas, cada uma com a própria aprovação.' },
 ]
 
 const howToChoose = [

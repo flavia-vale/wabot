@@ -4,6 +4,15 @@
  */
 
 import { COMMAND, DEFAULT_NODE_ID, isValidNodeId } from './protocol.js'
+import { accountIdFromSessionKey } from '../domain/session/sessionKey.js'
+
+/**
+ * Revisão V2 (multi-número × multi-servidor): o nó é da CONTA. Toda posse/cache
+ * de nó usa esta chave — `<conta>~n2` vira `<conta>`; chave comum fica igual.
+ */
+export function nodeOwnerKey(sessionKey) {
+  return accountIdFromSessionKey(sessionKey) ?? sessionKey
+}
 
 export function isNodeRoutingEnabled(env = process.env) {
   return ['1', 'true', 'on'].includes(String(env.SUPERVISOR_NODE_ROUTING ?? '').trim().toLowerCase())

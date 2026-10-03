@@ -340,8 +340,8 @@ de IA citando Awin/Rakuten na pergunta de marca.
 
 | Frente | Branch | Estado | O que entrou |
 |---|---|---|---|
-| 1 — GEO: fatos e marca | `feat/seo-geo-f1-fatos-lojas-awin-rakuten` | PR aberta (03/10) | `STORES_FACT_PT` (6 lojas + Awin/Rakuten) em definição da marca, ficha técnica, `llms.txt`, `pricing.md`, home, `/quem-somos`, `/precos`, hub de automação, FAQ público e plano Basic (migration DML guardada); `/quem-somos` vira página-resposta "O que é o Espelha Grupos"; `/melhores-bots-para-afiliados-whatsapp` ganha os 6 critérios respondidos (Sub-ID por grupo = não) e a tabela dos 8 bots; leva 🔝 de reindexação em `ACOES_FLAVIA`. Guarda: `test/fato-lojas-awin-rakuten.test.js` |
-| 2 — SEO: rede, Link Inteligente, títulos | — | pendente | — |
+| 1 — GEO: fatos e marca | `feat/seo-geo-f1-fatos-lojas-awin-rakuten` | em `develop` (#2231, 03/10) | `STORES_FACT_PT` (6 lojas + Awin/Rakuten) em definição da marca, ficha técnica, `llms.txt`, `pricing.md`, home, `/quem-somos`, `/precos`, hub de automação, FAQ público e plano Basic (migration DML guardada); `/quem-somos` vira página-resposta "O que é o Espelha Grupos"; `/melhores-bots-para-afiliados-whatsapp` ganha os 6 critérios respondidos (Sub-ID por grupo = não) e a tabela dos 8 bots; leva 🔝 de reindexação em `ACOES_FLAVIA`. Guarda: `test/fato-lojas-awin-rakuten.test.js` |
+| 2 — SEO: rede, Link Inteligente, títulos | `feat/seo-geo-f2-paginas-rede-link-inteligente` | PR aberta (#2235, 03/10) | Páginas `/netshoes-afiliados-whatsapp`, `/kabum-afiliados-whatsapp`, `/rakuten-afiliados-whatsapp` e `/grupo-whatsapp-lotado` (Link Inteligente), linkadas do rodapé, das `/alternativas/*` e das páginas fortes; títulos de `/quanto-ganha-afiliado-shopee` e de `/bot-que-busca-ofertas-shopee-whatsapp` ("Garimpo… no automático (radar)"). Fora: `/awin-afiliados-whatsapp` e `/programa-de-afiliados` (esperam os dados da seção 7); Amazon e post do ML (títulos trocados em 27/09, ainda sem medição) |
 | 3 — Vocabulário de entrada | — | pendente | — |
 | 4 — `/alternativas/*` (títulos dos 3 maiores) | — | pendente | — |
 | 5 — Vídeo | — | pendente | — |

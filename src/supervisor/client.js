@@ -7,7 +7,7 @@
  * erro apenas quando uma rota tentar de fato falar com o supervisor.
  */
 
-import { accountIdFromSessionKey, isExtraSessionKey } from '../domain/session/sessionKey.js'
+import { isExtraSessionKey } from '../domain/session/sessionKey.js'
 import { EventEmitter } from 'events'
 import logger from '../logger.js'
 import { buildRedisOptions } from '../core/redisFactory.js'
@@ -33,7 +33,7 @@ import {
   placementReservationKey,
   resolveRedisUrl,
 } from './protocol.js'
-import { isNodeRoutingEnabled, resolveKnownNodeIds } from './nodeRouting.js'
+import { isNodeRoutingEnabled, nodeOwnerKey, resolveKnownNodeIds } from './nodeRouting.js'
 import { createRedisClock } from './redisClock.js'
 import { findDualOwners, pickNodeForNewSession, resolveSessionNodeId, shouldPlaceSession, shouldReplaceUnpaired, withReservations } from './placement.js'
 
@@ -224,12 +224,15 @@ export function createSupervisorClient({
   // Nó dono da sessão: cache curto + banco (nodeId null = 'n1'). Falha de
   // leitura propaga — rotear às cegas mandaria o comando ao nó errado.
   async function resolveNodeId(userId) {
-    const hit = nodeOfUser.get(userId)
-    if (hit && hit.expiresAt > now()) return hit.nodeId
     // Número reserva (<conta>~n2) mora no nó da CONTA (docs/rca/multi-numero.md).
-    const row = await (await getDb()).waSession.findUnique({ where: { userId: accountIdFromSessionKey(userId) ?? userId }, select: { nodeId: true } })
+    // Cache pela CONTA (revisão V1): esquecer o nó da conta depois de mudá-la de
+    // servidor esquece o dos dois números — senão o ~n2 seguia indo para o antigo.
+    const accountId = nodeOwnerKey(userId)
+    const hit = nodeOfUser.get(accountId)
+    if (hit && hit.expiresAt > now()) return hit.nodeId
+    const row = await (await getDb()).waSession.findUnique({ where: { userId: accountId }, select: { nodeId: true } })
     const nodeId = resolveSessionNodeId(row)
-    nodeOfUser.set(userId, { nodeId, expiresAt: now() + nodeCacheTtlMs })
+    nodeOfUser.set(accountId, { nodeId, expiresAt: now() + nodeCacheTtlMs })
     return nodeId
   }
 
@@ -307,7 +310,7 @@ export function createSupervisorClient({
     // certo. Sem risco de duplicar: a recusa acontece ANTES de executar.
     const first = await resolveNodeId(payload.userId)
     const retryOnNewOwner = async (fallback) => {
-      nodeOfUser.delete(payload.userId)
+      nodeOfUser.delete(nodeOwnerKey(payload.userId))
       const second = await resolveNodeId(payload.userId)
       if (second === first) return fallback()
       return sendToNode(second, name, payload, timeoutMs)
@@ -460,6 +463,12 @@ export function createSupervisorClient({
       await publisherCheck.incr(key)
       await publisherCheck.expire(key, PLACEMENT_RESERVATION_TTL_SECONDS)
     } catch {}
+  }
+
+  // Revisão V3: vagas reservadas (2 min) num nó — quem decide ligar o número
+  // reserva soma isto à contagem (que tem cache de 15 s). Falha = 0.
+  async function getPlacementReservation(nodeId) {
+    try { return Number(await publisherCheck?.get(placementReservationKey(nodeId))) || 0 } catch { return 0 }
   }
 
   async function ensureNodePlacement(userId) {
@@ -703,7 +712,8 @@ export function createSupervisorClient({
     isSupervisorAlive, getSupervisorBootedAtMs, getSupervisorHeartbeatAtMs, getLastEvent, close, _events: events,
     moveSessionToShard, rollbackSessionFromShard, getShardMetrics,
     resolveNodeId, nodeIds, nodeRouting, getNodeCapacities,
-    forgetNode: userId => { nodeOfUser.delete(userId) },
+    getPlacementReservation, reservePlacement,
+    forgetNode: userId => { nodeOfUser.delete(nodeOwnerKey(userId)) },
     checkDualOwners,
     // Antes não era exportado: o contador do /metrics ficava sempre 0.
     getDualOwnerTotal: () => dualOwnerTotal,

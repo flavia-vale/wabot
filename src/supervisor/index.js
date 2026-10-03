@@ -12,7 +12,6 @@
  * Acoplamento com API é apenas via Redis. Reiniciar API não toca os workers.
  */
 
-import { accountIdFromSessionKey } from '../domain/session/sessionKey.js'
 import { listResumableStandbySessions } from '../core/standbySessions.js'
 import 'dotenv/config'
 import os from 'os'
@@ -43,6 +42,7 @@ import {
   isNodeRoutingEnabled,
   isOwnerLeaseEnabled,
   nodeIdWhere,
+  nodeOwnerKey,
   ownsLegacyQueue,
   resolveSupervisorNodeId,
   shouldActLocally,
@@ -307,7 +307,7 @@ async function checkSessionCircuitBreaker(userId) {
 // falha de leitura.
 const nodeOwnership = createNodeOwnershipCache({
   loadNodeId: async userId => {
-    const row = await db.waSession.findUnique({ where: { userId }, select: { nodeId: true } })
+    const row = await db.waSession.findUnique({ where: { userId: nodeOwnerKey(userId) }, select: { nodeId: true } })
     return row?.nodeId || 'n1'
   },
 })
@@ -331,7 +331,7 @@ async function listStandbyForThisNode() {
 
 function belongsToThisShard(sessionKey) {
   // Número reserva (<conta>~n2) mora no shard/nó da CONTA.
-  const userId = accountIdFromSessionKey(sessionKey) ?? sessionKey
+  const userId = nodeOwnerKey(sessionKey)
   if (!NODE_ROUTING) return shouldHandleUserOnShard(userId, SHARD_COUNT, SHARD_INDEX)
   const cached = nodeOwnership.peek(userId)
   return cached === null ? true : cached === NODE_ID
@@ -581,8 +581,12 @@ async function processCommand(job) {
   // Aquece a posse por nó (async) para os handlers síncronos. Falha de banco
   // propaga: o comando falha visível em vez de rodar sem saber de quem é.
   if (NODE_ROUTING && data.userId) {
-    if (commandNeedsFreshOwnership(name)) nodeOwnership.invalidate(data.userId) // START/STOP: banco, sem cache
-    await nodeOwnership.get(data.userId)
+    // Revisão V2: aquece pela CONTA — é a chave que `belongsToThisShard` consulta.
+    // Antes, comando do número reserva (<conta>~n2) aquecia a chave errada e a
+    // checagem de dono passava sem olhar o banco.
+    const owner = nodeOwnerKey(data.userId)
+    if (commandNeedsFreshOwnership(name)) nodeOwnership.invalidate(owner) // START/STOP: banco, sem cache
+    await nodeOwnership.get(owner)
   }
   return await handler(data)
 }
@@ -694,7 +698,7 @@ async function healthMonitorTick() {
     for (const s of persisted) {
       // Prontidão (<conta>~n2) segue o nó/shard da CONTA, nunca o hash da chave.
       const shardKey = s.accountId ?? s.userId
-      if (NODE_ROUTING && !s.accountId) nodeOwnership.set(s.userId, NODE_ID) // o filtro do banco já provou a posse
+      if (NODE_ROUTING) nodeOwnership.set(shardKey, NODE_ID) // o filtro do banco já provou a posse (da conta)
       if (!belongsToThisShard(shardKey)) continue
       if (String(s.lifecycle).startsWith('moving') || String(s.lifecycle).startsWith('restoring') || String(s.ownerInstance).startsWith('shard:')) continue
       if (sessionCore.isRunning(s.userId)) continue
@@ -786,7 +790,7 @@ async function boot() {
     for (const s of persisted) {
       // Prontidão (<conta>~n2) segue o nó/shard da CONTA, nunca o hash da chave.
       const shardKey = s.accountId ?? s.userId
-      if (NODE_ROUTING && !s.accountId) nodeOwnership.set(s.userId, NODE_ID) // o filtro do banco já provou a posse
+      if (NODE_ROUTING) nodeOwnership.set(shardKey, NODE_ID) // o filtro do banco já provou a posse (da conta)
       if (!belongsToThisShard(shardKey)) continue
       if (String(s.lifecycle).startsWith('moving') || String(s.lifecycle).startsWith('restoring') || String(s.ownerInstance).startsWith('shard:')) continue
       try {

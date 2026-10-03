@@ -522,6 +522,14 @@ antes dos portões: eles viraram **checagens obrigatórias antes de LIGAR**
 6. Só depois do portão 4: `MULTI_NUMBER_ROTATION_RELAY=true` e repetir com
    espelhamento com foto e com vídeo.
 
+## Vários servidores (multi-nó) — não regredir
+
+Revisão V1–V3 (2026-10-03), detalhe em `docs/ops/multi-supervisor-ativacao.md`.
+O nó é da CONTA: `<conta>~n2` sempre segue o nó de `WaSession.nodeId`
+(`nodeOwnerKey` em `src/supervisor/nodeRouting.js`). Mudar a conta de servidor
+leva os dois processos e as duas pastas de login. Conta em `moving_node` não
+troca de número nem liga a reserva.
+
 ## Fase 2.1 — plano técnico: origens na reserva (2026-10-03)
 
 **Problema (relatado na validação em staging):** a checagem da reserva só
