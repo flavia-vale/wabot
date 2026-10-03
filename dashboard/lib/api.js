@@ -366,11 +366,7 @@ export const api = {
   adminAssinaturaTestarRenovacao: (id) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/assinatura/testar-renovacao`),
   adminSessionStop: (id, reason) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/session/stop`, { method: 'POST', body: JSON.stringify({ reason }) }),
   adminDiagnosticoEnvios: (id, hours = 6) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/diagnostico/envios?hours=${encodeURIComponent(hours)}`),
-  adminAudit: (params = {}) => {
-    const qs = new URLSearchParams()
-    for (const [k, v] of Object.entries(params)) if (v !== '' && v != null) qs.set(k, String(v))
-    return apiFetch(`/api/admin/audit?${qs.toString()}`)
-  },
+  adminDiagnosticoConexao: (id, days = 3) => apiFetch(`/api/admin/users/${encodeURIComponent(id)}/diagnostico/conexao?days=${encodeURIComponent(days)}`),
   adminFilas: () => apiFetch('/api/admin/filas'),
   adminFilasReprocessar: (id, reason) => apiFetch(`/api/admin/filas/${encodeURIComponent(id)}/reprocessar`, { method: 'POST', body: JSON.stringify({ reason }) }),
   adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`),

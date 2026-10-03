@@ -2,6 +2,9 @@
 /**
  * Diagnóstico: "a cliente não consegue conectar o WhatsApp / erro ao gerar QR".
  *
+ * As regras do veredito vivem em src/domain/admin/diagnostics/conexao.js (a
+ * mesma que a ficha do cliente no painel usa); aqui só se coleta e imprime.
+ *
  * Read-only: não grava nada, não liga/desliga robô, não apaga credencial.
  *
  * Junta as cinco fontes que respondem a pergunta, porque nenhuma sozinha
@@ -10,7 +13,7 @@
  *  1. `WaSession` — estado gravado (status, lifecycle, último código de queda,
  *     `blockNotice` da trava por número repetido).
  *  2. `WaConnectionEvent` — a linha do tempo das quedas, com o código bruto.
- *  3. `AdminAuditLog('session.telemetry')` — o funil de CLIQUES dela na tela
+ *  3. `AnalyticsEvent('session_telemetry')` — o funil de CLIQUES dela na tela
  *     (connect_click -> service_start_ok -> qr_requested -> qr_rendered). É o
  *     que separa "a tela nem conseguiu ligar o robô" de "ligou e o QR nunca
  *     chegou".
@@ -28,6 +31,7 @@ import { createInterface } from 'readline'
 import { join } from 'path'
 import db from '../src/db.js'
 import { getLogsBaseDir, getAuthInfoDir } from '../src/paths.js'
+import { diagnoseConexao } from '../src/domain/admin/diagnostics/conexao.js'
 
 function arg(name, fallback) {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`))
@@ -84,15 +88,18 @@ async function main() {
   for (const e of eventos) console.log(`    ${iso(e.occurredAt)} | ${e.type} | code=${e.code || '-'} | lifecycle=${e.lifecycle || '-'} | ${String(e.metadata).slice(0, 200)}`)
   if (!eventos.length) console.log('    (nenhum — o robô dela não subiu nem caiu na janela)')
 
-  const tel = await db.adminAuditLog.findMany({
-    where: { actorUserId: user.id, action: 'session.telemetry', createdAt: { gte: desde } },
+  // Telemetria mora em AnalyticsEvent (não em AdminAuditLog) desde 2026-10-02.
+  const tel = await db.analyticsEvent.findMany({
+    where: { userId: user.id, event: 'session_telemetry', createdAt: { gte: desde } },
     orderBy: { createdAt: 'desc' },
     take: 120,
   })
   console.log(`\n[4] O QUE A TELA DELA FEZ (${tel.length} passos):`)
+  const tela = []
   for (const t of tel.reverse()) {
     let p = {}
-    try { p = JSON.parse(t.after || '{}') } catch {}
+    try { p = JSON.parse(t.metadata || '{}') } catch {}
+    tela.push({ event: p.event, at: t.createdAt })
     console.log(`    ${iso(t.createdAt)} | ${p.stage}/${p.event}${p.detail ? ` | ${String(p.detail).slice(0, 160)}` : ''}`)
   }
   if (!tel.length) console.log('    (nenhum — ou ela não abriu a tela na janela, ou a tela não chegou a chamar a API)')
@@ -115,6 +122,26 @@ async function main() {
   console.log(`    MAX_SESSIONS_PER_PROCESS no ambiente=${process.env.MAX_SESSIONS_PER_PROCESS || '(ausente -> padrão 20)'}`)
   for (const c of capacidade) console.log(`    ${c.event}: ${c._count.event}`)
   if (!capacidade.length) console.log('    (nenhuma recusa por teto registrada na janela)')
+
+  // Veredito: as MESMAS regras da ficha do cliente no painel (módulo único).
+  const recusasDela = sinais.filter((x) => x.event === 'ops_session_capacity_limit').length
+  const versaoRecusada = await db.analyticsEvent.count({ where: { event: 'ops_wa_version_rejected', createdAt: { gte: desde } } }).catch(() => 0)
+  const veredito = diagnoseConexao({
+    days,
+    user,
+    session: sess,
+    eventos,
+    tela,
+    credencial: { existe: existsSync(authDir), backupPareamento: existsSync(`${authDir}.pairing-backup`) },
+    vagas: { recusasDela, recusasServidor: capacidade.filter((c) => c.event === 'ops_session_capacity_limit').reduce((n, c) => n + c._count.event, 0), limite: process.env.MAX_SESSIONS_PER_PROCESS || null },
+    versaoRecusadaServidor: versaoRecusada,
+  })
+  console.log('\n[VEREDITO] (mesmas regras da ficha do painel)')
+  for (const e of veredito.elos) {
+    console.log(`    ${e.ok ? 'ok      ' : 'PROBLEMA'} | ${e.titulo}`)
+    e.frases.forEach((f, i) => console.log(`             ${f}\n             -> ${e.acoes[i]}`))
+  }
+  console.log(`    => ${veredito.veredito.frase}`)
 
   const logFile = join(getLogsBaseDir(), 'bot.log')
   console.log(`\n[7] LINHAS DO bot.log DO WORKER DELA (${logFile}):`)

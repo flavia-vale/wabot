@@ -570,6 +570,8 @@ function RoboTab({ userId }) {
   const [parando, setParando] = useState(false)
   const [diag, setDiag] = useState(null)
   const [diagCarregando, setDiagCarregando] = useState(false)
+  const [diagCx, setDiagCx] = useState(null)
+  const [diagCxCarregando, setDiagCxCarregando] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -615,6 +617,17 @@ function RoboTab({ userId }) {
       setAviso(err?.message || 'Não consegui parar o robô.')
     } finally {
       setParando(false)
+    }
+  }
+
+  async function diagnosticarConexao(id) {
+    setDiagCxCarregando(true)
+    try {
+      setDiagCx({ data: await api.adminDiagnosticoConexao(id), error: '' })
+    } catch (err) {
+      setDiagCx({ data: null, error: err?.message || 'Não consegui fazer o diagnóstico.' })
+    } finally {
+      setDiagCxCarregando(false)
     }
   }
 
@@ -696,6 +709,40 @@ function RoboTab({ userId }) {
                 <li key={elo.id} className="py-2 text-sm">
                   <p className="font-bold text-slate-900">{elo.ok ? '✔' : '✗'} {elo.titulo}</p>
                   {asArray(elo.frases).map((frase) => <p key={frase} className="mt-0.5 text-xs text-slate-600">{frase}</p>)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Por que não conecta?</h3>
+          <button
+            type="button"
+            onClick={() => diagnosticarConexao(userId)}
+            disabled={diagCxCarregando}
+            className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-black text-white hover:bg-slate-900 disabled:opacity-60"
+          >
+            {diagCxCarregando ? 'Verificando…' : 'Verificar agora'}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-500">Confere, nesta ordem: conta, vaga no servidor, o que ela fez na tela, WhatsApp e credencial dos últimos 3 dias. A primeira que falhar é a causa.</p>
+        {diagCx?.error && <p className="mt-3 text-sm text-red-700">{diagCx.error}</p>}
+        {diagCx?.data && (
+          <div className="mt-3 space-y-2">
+            <p className={`rounded-xl px-3 py-2 text-sm font-bold ${diagCx.data.veredito.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>
+              {diagCx.data.veredito.frase}
+              {diagCx.data.veredito.acao && <span className="mt-1 block text-xs font-medium">O que fazer: {diagCx.data.veredito.acao}</span>}
+            </p>
+            <ul className="divide-y divide-slate-100">
+              {asArray(diagCx.data.elos).map((elo) => (
+                <li key={elo.id} className="py-2 text-sm">
+                  <p className="font-bold text-slate-900">{elo.ok ? '✔' : '✗'} {elo.titulo}</p>
+                  {asArray(elo.frases).map((frase, i) => (
+                    <p key={frase} className="mt-0.5 text-xs text-slate-600">{frase}{asArray(elo.acoes)[i] ? ` → ${asArray(elo.acoes)[i]}` : ''}</p>
+                  ))}
                 </li>
               ))}
             </ul>

@@ -580,24 +580,26 @@ DLQ continua nas rotas `/send-dlq/:userId` já existentes (Operação → Filas)
 Custo: 6 consultas pequenas por clique em "Verificar agora", zero processo
 novo, zero RAM.
 
-## Operação → Auditoria, "quem fez o quê" (item 9 / M8, 2026-10-03)
+## G4 — "Por que não conecta" na ficha do cliente (2026-10-03)
 
-**Era:** `AdminAuditLog` era gravado em toda ação do painel e nunca lido; só
-SQL na VPS mostrava quem fez o quê.
+**O que era:** `scripts/diag-nao-conecta.mjs` só rodava por SSH. A atendente
+não tinha como separar "QR venceu", "sem vaga", "WhatsApp recusou a versão
+(405)" e "tempo esgotado (408)" — causas que pedem ações opostas.
 
-**Agora:**
+**Onde mora:** regras puras em `src/domain/admin/diagnostics/conexao.js`
+(`diagnoseConexao`: elos conta → vaga → tela → WhatsApp → credencial, cada um
+com problema + "o que fazer" em frase leiga). Rota
+`GET /api/admin/users/:id/diagnostico/conexao` (`support:read`, auditada como
+`admin.user.diagnostico_conexao`), bloco "Por que não conecta?" na aba Robô da
+ficha, ao lado de "Por que não envia?". O script importa o mesmo módulo e
+imprime o `[VEREDITO]`. Teste: `test/admin-diagnostico-conexao.test.js`.
 
-| Peça | Onde mora |
-|---|---|
-| Dicionário de ações em frase leiga (`admin.user.block` → "bloqueou a conta"), query/where/paginação e linhas redigidas, PURO | `src/domain/admin/auditLabels.js` |
-| Rota `GET /api/admin/audit?days=30&action=&actor=&target=&page=&take=` (`admin:read` + só papel `owner`/`admin`, `take` ≤ 200, payload por `src/adminRedaction.js`, leitura NÃO auditada) | `src/api/routes/admin.js` |
-| Seção "Auditoria" em Operação (componente próprio, some para outros papéis; links para a ficha) | `dashboard/components/AuditoriaSection.js` |
-| Guarda | `test/admin-auditoria-tela.test.js` |
-
-**Não regredir:** ação nova `action: 'admin.…'` exige rótulo em `AUDIT_LABELS`
-(o teste varre `src/` e falha); a rota de leitura nunca chama
-`writeAdminAuditLog` (viraria ruído na própria trilha); `take` nunca passa de
-200; `before`/`after` só saem por `redactAdminPayload`; a seção fica em
-componente próprio (teto de linhas da Operação em `admin-inicio-enxuto`).
-Custo: 1 `count` + 1 `findMany` paginado por consulta (índices em `createdAt`,
-`action`), zero processo novo, zero RAM.
+**Não regredir:**
+- Só banco (`WaSession`, `WaConnectionEvent`, `AnalyticsEvent`) + existência da
+  pasta de credencial. NUNCA `bot.log` na rota (é da frota inteira).
+- A telemetria da tela mora em `AnalyticsEvent('session_telemetry')` desde
+  2026-10-02; o script lia `AdminAuditLog` (vazio) e foi corrigido.
+- 405 com `ops_wa_version_rejected` em várias contas = problema geral, nunca
+  pedir para a cliente parear de novo (ver `whatsapp-sessao.md`).
+- Sem jargão (`405`, `socket`, `handshake`, `pairing`) nas frases da tela.
+- Custo: 6 consultas pequenas por clique, zero processo novo, zero RAM.
