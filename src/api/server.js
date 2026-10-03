@@ -47,7 +47,8 @@ import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
 import { BOTS_STALE_MS, decideBotsReadiness } from '../ops/botsReadiness.js'
-import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, listRunningBots, listRunningBotsByNode, getNodeCapacities, getSupervisorNodesSnapshot, getDualOwnerTotal, SUPERVISOR_MODE } from '../manager.js'
+import { buildHealthPayload, withTimeout } from '../ops/healthPayload.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, getSupervisorHeartbeatAtMs, listRunningBots, listRunningBotsByNode, getNodeCapacities, getSupervisorNodesSnapshot, getDualOwnerTotal, SUPERVISOR_MODE } from '../manager.js'
 import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
 import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/staleWorkerCodeGuard.js'
 import { getCodeChangedAtMs } from '../ops/codeVersion.js'
@@ -710,8 +711,18 @@ app.register(leadNurtureRoutes, { prefix: '/api/lead-nurture' })
 app.register(emailPrefsRoutes, { prefix: '/api/emails' })
 app.register(shopeeSalesRoutes, { prefix: '/api/shopee-sales' })
 
-// Liveness: processo está de pé
-app.get('/health', () => ({ ok: true }))
+// Liveness: processo está de pé. Em `remote` informa também o supervisor
+// (`supervisor: { alive, lastHeartbeatAt }`), mas o status HTTP é SEMPRE 200:
+// o smoke test do deploy bate aqui e supervisor fora do ar não pode derrubá-lo.
+// Quem decide 503 é `/ready/bots`. Ver docs/rca/deploy-e-infra.md.
+app.get('/health', async () => {
+  if (SUPERVISOR_MODE !== 'remote') return buildHealthPayload({ mode: SUPERVISOR_MODE })
+  const sinal = await withTimeout(
+    Promise.all([isSupervisorAlive(), getSupervisorHeartbeatAtMs()]).then(([alive, at]) => ({ alive, at })),
+    1500,
+  ).catch(() => null)
+  return buildHealthPayload({ mode: SUPERVISOR_MODE, supervisorAlive: sinal?.alive ?? null, heartbeatAtMs: sinal?.at ?? null })
+})
 
 // Prometheus scrape endpoint. Fora do rate limit global (allowlist), então
 // precisa de proteção própria: METRICS_TOKEN exige Authorization: Bearer;

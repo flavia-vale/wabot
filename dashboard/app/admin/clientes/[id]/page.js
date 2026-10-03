@@ -394,6 +394,74 @@ const TABS = [
   ['uso', 'Uso'],
 ]
 
+// Bloquear / banir / desbloquear a conta. Ação pesada: só quem o servidor
+// deixa (`podeBloquear`), motivo de 10+ letras e dupla confirmação — o
+// window.confirm e depois digitar o e-mail da conta. O servidor confere tudo
+// de novo (src/domain/admin/blockPolicy.js).
+function BloquearConta({ userId, email, status, podeBloquear, onSaved }) {
+  const [aberto, setAberto] = useState(false)
+  const [alvo, setAlvo] = useState('suspended')
+  const [motivo, setMotivo] = useState('')
+  const [emailDigitado, setEmailDigitado] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  if (!podeBloquear) return null
+  const bloqueada = status === 'suspended' || status === 'banned'
+
+  async function confirmar(event) {
+    event.preventDefault()
+    if (motivo.trim().length < 10) { setErro('Escreva o motivo com pelo menos 10 letras.'); return }
+    if (emailDigitado.trim().toLowerCase() !== String(email ?? '').trim().toLowerCase()) { setErro('O e-mail digitado não é o da conta.'); return }
+    const pergunta = bloqueada
+      ? `Liberar o acesso de ${email}? A cliente volta a entrar no painel.`
+      : `${alvo === 'banned' ? 'BANIR' : 'Suspender'} a conta de ${email}? Ela perde o acesso ao painel e o motivo aparece para ela.`
+    if (!window.confirm(pergunta)) return
+    setSalvando(true)
+    setErro('')
+    try {
+      const corpo = { reason: motivo.trim(), confirmEmail: emailDigitado.trim() }
+      if (bloqueada) await api.adminUserUnblock(userId, corpo)
+      else await api.adminUserBlock(userId, { ...corpo, status: alvo })
+      setAberto(false)
+      setMotivo('')
+      setEmailDigitado('')
+      await onSaved?.()
+    } catch (err) {
+      setErro(err?.message || 'Não consegui concluir.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  if (!aberto) {
+    return (
+      <button type="button" onClick={() => setAberto(true)} className="rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">
+        {bloqueada ? 'Desbloquear conta' : 'Bloquear / banir conta'}
+      </button>
+    )
+  }
+
+  return (
+    <form onSubmit={confirmar} className="w-full max-w-md space-y-2 rounded-2xl border border-red-200 bg-white p-4">
+      <h3 className="text-sm font-bold text-slate-800">{bloqueada ? 'Desbloquear conta' : 'Bloquear ou banir conta'}</h3>
+      {!bloqueada && (
+        <select value={alvo} onChange={e => setAlvo(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+          <option value="suspended">Suspender (pode ser desfeito)</option>
+          <option value="banned">Banir</option>
+        </select>
+      )}
+      <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={3} maxLength={400} placeholder="Motivo (mínimo 10 letras)" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+      <input value={emailDigitado} onChange={e => setEmailDigitado(e.target.value)} placeholder={`Digite ${email ?? 'o e-mail da conta'} para confirmar`} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+      {erro && <p className="text-xs font-semibold text-red-700">{erro}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={salvando} className="rounded-xl bg-red-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">{salvando ? 'Salvando...' : 'Confirmar'}</button>
+        <button type="button" onClick={() => { setAberto(false); setErro('') }} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">Cancelar</button>
+      </div>
+    </form>
+  )
+}
+
 export default function AdminClienteHistoricoPage() {
   const params = useParams()
   const id = params?.id
@@ -448,7 +516,10 @@ export default function AdminClienteHistoricoPage() {
             </div>
             <p className="text-sm text-slate-500">{history.cadastro?.email} · {history.cadastro?.contactPhone || 'sem celular'}</p>
           </div>
-          <Link href="/admin/clientes" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Voltar à lista</Link>
+          <div className="flex flex-wrap items-start gap-2">
+            <BloquearConta userId={history.id} email={history.cadastro?.email} status={history.cadastro?.status} podeBloquear={history.podeBloquear === true} onSaved={reload} />
+            <Link href="/admin/clientes" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Voltar à lista</Link>
+          </div>
         </div>
 
         <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3 lg:grid-cols-6">
