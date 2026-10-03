@@ -22,6 +22,11 @@ dona do produto: `plan.md` §"Decisões registradas".
 - O Instagram Stories **fica no caminho próprio** (`src/instagram/`, decisão
   de 2026-10-02). Na tela Aplicativos ele aparece como "tela própria".
 
+- **Escondido por enquanto (2026-10-03):** card do Premium fora do
+  `/painel/plano` (todos os ambientes) e tela Aplicativos fora do menu e da
+  rota em **produção** (staging segue com ela). Só tela; backend igual.
+  Reverter: `dashboard/lib/featureVisibility.js`.
+
 ## Como funciona
 
 | Peça | Onde |
