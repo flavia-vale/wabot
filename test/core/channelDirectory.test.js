@@ -23,6 +23,7 @@ test('getChannelMetadata por jid retorna formato normalizado', async () => {
     owner: '5511999999999@s.whatsapp.net',
     isViewerOwner: true,
     picture: null,
+    viewerRole: null,
   })
 })
 

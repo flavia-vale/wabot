@@ -66,6 +66,7 @@ import { sendMail, isEmailConfigured } from '../email/mailer.js'
 import * as sessionManager from '../manager.js'
 import { createNumberFailoverSweep } from '../jobs/numberFailover.js'
 import { notifyNumberSwitched } from '../emailTriggers/events.js'
+import { sourceGapsForSlot, sourceGapsNotice } from '../core/reserveCoverage.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
 import { emailPrefsRoutes } from './routes/emailPrefs.js'
 import { shopeeSalesRoutes } from './routes/shopeeSales.js'
@@ -409,7 +410,11 @@ const runNumberFailoverTick = createNumberFailoverSweep({
   db,
   manager: sessionManager,
   logger: app.log,
-  notify: ({ user }) => (isEmailConfigured() ? notifyNumberSwitched({ db, sendMail, user, logger: app.log }) : Promise.resolve()),
+  notify: async ({ user, to }) => {
+    if (!isEmailConfigured()) return
+    const gaps = await sourceGapsForSlot({ db, userId: user.id, slot: to }).catch(() => null)
+    return notifyNumberSwitched({ db, sendMail, user, avisoOrigens: sourceGapsNotice(gaps ?? {}), logger: app.log })
+  },
 })
 function startNumberFailoverSweep() {
   const timer = setInterval(() => {

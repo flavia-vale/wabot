@@ -75,7 +75,8 @@ test('estrutural: a prontidão não espelha, só aceita comandos de socket e só
   assert.match(src, /const CAN_SEND = !IS_STANDBY \|\| ROTATION_ON/)
   assert.match(src, /if \(CAN_SEND && !sendBackend\) sendBackend = await createSendBackend\(\)/)
   assert.match(src, /markUpsertReceived\(\)\n\s+\/\/[^\n]*\n\s+if \(IS_STANDBY\) return/)
-  assert.match(src, /STANDBY_IPC_TYPES = new Set\(\['stop', 'requestPairingCode', 'listGroups', 'metrics'\]\)/)
+  // Fase 2.1: consultar/seguir canal (a reserva precisa seguir os canais de origem).
+  assert.match(src, /STANDBY_IPC_TYPES = new Set\(\['stop', 'requestPairingCode', 'listGroups', 'metrics', 'channel:metadata', 'channel:follow'\]\)/)
   assert.match(src, /if \(IS_STANDBY\) \{\n\s+await handleStandbyOpen\(\{ phone \}\)\n\s+\} else \{/)
   assert.match(src, /const AUTH_DIR = getAuthInfoDir\(AUTH_KEY\)/)
   assert.doesNotMatch(src, /getAuthInfoDir\(userId\)/)
