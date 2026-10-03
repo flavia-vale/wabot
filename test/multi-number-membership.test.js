@@ -32,8 +32,8 @@ test('grupos que faltam usam a pertença gravada do número de prontidão', asyn
   await db.user.create({ data: { id: userId, name: 'M', email: `${userId}@t.local`, passwordHash: 'x', plan: 'pro', extraNumbers: 1, accessExpiresAt: new Date(Date.now() + 864e5) } })
   const app = Fastify({ logger: false })
   app.decorate('authenticate', async req => { req.user = { sub: userId } })
-  let liveCalls = 0
-  const manager = { isRunning: () => true, listGroups: async () => { liveCalls++; return [] } }
+  const liveKeys = []
+  const manager = { isRunning: () => true, listGroups: async key => { liveKeys.push(key); return [] } }
   await app.register(multiNumberRoutes, { prefix: '/api/multi-number', manager, env: { MULTI_NUMBER_ENABLED: 'true' } })
   try {
     await db.waSession.create({ data: { userId, status: 'connected', phone: '5511999990000' } })
@@ -46,7 +46,7 @@ test('grupos que faltam usam a pertença gravada do número de prontidão', asyn
     const res = (await app.inject({ method: 'GET', url: '/api/multi-number/reserve/missing-groups' })).json()
     assert.equal(res.source, 'stored')
     assert.deepEqual(res.missing.map(g => g.waJid), ['g2@g.us'])
-    assert.equal(liveCalls, 0)
+    assert.ok(!liveKeys.includes(`${userId}~n2`), 'a reserva usou a pertença gravada, sem consulta ao vivo')
   } finally {
     await db.user.deleteMany({ where: { id: userId } })
   }

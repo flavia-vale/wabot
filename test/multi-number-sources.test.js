@@ -114,7 +114,9 @@ test('rota: "conferir" devolve destinos (formato antigo) + origens do número re
     assert.equal(res.sources.ok, 2)
     assert.deepEqual(res.sources.missingGroups.map(g => g.waJid), ['o2@g.us'])
     assert.deepEqual(res.sources.missingChannels.map(g => g.waJid), ['c2@newsletter'])
-    assert.ok(manager.calls.every(c => c[1] === `${userId}~n2`), 'pergunta sempre ao número reserva')
+    assert.ok(manager.calls.some(c => c[1] === `${userId}~n2`), 'pergunta ao número reserva')
+    // Número que envia sem pertença gravada: lê os grupos ao vivo (aqui, nenhum).
+    assert.deepEqual(res.active.sources.missingGroups.map(g => g.waJid), ['o1@g.us', 'o2@g.us'])
   } finally {
     await db.user.deleteMany({ where: { id: userId } })
   }
@@ -184,6 +186,28 @@ test('aviso da troca lê a pertença do número que assumiu', async () => {
     assert.equal(gaps.known, true)
     assert.deepEqual(gaps.missingGroups.map(g => g.waJid), ['o2@g.us'])
     assert.equal(gaps.channelCount, 1)
+  } finally {
+    await db.user.deleteMany({ where: { id: userId } })
+  }
+})
+
+test('rota: confere também o número que ENVIA (papéis invertem depois da troca)', async () => {
+  // Staging 2026-10-03: a reserva estava em tudo, mas o número que enviava
+  // não estava numa origem — e a tela dizia "recebe de todas".
+  const manager = channelManager({ 'c1@newsletter': 'SUBSCRIBER', 'c2@newsletter': 'SUBSCRIBER' })
+  const { app, userId } = await build({ manager })
+  try {
+    await db.waGroupMembership.createMany({ data: [
+      { userId, slot: 1, waJid: 'd1@g.us' },
+      { userId, slot: 1, waJid: 'o1@g.us' },
+      { userId, slot: 1, waJid: 'o2@g.us' },
+    ] })
+    // Depois da troca: o número 2 envia, o 1 fica de prontidão.
+    await db.user.update({ where: { id: userId }, data: { activeWaSlot: 2 } })
+    const res = (await app.inject({ method: 'GET', url: '/api/multi-number/reserve/missing-groups' })).json()
+    assert.equal(res.sources.ok, 4, 'a reserva (número 1) recebe de todas')
+    assert.deepEqual(res.active.sources.missingGroups.map(g => g.waJid), ['o2@g.us'], 'o número que envia (2) não está na origem o2')
+    assert.ok(manager.calls.some(c => c[0] === 'meta' && c[1] === userId), 'canais do número que envia: pergunta ao processo da conta')
   } finally {
     await db.user.deleteMany({ where: { id: userId } })
   }

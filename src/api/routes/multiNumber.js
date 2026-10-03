@@ -260,37 +260,50 @@ export async function multiNumberRoutes(app, opts = {}) {
 
   // Grupos de destino em que o número reserva NÃO está — nesses ele não
   // consegue enviar se assumir.
-  app.get('/reserve/missing-groups', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const state = await requireReserve(req, reply)
-    if (!state) return
-    if (state.standby?.status !== 'connected') return reply.code(409).send({ error: 'O número reserva ainda não está conectado.' })
-    const userId = req.user.sub
-    const destinations = await db.group.findMany({ where: { userId, role: 'post', kind: 'group' }, select: { waJid: true, name: true } })
-    // Fase 2: lê a pertença gravada pelo próprio robô (WaGroupMembership) do
-    // número que está de prontidão; sem dado recente, pergunta ao robô ao vivo.
-    const standbySlot = otherSlot(state.activeWaSlot)
+  // Destinos e origens de UM número. Pertença gravada pelo próprio robô
+  // (WaGroupMembership); sem dado recente, pergunta ao robô ao vivo. Canais:
+  // sempre ao vivo. Devolve null se não deu para ler os grupos.
+  async function numberCoverage({ userId, slot, processKey, destinations, sources }) {
     const stored = await db.waGroupMembership.findMany({
-      where: { userId, slot: standbySlot, refreshedAt: { gte: new Date(Date.now() - MEMBERSHIP_FRESH_MS) } },
+      where: { userId, slot, refreshedAt: { gte: new Date(Date.now() - MEMBERSHIP_FRESH_MS) } },
       select: { waJid: true },
     })
     let memberJids = stored.map(r => r.waJid)
     let source = 'stored'
     if (!stored.length) {
-      const live = await Promise.resolve(manager.listGroups(standbyProcessKey(userId))).catch(() => null)
-      if (!Array.isArray(live)) return reply.code(502).send({ error: 'Não foi possível ler os grupos do número reserva agora.' })
+      const live = await Promise.resolve(manager.listGroups(processKey)).catch(() => null)
+      if (!Array.isArray(live)) return null
       memberJids = live.map(g => g.waJid)
       source = 'live'
     }
-    // Origens (Fase 2.1): grupos pela pertença; canais perguntando ao número.
-    const sources = await db.group.findMany({ where: { userId, role: 'monitor' }, select: { waJid: true, name: true } })
     const channelJids = [...new Set(sources.map(r => r.waJid).filter(j => j.endsWith('@newsletter')))]
-    const channelStates = channelJids.length ? await readChannelStates(standbyProcessKey(userId), channelJids) : {}
+    const channelStates = channelJids.length ? await readChannelStates(processKey, channelJids) : {}
     return {
       total: destinations.length,
       missing: missingDestinations({ destinations, memberJids }),
       source,
       sources: sourceCoverage({ sources, memberJids, channelStates }),
     }
+  }
+
+  // Grupos/canais em que cada número NÃO está. Raiz (formato antigo) = número
+  // de prontidão; `active` = número que envia agora (depois de uma troca os
+  // papéis se invertem, e origem fora do número que envia = parada AGORA).
+  app.get('/reserve/missing-groups', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const state = await requireReserve(req, reply)
+    if (!state) return
+    if (state.standby?.status !== 'connected') return reply.code(409).send({ error: 'O número reserva ainda não está conectado.' })
+    const userId = req.user.sub
+    const [destinations, sources] = await Promise.all([
+      db.group.findMany({ where: { userId, role: 'post', kind: 'group' }, select: { waJid: true, name: true } }),
+      db.group.findMany({ where: { userId, role: 'monitor' }, select: { waJid: true, name: true } }),
+    ])
+    const standby = await numberCoverage({ userId, slot: otherSlot(state.activeWaSlot), processKey: standbyProcessKey(userId), destinations, sources })
+    if (!standby) return reply.code(502).send({ error: 'Não foi possível ler os grupos do número reserva agora.' })
+    const active = state.active?.status === 'connected'
+      ? await numberCoverage({ userId, slot: state.activeWaSlot, processKey: userId, destinations, sources })
+      : null
+    return { ...standby, active }
   })
 
   // A reserva segue os canais de origem que ainda não segue. Lote pequeno e
