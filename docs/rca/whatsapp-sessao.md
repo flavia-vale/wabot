@@ -1124,3 +1124,160 @@ Subir o Baileys exige refazer o patch. Não ampliar o ramo de DM para
 **Aceite do ramo de DM (frota):** `grep -c 'wabot: DM sem decifrar confirmada
 com ack' bot.log` > 0; `500 / conexões` por dia cai; `diag-frota-cega.mjs`
 estável. Isso NÃO é aceite do caso da cliente (segue cega).
+
+## Conectada e cega depois do ciclo de quedas: `<ack>` sem `type` segurava a fila offline (RCA 2026-10-03 — causa medida; não regredir)
+
+**Causa medida (2026-10-03, `doritosmms@gmail.com`, pid 3519832, 3 h de log):**
+
+| Medida | Valor |
+|---|---|
+| nós de mensagem que chegaram ao socket | 225 — **todos** cópia `fromMe` do celular da cliente (ids `3A…`, iPhone) para a **Meta AI** (`recipient` `867051314767696@bot`) |
+| ids distintos | 15, cada um reentregue **5× em 8 s por conexão** (`offline` 9→8→6→5→3), 3 conexões |
+| `failed to decrypt` | 224, todos `No matching sessions found for message` (sessão com o próprio celular) |
+| ramo tomado | 224 `DM sem decifrar confirmada com ack, sem retry` (plain `<ack>`) |
+| "handled N offline messages" | **0** — o servidor nunca encerrou a fila offline |
+| `messages.upsert` / aceitas / decrypt de grupo | 0 / 0 / 0 |
+| `stream:error` | 2, a cada ~50 min, sempre `<ack class=message type=text id=3A056B4F70709D37B587/>` |
+
+Leitura: o servidor **não aceitou** o nosso `<ack>` dessas cópias (por isso
+reentrega 5×), a fila offline **nunca fecha**, e enquanto ela não fecha o
+WhatsApp **não entrega mais nada** ao aparelho — nem grupo. É a cegueira.
+Depois de 50 min ele derruba a conexão citando o ack que esperava — e esse ack
+vem **com `type`**. No Baileys 6.7.23 `sendMessageAck` só põe `type` no ack de
+`<message>` em erro/`unavailable` (`errorCode !== 0`); por isso o **nack 487** do
+caso glaucia (com `type`) era aceito e o **ack simples** do ramo de DM (sem
+`type`) não. O WA Web sempre manda `type` e `from`
+(`WAWebHandleMsgSendAck.sendAck/sendNack`); o Baileys 7.x (`Utils/stanza-ack.js`)
+também. Re-parear "curava" porque zera a fila offline do aparelho no servidor.
+O "outro sistema Baileys no mesmo número" **não existe**: era o iPhone da cliente
+conversando com a Meta AI.
+
+**Conserto (patch do Baileys, `sendMessageAck`):** `type` sempre que o nó tem
+`type`; `from = me.id` em todo ack de `<message>`. E a regra A passa a cobrir
+`recipient` `@bot` (`isJidMetaIa`): a cópia para a Meta AI é confirmada antes
+de abrir, sem os 224 erros de decrypt. Teste:
+`test/baileys-ack-type-patch.test.js`.
+
+**Aceite:** no pid da conta, depois do restart do `bot-supervisor`: aparece
+`handled N offline messages/notifications` na primeira conexão; cada id `3A…`
+chega **1×** por conexão (não 5×); `Censo de entrada do socket na janela` com
+`arrivals.grupo` > 0; zero `stream:error` com `<ack class=message type=text>`.
+`node scripts/diag-cega-pid.mjs doritosmms@gmail.com` deixa de dar
+`fila_offline_presa`.
+
+**Não regredir:** não voltar a condicionar `type` a erro/`unavailable` no ack;
+não tirar `@bot` da regra A sem medir; a mensagem travada da `stream:error` é o
+**ack esperado pelo servidor** — comparar os atributos dele com o ack que mandamos
+é o primeiro passo em qualquer repetição.
+
+### Histórico da investigação (antes da causa medida)
+
+
+Casos: `gabrielpontes@consultorfin.com` (2026-10-02) e `doritosmms@gmail.com`
+(2026-10-03): painel "conectado", 0 mensagens aceitas das origens por 19 h+,
+antes disso ciclo de quedas 500 com `stuckMsg:true` (25 em 24 h no segundo
+caso, última 18:15:57Z). O conserto do `<receipt type=sender>` em LID (#2155)
+**parou as quedas e não devolveu a recepção**; o Gabriel só voltou a receber
+depois de desconectar, esquecer o aparelho no celular e parear de novo.
+Reconectar e reiniciar o worker não resolveram.
+
+**O que o levantamento da frota mostrou (14 dias, `WaConnectionEvent` 500 com
+`stuckMsg`):** 40 contas com 60 a 314 quedas cada — e **quase todas seguem
+espelhando** (`ultimoEnvio` no mesmo dia). Logo o ciclo de quedas **não basta**
+para cegar: a cegueira tem um fator a mais, ainda sem dado.
+
+**Por que o bot.log não respondia "a mensagem de grupo chega ao socket?"**
+(conferido na fonte do Baileys 6.7.23 e em `src/logger.js`):
+
+| Caminho da mensagem de grupo | Rastro no `bot.log` (nível `info`) |
+|---|---|
+| servidor não entrega ao aparelho | **nenhum** |
+| chega e `shouldIgnoreJid` descarta (grupo fora da lista, escopo, quarentena) | **nenhum** — `'ignored message'` é `debug`; a regra antiga `WA_IGNORE_UNMONITORED_GROUPS` não tinha contador |
+| chega e não decifra | `failed to decrypt message` (`error`) com `remoteJid` + `sent retry receipt` |
+| chega, abre, worker descarta | `messages.upsert recebido` (só `type`/`count`) |
+| aceita | `mensagem recebida` / `Mensagem aceita para processamento` |
+
+As duas primeiras linhas eram **indistinguíveis** — e são exatamente as
+hipóteses (a)/(d) "estado da conta no servidor" vs (c) "regra nossa descarta".
+
+**Instrumentação (só dado, sem mudar comportamento):**
+
+- Patch do Baileys: o gancho `onIncomingMessageNode` (já existia, ANTES de
+  qualquer decisão em `handleMessage`) passa a levar `offline` e `encType`
+  (`skmsg` = grupo; `pkmsg`/`msg` = sessão direta).
+- `src/core/inboundNodeCensus.js` (puro): conta por tipo de chat (grupo, dm,
+  canal, status, própria conta) o que **chegou**, o que foi **descartado e por
+  qual regra** (`escopo`, `grupo_nao_monitorado`, `canal_quarentena`,
+  `chat_quarentena`, `dm_outro_aparelho`), o que **falhou ao abrir**, o que
+  chegou ao **upsert** e o que foi **aceito**. Dois relógios: janela (resumo
+  periódico) e "desde a última aceitação" (zera só em aceite — mesma lição de
+  `failuresSinceLastAccepted`). Amostra: as primeiras `WA_INBOUND_CENSUS_SAMPLE`
+  (3) chegadas por tipo na janela viram linha
+  `Censo de entrada: nó de mensagem chegou ao socket (amostra)`.
+  ⚠️ `ignored` pode superestimar: o mesmo `shouldIgnoreJid` é consultado para
+  recibo, notificação e presença do chat, não só para `<message>`; `arrivals`
+  conta só nó de mensagem. Comparar descarte com falha de decrypt, não com a
+  chegada.
+- Resumo a cada `WA_INBOUND_CENSUS_INTERVAL_MS` (30 min; `0` desliga) no
+  heartbeat: `Censo de entrada do socket na janela` — **o zero também é dado**:
+  `arrivals` sem `grupo` por horas numa conta conectada = o servidor não
+  entrega grupo a este aparelho.
+- `describeBlindness` classifica onde a mensagem de grupo some
+  (`nada_chega` / `chega_e_e_descartada` / `chega_e_nao_abre` /
+  `chega_e_nao_e_aceita`) e vai no log `Sessão conectada e SEM receber
+  mensagens`, no sinal `ops_wa_reception_blind` (`blindKind`, `groupArrivals`,
+  `groupDropped`, `groupDecryptFailures`, `groupUpserts`, `stuckDrops`,
+  `lastGroupArrivalAgeMs`) e no IPC de métricas (`inboundCensus`).
+- Contador novo `stuckDropsSinceLastAccepted` (escopo de módulo, zera só em
+  `markMessageAccepted`): quantas quedas 500 com mensagem travada antecederam
+  a cegueira.
+- Aviso à dona (`adminOpsAlertPolicy.findPayingBlind`/`buildOpsAlerts`): cada
+  conta cega sai com o tipo e as quedas; quando é `nada_chega`, a ação diz que
+  **Reconectar e reiniciar não resolvem — parear de novo**. Robô sem o censo não
+  manda o campo e o aviso fica como era.
+
+**Diagnóstico pronto (read-only, uma conta):**
+
+```bash
+cd ~/wabot && node scripts/diag-cega-pid.mjs <email>            # --log-mb=200 se a cauda não alcançar
+```
+
+Acha o pid pelo `BOT_USER_ID` em `/proc`, lê só as linhas daquele pid e imprime
+o veredito por hipótese. Em robô sem o censo responde com o que o log antigo
+permite (upsert, decrypt de grupo, escopo) e avisa que o censo falta.
+
+**Aceite da instrumentação** (depois do deploy + `pm2 restart bot-supervisor`,
+que reconecta todas as sessões — anunciar antes): numa conta cega e conectada,
+`diag-cega-pid.mjs` imprime `VEREDITO [nada_chega]` (hipótese a/d) **ou** um dos
+outros três (b/c) — em qualquer caso a dúvida acaba. Nas contas saudáveis,
+`arrivals.grupo` > 0 e `accepted.grupo` > 0 no mesmo resumo.
+
+**Separar (d) com a cliente (experimento reversível, já proposto no RCA
+anterior):** se há outro sistema ligado ao mesmo número ("Aparelhos
+conectados"), removê-lo por algumas horas e reiniciar só o robô dela. Se o
+censo passar a mostrar `arrivals.grupo` > 0, a causa é a convivência com esse
+aparelho (os ids `3EB0…` e `verified_name` apontam para outro Baileys).
+
+**Ação segura (decidida, não automática):** a única cura observada é o
+re-pareamento pela cliente. **Nunca** apagar `auth_info` por isso — o teto de
+`badSession` continua excluindo 500 com `stuckMsgId`, e a seção "badSession
+(500)" vale inteira. O que muda é que o aviso à dona agora nomeia o caso e a
+ação. Mandar e-mail à cliente pedindo o novo pareamento é demanda nova (decidir
+com a dona: agora ou backlog).
+
+**Hipótese a ser testada com o censo (sem dado ainda):** o fan-out de grupo
+para este aparelho morreu no servidor/nos aparelhos dos remetentes (sender-key
+nunca redistribuída para um aparelho que ficou meses caindo), e por isso só o
+novo pareamento — identidade e pre-keys novas — cura. Se o censo mostrar
+`nada_chega` com `offline_preview` do servidor trazendo só DM/`propria`, essa
+hipótese ganha dado; se mostrar grupo chegando e `decryptFailures.grupo`, é
+sender-key local (b) e cabe refresh de grupos antes de pedir pareamento.
+
+**Não regredir:** o gancho do patch fica ANTES de `shouldIgnoreOwnDeviceDm`,
+`shouldIgnoreJid` e `decryptMessageNode` (senão o censo mede depois da decisão e
+volta a mentir); `inboundCensus` e `stuckDropsSinceLastAccepted` em escopo de
+módulo; nenhuma linha de log por mensagem fora da amostra limitada. Testes:
+`test/inbound-node-census.test.js`, `test/blind-pid-log-scan.test.js`,
+`test/out-of-scope-chat-guard.test.js` (gancho), `test/bot-worker-chat-scope-wiring.test.js`
+(regra antiga agora conta), `test/bot-worker-reception-blindness-wiring.test.js`,
+`test/admin-ops-alert-policy.test.js`.

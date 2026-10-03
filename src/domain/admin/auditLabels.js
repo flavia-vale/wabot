@@ -81,6 +81,8 @@ export const AUDIT_LABELS = Object.freeze({
   'admin.user.access.update': 'mudou o acesso de um cliente',
   'admin.user.block': 'bloqueou a conta',
   'admin.user.diagnostico_envios': 'rodou o diagnóstico de envios de um cliente',
+  'admin.user.diagnostico_conexao': 'rodou o diagnóstico de conexão de um cliente',
+  'admin.assinatura.sincronizar': 'sincronizou a assinatura de um cliente com o Mercado Pago',
   'admin.user.unblock': 'desbloqueou a conta',
   'admin.users.access': 'consultou o acesso de um cliente',
   'admin.users.detail': 'abriu a ficha de um cliente',
