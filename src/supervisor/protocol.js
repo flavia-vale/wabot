@@ -231,6 +231,13 @@ export function bootedAtKey(nodeId) {
   return `${SUPERVISOR_BOOTED_AT_KEY}:${assertNodeId(nodeId)}`
 }
 
+// Identidade da MÁQUINA que hoje é o nó (revisão C3, só com roteamento). Dois
+// servidores com o mesmo SUPERVISOR_NODE_ID religariam as MESMAS contas.
+export const SUPERVISOR_IDENTITY_KEY = 'supervisor:identity'
+export function identityKey(nodeId) {
+  return `${SUPERVISOR_IDENTITY_KEY}:${assertNodeId(nodeId)}`
+}
+
 // Teto de sessões do próprio nó (MAX_SESSIONS_PER_PROCESS), publicado pelo
 // supervisor com o mesmo TTL do heartbeat. A API lê daqui em vez de presumir
 // que todos os nós têm o mesmo teto. Aditivo.

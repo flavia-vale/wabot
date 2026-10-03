@@ -230,12 +230,60 @@ export function createSupervisorClient({
     return nodeId
   }
 
+  // Revisão C5: API com a flag ligada + supervisor n1 no modo ANTIGO (desfazer
+  // na ordem errada, ou supervisor ainda sem a versão nova). O n1 antigo só
+  // escreve o heartbeat legado e só lê a fila legada: em vez de "servidor fora"
+  // para o painel inteiro, os comandos do n1 vão pela fila legada.
+  let lastLegacyFallbackWarnAt = 0
+  async function nodeLiveness(nodeId) {
+    if (!publisherCheck) {
+      try { await init() } catch { return { alive: false, legacy: false } }
+    }
+    try {
+      if (await publisherCheck.get(heartbeatKey(nodeId))) return { alive: true, legacy: false }
+      if (nodeId === DEFAULT_NODE_ID && await publisherCheck.get(SUPERVISOR_HEARTBEAT_KEY)) {
+        if (now() - lastLegacyFallbackWarnAt > 60_000) {
+          lastLegacyFallbackWarnAt = now()
+          logger.warn({ event: 'node_routing_legacy_fallback' }, 'node_routing_legacy_fallback: o supervisor n1 está no modo antigo — comandos do n1 indo pela fila legada (desligue SUPERVISOR_NODE_ROUTING na API ou religue o supervisor com a flag)')
+        }
+        return { alive: true, legacy: true }
+      }
+      return { alive: false, legacy: false }
+    } catch {
+      return { alive: false, legacy: false }
+    }
+  }
+
+  let legacyChannel = null
+  function getLegacyChannel() {
+    if (!legacyChannel) {
+      legacyChannel = (async () => {
+        await init()
+        const { Queue, QueueEvents } = deps
+        const connection = { url: redisUrl, maxRetriesPerRequest: null, enableReadyCheck: false }
+        const q = new Queue(COMMAND_QUEUE, { connection })
+        const qe = new QueueEvents(COMMAND_QUEUE, { connection })
+        await qe.waitUntilReady()
+        return { queue: q, queueEvents: qe }
+      })().catch(err => { legacyChannel = null; throw err })
+    }
+    return legacyChannel
+  }
+
   async function sendToNode(nodeId, name, payload, timeoutMs) {
     // Falha rápida: nó sem heartbeat = ninguém vai ler a fila. Sem isso cada
     // clique esperava o timeout cheio (5-45 s) e o job ficava parado na fila.
-    if (!(await isSupervisorAlive(nodeId))) {
+    const liveness = await nodeLiveness(nodeId)
+    if (liveness.legacy) {
+      const { queue: q, queueEvents: qe } = await getLegacyChannel()
+      return enqueue(q, qe, name, payload, timeoutMs)
+    }
+    if (!liveness.alive) {
       const err = new Error('O servidor dos seus robôs não está respondendo agora. Nossa equipe já foi avisada — tente de novo em alguns minutos.')
       err.code = 'WA_NODE_UNAVAILABLE'
+      // C10: indisponibilidade conhecida (503), não falha da API — o tratador de
+      // erros responde 503 com frase genérica e o classificador não a conta como incidente.
+      err.statusCode = 503
       err.nodeId = nodeId
       throw err
     }
@@ -276,11 +324,11 @@ export function createSupervisorClient({
     }
     try {
       if (nodeRouting) {
-        if (nodeId) return Boolean(await publisherCheck.get(heartbeatKey(nodeId)))
+        if (nodeId) return (await nodeLiveness(nodeId)).alive
         // Sem nodeId: vivo só se TODOS os nós conhecidos estão vivos — um nó
         // morto não pode ficar escondido atrás dos outros.
-        const flags = await Promise.all(nodeIds.map(id => publisherCheck.get(heartbeatKey(id))))
-        return flags.every(Boolean)
+        const flags = await Promise.all(nodeIds.map(id => nodeLiveness(id)))
+        return flags.every(f => f.alive)
       }
       const value = await publisherCheck.get(SUPERVISOR_HEARTBEAT_KEY)
       return Boolean(value)
@@ -416,8 +464,10 @@ export function createSupervisorClient({
     if (!nodeId) return false // sem nó disponível = recusa, classificada pela API
     return send(COMMAND.START_BOT, { userId }, { nodeId })
   }
-  const stopBot = userId => send(COMMAND.STOP_BOT, { userId })
-  const isRunning = userId => send(COMMAND.IS_RUNNING, { userId })
+  // `opts.nodeId` (só com roteamento): fala com um nó ESPECÍFICO em vez do dono
+  // no banco — usado pelo desfazer da mudança de servidor (revisão C6).
+  const stopBot = (userId, opts = {}) => send(COMMAND.STOP_BOT, { userId }, { nodeId: opts?.nodeId ?? null })
+  const isRunning = (userId, opts = {}) => send(COMMAND.IS_RUNNING, { userId }, { nodeId: opts?.nodeId ?? null })
   // Split-brain: o mesmo robô ligado em dois nós. É o único ponto que enxerga
   // os dois nós juntos, então a deduplicação por Set NÃO pode apagar o sinal.
   // Parar o robô do nó errado é opt-in (SUPERVISOR_DUAL_OWNER_AUTOSTOP=1).
@@ -546,6 +596,9 @@ export function createSupervisorClient({
     try { await publisherCheck?.quit() } catch {}
     try { await queueEvents?.close() } catch {}
     try { await queue?.close() } catch {}
+    if (legacyChannel) {
+      try { const { queue: q, queueEvents: qe } = await legacyChannel; await qe?.close(); await q?.close() } catch {}
+    }
     for (const channel of nodeChannels.values()) {
       try {
         const { queue: q, queueEvents: qe } = await channel
@@ -566,5 +619,6 @@ export function createSupervisorClient({
     isSupervisorAlive, getSupervisorBootedAtMs, getSupervisorHeartbeatAtMs, getLastEvent, close, _events: events,
     moveSessionToShard, rollbackSessionFromShard, getShardMetrics,
     resolveNodeId, nodeIds, nodeRouting, getNodeCapacities,
+    forgetNode: userId => { nodeOfUser.delete(userId) },
   })
 }
