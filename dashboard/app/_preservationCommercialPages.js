@@ -9,6 +9,8 @@ import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 import { DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from '@/lib/marketing-content'
 import { AUTOMATION_MODELS, OUR_MODEL_COVERAGE, buildCompetitorModelRows } from '@/lib/automation-models'
 import { CUSTO_FRASE, PRECO_PLANOS_FRASE, fraseNumerosProprios, precoDoPlano } from '@/lib/resposta-citavel'
+import { CanalVideo } from '@/components/marketing/CanalVideo'
+import { VIDEO_AFILIADO_SHOPEE_AUTOMATICO, videoPublicado } from '../../src/tutorialVideo.js'
 
 const siteUrl = getSiteUrl()
 // "As outras lojas" sai da lista canônica: a resposta escrita à mão ficou
@@ -16,6 +18,10 @@ const siteUrl = getSiteUrl()
 function outrasLojas(loja) {
   const outras = SUPPORTED_STORES.filter((nome) => nome !== loja)
   return `${outras.slice(0, -1).join(', ')} e ${outras.at(-1)}`
+}
+// Páginas de rede (Netshoes, KaBuM): nenhuma das 6 lojas é "a desta página".
+function todasAsLojas() {
+  return `${SUPPORTED_STORES.slice(0, -1).join(', ')} e ${SUPPORTED_STORES.at(-1)}`
 }
 // "Basic R$39 ou Pro R$69 a cada 30 dias", montado de DEFAULT_LANDING_PLANS
 // (lib/resposta-citavel.js) para a abertura das páginas-resposta (plano GEO
@@ -59,7 +65,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
    */
   'shopee-afiliados-whatsapp': {
     path: '/shopee-afiliados-whatsapp',
-    title: 'Shopee Afiliados: divulgar no WhatsApp sem copiar',
+    // 03/10/2026 (Frente 3, item 11 da análise SEO+GEO): "7 dias grátis" no
+    // título, como nas páginas de rede e na de Amazon (que já tinha).
+    title: 'Shopee Afiliados no WhatsApp: 7 dias grátis',
     description: 'Já é afiliada Shopee? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu link, sem copiar e colar oferta por oferta. 7 dias grátis.',
     eyebrow: 'Shopee Afiliados',
     h1: 'Shopee Afiliados: como divulgar suas ofertas no WhatsApp sem copiar e colar',
@@ -146,7 +154,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
    * a afiliada, não argumento de venda. */
   'mercado-livre-afiliados-whatsapp': {
     path: '/mercado-livre-afiliados-whatsapp',
-    title: 'Afiliado Mercado Livre: divulgar no WhatsApp',
+    // 03/10/2026 (Frente 3, item 11 da análise SEO+GEO): "7 dias grátis" no
+    // título, como nas páginas de rede e na de Amazon (que já tinha).
+    title: 'Afiliado Mercado Livre no WhatsApp: 7 dias grátis',
     description: 'Já é afiliada do Mercado Livre? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu link, sem copiar e colar oferta por oferta.',
     eyebrow: 'Mercado Livre Afiliados',
     h1: 'Afiliado do Mercado Livre: como divulgar suas ofertas no WhatsApp sem copiar e colar',
@@ -308,7 +318,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
    * lojas essa parte NÃO é garantida. */
   'magalu-afiliados-whatsapp': {
     path: '/magalu-afiliados-whatsapp',
-    title: 'Divulgador Magalu: publicar ofertas no WhatsApp',
+    // 03/10/2026 (Frente 3, item 11 da análise SEO+GEO): "7 dias grátis" no
+    // título, como nas páginas de rede e na de Amazon (que já tinha).
+    title: 'Divulgador Magalu no WhatsApp: 7 dias grátis',
     description: 'Já é divulgadora do Magalu? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu código, sem copiar e colar oferta por oferta.',
     eyebrow: 'Divulgador Magalu',
     h1: 'Divulgador Magalu: como publicar suas ofertas no WhatsApp sem copiar e colar',
@@ -378,7 +390,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
    * código (src/converters/shein.js) — não é promessa de marketing. */
   'shein-afiliados-whatsapp': {
     path: '/shein-afiliados-whatsapp',
-    title: 'SHEIN Afiliados: divulgar no WhatsApp',
+    // 03/10/2026 (Frente 3, item 11 da análise SEO+GEO): "7 dias grátis" no
+    // título, como nas páginas de rede e na de Amazon (que já tinha).
+    title: 'SHEIN Afiliados no WhatsApp: 7 dias grátis',
     description: 'Já é afiliada SHEIN? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu link curto, sem copiar e colar oferta por oferta.',
     eyebrow: 'SHEIN Afiliados',
     h1: 'SHEIN Afiliados: como divulgar suas ofertas no WhatsApp sem copiar e colar',
@@ -440,6 +454,280 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       ['E se a conversão falhar?', 'A oferta não é publicada. Encaminhar o link original daria a sua comissão para o afiliado do grupo de origem. Melhor não enviar do que enviar pagando para outra pessoa.'],
       ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino e variação de texto.'],
       ['Dá para divulgar outras lojas junto?', `Dá. ${outrasLojas('SHEIN')} entram no mesmo plano de entrada, sem custo a mais por loja.`],
+    ],
+  },
+  /* Frente 2 da análise SEO+GEO de 02/10/2026 (G1): as três lojas/redes com
+   * busca e sem página nossa — `afiliado netshoes` 5.000/mês, `afiliado kabum`
+   * 500, `rakuten afiliados` 500, todas de concorrência baixa. O produto já
+   * converte essas lojas (src/converters/awin.js e rakuten.js), mas só para a
+   * afiliada APROVADA na loja dentro da rede: sem aprovação, a oferta não sai
+   * (CONVERSION_FAILURE.AWIN_STORE_NOT_JOINED). A página responde as duas
+   * intenções da busca: como entrar no programa e como divulgar no WhatsApp.
+   * Nenhuma taxa de comissão citada: não temos fonte datada. */
+  'netshoes-afiliados-whatsapp': {
+    path: '/netshoes-afiliados-whatsapp',
+    title: 'Afiliado Netshoes: ofertas no WhatsApp, 7 dias grátis',
+    description: 'Como virar afiliado Netshoes pela Rakuten e publicar as ofertas nos seus grupos de WhatsApp com o seu link, sem copiar e colar. Teste 7 dias grátis, sem cartão.',
+    eyebrow: 'Afiliado Netshoes',
+    h1: 'Afiliado Netshoes: como entrar no programa e publicar as ofertas no WhatsApp',
+    lead: 'O programa de afiliados da Netshoes roda na rede Rakuten Advertising: você se cadastra na Rakuten, pede para participar do programa da Netshoes e, aprovada, recebe links com o seu código. O Espelha Grupos entra depois disso: acompanha os grupos de ofertas que você escolher, troca o link da Netshoes pelo seu e publica nos seus grupos do WhatsApp, com intervalo entre os envios e histórico do que saiu.',
+    forWhom: 'Afiliada aprovada no programa da Netshoes na Rakuten (ou começando o cadastro) que divulga ofertas de esporte e moda em grupos do WhatsApp.',
+    intent: 'afiliado netshoes',
+    related: [
+      { href: '/rakuten-afiliados-whatsapp', label: 'Rakuten Afiliados no WhatsApp', note: 'A rede por trás do programa da Netshoes, e as outras lojas dela.' },
+      { href: '/kabum-afiliados-whatsapp', label: 'Afiliado KaBuM no WhatsApp', note: 'O mesmo caminho, pela rede Awin.' },
+      { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'Origens, conversão de link, destinos e histórico de envio.' },
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados paga mais', note: 'Comparação entre os programas, com fonte e data.' },
+      { href: '/ferramentas/calculadora-comissao-afiliado-whatsapp', label: 'Calculadora de comissão de afiliado', note: 'Faça a conta com os seus números antes de escolher a loja.' },
+      { href: '/precos', label: 'Preços e planos', note: 'Basic, Pro e o que entra em cada um.' },
+    ],
+    about: ['Afiliado Netshoes', 'Rakuten Advertising', 'Grupos de WhatsApp'],
+    decisionQA: [
+      {
+        q: 'Como virar afiliado Netshoes?',
+        a: 'Pela Rakuten Advertising, a rede que opera o programa da Netshoes no Brasil. Você cria a sua conta de publisher na Rakuten, procura a Netshoes na lista de anunciantes e pede para participar. A Netshoes aprova ou recusa; aprovada, os links que você gera na Rakuten levam o seu código.',
+      },
+      {
+        q: 'O Espelha Grupos converte o link da Netshoes?',
+        a: 'Converte, desde que você esteja aprovada no programa da Netshoes na Rakuten. Você cadastra a sua conta da Rakuten no painel e o robô troca o link da oferta pelo seu. Se você ainda não foi aprovada, a oferta da Netshoes não é publicada: o link de outra pessoa nunca sai no seu grupo.',
+      },
+      {
+        q: 'Preciso de programação, API ou n8n?',
+        a: 'Não. Você conecta o WhatsApp lendo um QR Code, cadastra a sua conta da Rakuten em "Minhas credenciais" e escolhe de quais grupos as ofertas vêm e para quais grupos ou canais elas vão.',
+      },
+      {
+        q: 'Quanto custa?',
+        a: 'Sete dias grátis, sem cartão, com o plano Pro completo. Depois, plano Basic por R$39 ou plano Pro por R$69 a cada 30 dias. A conversão das lojas da Rakuten já vale no Basic. Sem fidelidade.',
+      },
+    ],
+    aside: {
+      pill: 'O que é específico da Netshoes',
+      title: 'O link só vira seu se a Netshoes aprovou você na Rakuten.',
+      body: 'Na Shopee ou na Amazon basta ter conta de afiliada. Na Netshoes existe um passo a mais: a loja aprova cada afiliado dentro da Rakuten. O robô lê da sua conta quais lojas aprovaram você e só converte essas. Loja sem aprovação = oferta não publicada, para nunca mandar o seu público por um link que paga outra pessoa.',
+    },
+    bestFor: {
+      yes: [
+        'Afiliada aprovada na Netshoes pela Rakuten que publica ofertas de tênis, esporte e moda em vários grupos.',
+        'Quem divulga Netshoes junto com Shopee, Mercado Livre e Amazon e quer tudo no mesmo robô.',
+        'Quem quer as promoções da Netshoes chegando sozinhas (ofertas automáticas da Rakuten, plano Pro).',
+      ],
+      no: [
+        'Quem ainda não pediu para participar do programa da Netshoes na Rakuten: sem aprovação, o robô não converte.',
+        'Quem quer o robô buscando produto da Netshoes por palavra-chave: a busca por palavra-chave hoje é só na Shopee; da Rakuten chegam as promoções do feed.',
+        'Quem procura promessa de banimento zero. Ninguém controla a decisão do WhatsApp.',
+      ],
+    },
+    primaryCta: 'Testar 7 dias grátis',
+    secondaryCta: 'Ver como funciona a operação',
+    problemTitle: 'Aprovada na Netshoes, o trabalho vira publicar.',
+    problem: 'Você acha a oferta, gera o link na Rakuten, monta o texto e repete em cada grupo. No caminho manual, link sem o seu código escapa, a mesma oferta sai duas vezes no mesmo grupo e tudo vai de uma vez porque só sobrou aquela janela do dia.',
+    bullets: ['Link da Netshoes trocado pelo seu, só nas lojas que aprovaram você na Rakuten.', 'Se a troca falhar, a oferta não sai: nunca o link de outra pessoa.', 'A mesma oferta não sai duas vezes no mesmo grupo.', 'Histórico do que saiu, para onde e o que foi bloqueado.'],
+    process: ['Peça para participar do programa da Netshoes na Rakuten Advertising.', 'Cadastre a sua conta da Rakuten em "Minhas credenciais" no painel.', 'Escolha de quais grupos as ofertas vêm e para quais grupos ou canais elas vão.', 'Acompanhe no histórico o que saiu e o que foi bloqueado.'],
+    faqs: [
+      ['Isso substitui o meu cadastro na Rakuten?', 'Não. O programa é da Netshoes, operado pela Rakuten, e a comissão é paga por eles. O robô só cuida da distribuição.'],
+      ['E se a Netshoes estiver na Awin e na Rakuten?', 'Se você tiver aprovação nas duas redes para a mesma loja, o robô usa a Awin primeiro e a Rakuten como segunda opção.'],
+      ['Isso é "anti-ban"?', 'Não como promessa. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino e variação de texto (plano Pro).'],
+      ['Dá para divulgar outras lojas junto?', `Dá. ${todasAsLojas()} e as outras lojas em que você é aprovada na Awin e na Rakuten entram no mesmo plano.`],
+    ],
+  },
+  'kabum-afiliados-whatsapp': {
+    path: '/kabum-afiliados-whatsapp',
+    title: 'Afiliado KaBuM: ofertas no WhatsApp, 7 dias grátis',
+    description: 'Como virar afiliado KaBuM pela Awin e publicar as ofertas de tecnologia nos seus grupos de WhatsApp com o seu link. Teste 7 dias grátis, sem cartão.',
+    eyebrow: 'Afiliado KaBuM',
+    h1: 'Afiliado KaBuM: como entrar no programa e publicar as ofertas no WhatsApp',
+    lead: 'O programa de afiliados da KaBuM roda na rede Awin: você se cadastra como publisher na Awin, pede para participar do programa da KaBuM e, aprovada, gera links com o seu código. O Espelha Grupos entra depois disso: acompanha os grupos de ofertas que você escolher, troca o link da KaBuM pelo seu e publica nos seus grupos do WhatsApp, com intervalo entre os envios e histórico do que saiu.',
+    forWhom: 'Afiliada aprovada no programa da KaBuM na Awin (ou começando o cadastro) que divulga ofertas de tecnologia e games em grupos do WhatsApp.',
+    intent: 'afiliado kabum',
+    related: [
+      { href: '/netshoes-afiliados-whatsapp', label: 'Afiliado Netshoes no WhatsApp', note: 'O mesmo caminho, pela rede Rakuten.' },
+      { href: '/rakuten-afiliados-whatsapp', label: 'Rakuten Afiliados no WhatsApp', note: 'A outra rede que o robô converte.' },
+      { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'Origens, conversão de link, destinos e histórico de envio.' },
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados paga mais', note: 'Comparação entre os programas, com fonte e data.' },
+      { href: '/ferramentas/calculadora-comissao-afiliado-whatsapp', label: 'Calculadora de comissão de afiliado', note: 'Faça a conta com os seus números antes de escolher a loja.' },
+      { href: '/precos', label: 'Preços e planos', note: 'Basic, Pro e o que entra em cada um.' },
+    ],
+    about: ['Afiliado KaBuM', 'Awin', 'Grupos de WhatsApp'],
+    decisionQA: [
+      {
+        q: 'Como virar afiliado KaBuM?',
+        a: 'Pela Awin, a rede que opera o programa da KaBuM. Você cria a sua conta de publisher na Awin, procura a KaBuM entre os anunciantes e pede para participar. A KaBuM aprova ou recusa; aprovada, os links que você gera na Awin levam o seu código.',
+      },
+      {
+        q: 'O Espelha Grupos converte o link da KaBuM?',
+        a: 'Converte, desde que você esteja aprovada no programa da KaBuM na Awin. Você cadastra o seu código de acesso da Awin no painel e o robô troca o link da oferta pelo seu. Sem aprovação, a oferta da KaBuM não é publicada: o link de outra pessoa nunca sai no seu grupo.',
+      },
+      {
+        q: 'Preciso de programação, API ou n8n?',
+        a: 'Não. Você conecta o WhatsApp lendo um QR Code, cadastra o código de acesso da Awin em "Minhas credenciais" e escolhe de quais grupos as ofertas vêm e para quais grupos ou canais elas vão.',
+      },
+      {
+        q: 'Quanto custa?',
+        a: 'Sete dias grátis, sem cartão, com o plano Pro completo. Depois, plano Basic por R$39 ou plano Pro por R$69 a cada 30 dias. A conversão das lojas da Awin já vale no Basic. Sem fidelidade.',
+      },
+    ],
+    aside: {
+      pill: 'O que é específico da KaBuM',
+      title: 'Promoção de tecnologia dura pouco: a da Awin costuma valer um dia.',
+      body: 'As promoções da KaBuM que chegam pela Awin costumam valer do começo ao fim do mesmo dia. No plano Pro, as ofertas automáticas trazem essas promoções das lojas da Awin em que você é aprovada e publicam no seu grupo enquanto ainda valem; a promoção que vence antes de sair não é enviada.',
+    },
+    bestFor: {
+      yes: [
+        'Afiliada aprovada na KaBuM pela Awin que publica ofertas de tecnologia e games em vários grupos.',
+        'Quem divulga KaBuM junto com Shopee, Mercado Livre e Amazon e quer tudo no mesmo robô.',
+        'Quem quer as promoções do dia chegando sozinhas (ofertas automáticas da Awin, plano Pro).',
+      ],
+      no: [
+        'Quem ainda não foi aprovada no programa da KaBuM na Awin: sem aprovação, o robô não converte.',
+        'Quem quer o robô buscando produto da KaBuM por palavra-chave: a busca por palavra-chave hoje é só na Shopee; da Awin chegam as promoções.',
+        'Quem procura promessa de banimento zero. Ninguém controla a decisão do WhatsApp.',
+      ],
+    },
+    primaryCta: 'Testar 7 dias grátis',
+    secondaryCta: 'Ver como funciona a operação',
+    problemTitle: 'Aprovada na KaBuM, o trabalho vira publicar rápido.',
+    problem: 'Oferta de tecnologia acaba no mesmo dia. No caminho manual você gera o link na Awin, monta o texto e repete em cada grupo — e quando termina, metade das promoções já venceu ou saiu sem o seu código.',
+    bullets: ['Link da KaBuM trocado pelo seu, só nas lojas que aprovaram você na Awin.', 'Se a troca falhar, a oferta não sai: nunca o link de outra pessoa.', 'A mesma oferta não sai duas vezes no mesmo grupo.', 'Histórico do que saiu, para onde e o que foi bloqueado.'],
+    process: ['Peça para participar do programa da KaBuM na Awin.', 'Cadastre o seu código de acesso da Awin em "Minhas credenciais" no painel.', 'Escolha de quais grupos as ofertas vêm e para quais grupos ou canais elas vão.', 'Acompanhe no histórico o que saiu e o que foi bloqueado.'],
+    faqs: [
+      ['Isso substitui o meu cadastro na Awin?', 'Não. O programa é da KaBuM, operado pela Awin, e a comissão é paga por eles. O robô só cuida da distribuição.'],
+      ['Outras lojas da Awin também funcionam?', 'Funcionam: o robô converte as lojas da Awin em que você foi aprovada (por exemplo C&A e Casas Bahia), não uma lista fechada nossa.'],
+      ['Isso é "anti-ban"?', 'Não como promessa. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino e variação de texto (plano Pro).'],
+      ['Dá para divulgar outras lojas junto?', `Dá. ${todasAsLojas()} e as outras lojas em que você é aprovada na Awin e na Rakuten entram no mesmo plano.`],
+    ],
+  },
+  'rakuten-afiliados-whatsapp': {
+    path: '/rakuten-afiliados-whatsapp',
+    title: 'Rakuten Afiliados: ofertas no WhatsApp, 7 dias grátis',
+    description: 'Como funciona a Rakuten Afiliados (Rakuten Advertising) e como publicar as ofertas das lojas que aprovaram você nos seus grupos de WhatsApp. 7 dias grátis.',
+    eyebrow: 'Rakuten Afiliados',
+    h1: 'Rakuten Afiliados: como funciona e como publicar as ofertas no WhatsApp',
+    lead: 'A Rakuten Advertising é uma rede de afiliados: em vez de um programa por loja, você tem uma conta só e pede para participar do programa de cada loja da rede, como a Netshoes. Cada loja aprova ou recusa. O Espelha Grupos lê da sua conta quais lojas aprovaram você, troca o link dessas lojas pelo seu e publica nos seus grupos do WhatsApp; no plano Pro, também traz sozinho as promoções e cupons do feed da Rakuten.',
+    forWhom: 'Afiliada com conta na Rakuten Advertising (ou abrindo uma) que divulga ofertas em grupos e canais do WhatsApp.',
+    intent: 'rakuten afiliados',
+    related: [
+      { href: '/netshoes-afiliados-whatsapp', label: 'Afiliado Netshoes no WhatsApp', note: 'A loja mais buscada da Rakuten, passo a passo.' },
+      { href: '/kabum-afiliados-whatsapp', label: 'Afiliado KaBuM no WhatsApp', note: 'O mesmo caminho, pela rede Awin.' },
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'Garimpo automático de ofertas', note: 'Como as ofertas automáticas funcionam no plano Pro.' },
+      { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'Origens, conversão de link, destinos e histórico de envio.' },
+      { href: '/precos', label: 'Preços e planos', note: 'Basic, Pro e o que entra em cada um.' },
+    ],
+    about: ['Rakuten Advertising', 'Rede de afiliados', 'Grupos de WhatsApp'],
+    decisionQA: [
+      {
+        q: 'O que é a Rakuten Afiliados?',
+        a: 'É a Rakuten Advertising, uma rede de afiliados. Você abre uma conta de publisher e pede para participar do programa de cada loja da rede. A loja aprova ou recusa, e a comissão de cada venda é paga pela rede, conforme as regras do programa daquela loja.',
+      },
+      {
+        q: 'O Espelha Grupos converte link da Rakuten?',
+        a: 'Converte os links das lojas em que você foi aprovada na Rakuten, inclusive os que chegam como click.linksynergy.com. Você cadastra a sua conta da Rakuten no painel; loja sem aprovação = oferta não publicada, para o link de outra pessoa nunca sair no seu grupo.',
+      },
+      {
+        q: 'O robô traz as promoções da Rakuten sozinho?',
+        a: 'No plano Pro, sim: as ofertas automáticas podem ter a Rakuten como origem e publicam as promoções e cupons do feed das lojas que aprovaram você, sem grupo de origem. A promoção vencida não é enviada.',
+      },
+      {
+        q: 'Quanto custa?',
+        a: 'Sete dias grátis, sem cartão, com o plano Pro completo. Depois, plano Basic por R$39 (já converte as lojas da Rakuten) ou plano Pro por R$69 a cada 30 dias (soma as ofertas automáticas). Sem fidelidade.',
+      },
+    ],
+    aside: {
+      pill: 'Rede, não loja',
+      title: 'Uma conta, várias lojas — cada uma com a própria aprovação.',
+      body: 'Na Rakuten você não é afiliada "da rede": é afiliada de cada loja que aprovou você lá dentro. Por isso o robô não usa uma lista fixa de lojas. Ele lê a sua conta, converte só as aprovadas e deixa de publicar a oferta de loja em que você não foi aprovada.',
+    },
+    bestFor: {
+      yes: [
+        'Afiliada com lojas aprovadas na Rakuten que já divulga em grupos do WhatsApp.',
+        'Quem quer promoções e cupons da Rakuten publicados sozinhos (plano Pro).',
+        'Quem divulga também Shopee, Mercado Livre, Amazon e lojas da Awin e quer tudo num robô só.',
+      ],
+      no: [
+        'Quem ainda não tem nenhuma loja aprovada na Rakuten: o robô não tem o que converter.',
+        'Quem quer buscar produto da Rakuten por palavra-chave: a busca por palavra-chave hoje é só na Shopee.',
+        'Quem procura promessa de banimento zero. Ninguém controla a decisão do WhatsApp.',
+      ],
+    },
+    primaryCta: 'Testar 7 dias grátis',
+    secondaryCta: 'Ver como funciona a operação',
+    problemTitle: 'Na rede, cada loja tem o seu link — e o seu prazo.',
+    problem: 'Com várias lojas aprovadas, o trabalho manual multiplica: gerar o link certo de cada loja, conferir se a promoção ainda vale, montar o texto e repetir em cada grupo. Promoção vencida e link sem o seu código são os dois erros mais caros.',
+    bullets: ['Link das lojas aprovadas na Rakuten trocado pelo seu.', 'Se a troca falhar, a oferta não sai: nunca o link de outra pessoa.', 'Promoções e cupons do feed publicados sozinhos no Pro, sem enviar os vencidos.', 'Histórico do que saiu, para onde e o que foi bloqueado.'],
+    process: ['Abra a sua conta na Rakuten Advertising e peça para participar das lojas que você divulga.', 'Cadastre a conta da Rakuten em "Minhas credenciais" no painel.', 'Escolha de quais grupos as ofertas vêm, ou crie uma oferta automática com a Rakuten como origem (Pro).', 'Acompanhe no histórico o que saiu e o que foi bloqueado.'],
+    faqs: [
+      ['A Rakuten e a Awin podem ter a mesma loja?', 'Podem. Se você tiver aprovação nas duas para a mesma loja, o robô usa a Awin primeiro e a Rakuten como segunda opção.'],
+      ['Preciso de programação?', 'Não. Você cadastra a conta da Rakuten no painel e o robô faz o resto. Não há integração para montar nem servidor para manter.'],
+      ['Isso é "anti-ban"?', 'Não como promessa. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino e variação de texto (plano Pro).'],
+      ['A comissão passa pelo Espelha Grupos?', 'Não. A comissão é da rede e da loja, paga direto para você. O robô só cuida da distribuição.'],
+    ],
+  },
+  /* Frente 2, item 6 (G6): `limite de membros grupo whatsapp` 500/mês e
+   * `grupo whatsapp lotado` 50, sem página nossa. O Link Inteligente (PRO,
+   * src/core/smartLinkPicker.js) e o aviso de grupo quase cheio
+   * (src/core/smartLinkAlertPolicy.js) resolvem essa dor e eram invisíveis
+   * fora do painel. Teto padrão de 1000 por grupo, configurável até 1024. */
+  'grupo-whatsapp-lotado': {
+    path: '/grupo-whatsapp-lotado',
+    title: 'Limite de membros do grupo de WhatsApp e grupo lotado',
+    description: 'O grupo de WhatsApp tem limite de 1.024 membros. Veja o que fazer quando lota: um link só que manda cada pessoa para o grupo com vaga e avisa antes de encher.',
+    eyebrow: 'Grupo lotado',
+    h1: 'Limite de membros do grupo de WhatsApp: o que fazer quando o grupo lota',
+    lead: 'Um grupo de WhatsApp aceita até 1.024 participantes. Quando lota, o convite deixa de funcionar e quem chega pelo seu link fica de fora. A saída é abrir mais grupos e divulgar um link só que manda cada pessoa para o grupo com mais vaga: é o Link Inteligente do Espelha Grupos, que ainda avisa você quando um grupo está quase cheio.',
+    forWhom: 'Afiliada ou admin com grupos de ofertas que lotam e que divulga o convite na bio, em anúncios ou em outros grupos.',
+    intent: 'limite de membros grupo whatsapp',
+    related: [
+      { href: '/bot-achadinhos-whatsapp', label: 'Bot de achadinhos no WhatsApp', note: 'Publicar a mesma oferta em todos os grupos, sem copiar e colar.' },
+      { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'Origens, conversão de link, destinos e histórico de envio.' },
+      { href: '/grupo-para-canal-whatsapp', label: 'Grupo ou canal do WhatsApp?', note: 'Quando vale migrar parte do público para um canal.' },
+      { href: '/precos', label: 'Preços e planos', note: 'O Link Inteligente está no plano Pro.' },
+    ],
+    about: ['Limite de membros do grupo de WhatsApp', 'Link Inteligente', 'Grupos de ofertas'],
+    decisionQA: [
+      {
+        q: 'Qual é o limite de membros de um grupo de WhatsApp?',
+        a: 'Até 1.024 participantes por grupo, contando os administradores. Passou disso, o WhatsApp não deixa mais ninguém entrar pelo convite. Para crescer, a saída é ter mais de um grupo (ou levar parte do público para um canal, que não tem esse limite).',
+      },
+      {
+        q: 'O que acontece com quem clica no convite de um grupo lotado?',
+        a: 'A pessoa não consegue entrar. Se o convite está na sua bio, num anúncio ou num post, cada clique depois disso é uma pessoa perdida — e você só descobre quando alguém reclama.',
+      },
+      {
+        q: 'Como o Link Inteligente resolve?',
+        a: 'Você cria um endereço só (espelhagrupos.com.br/g/seu-nome) e coloca nele os seus grupos. A cada clique, o robô manda a pessoa para o grupo com menos membros; grupo que chega ao teto (padrão 1.000) sai do rodízio. Se todos lotarem, quem clica vê uma página de "grupos lotados" em vez de um convite quebrado.',
+      },
+      {
+        q: 'Quanto custa?',
+        a: 'O Link Inteligente e o painel de membros por grupo estão no plano Pro, R$69 a cada 30 dias. Dá para testar 7 dias grátis com o Pro completo, sem cartão.',
+      },
+    ],
+    aside: {
+      pill: 'Aviso antes de lotar',
+      title: 'Você fica sabendo antes, não depois.',
+      body: 'Quando um grupo do Link Inteligente fica quase cheio, ou quando todos lotam, o Espelha Grupos manda um aviso no seu próprio WhatsApp e por e-mail. O de "quase cheio" espera o fim da madrugada; o de "todos lotaram" sai na hora. Dá tempo de abrir um grupo novo e colocar no link antes de perder gente.',
+    },
+    bestFor: {
+      yes: [
+        'Quem divulga um convite de grupo na bio, em anúncios ou em outros grupos e já teve grupo lotado.',
+        'Quem tem vários grupos do mesmo nicho e quer encher um de cada vez, sem trocar o link divulgado.',
+        'Quem quer acompanhar quantos membros cada grupo tem (painel de membros, plano Pro).',
+      ],
+      no: [
+        'Quem tem um grupo só e longe de lotar: o convite comum do WhatsApp resolve.',
+        'Quem quer criar grupos automaticamente: o robô não cria grupo; você cria e coloca no link.',
+        'Quem não usa o Espelha Grupos como admin dos grupos: o robô precisa ser admin para pegar o convite.',
+      ],
+    },
+    primaryCta: 'Testar 7 dias grátis',
+    secondaryCta: 'Ver como funciona a operação',
+    problemTitle: 'Grupo lotado é convite quebrado na sua bio.',
+    problem: 'O link de convite não avisa que o grupo encheu. Ele simplesmente para de funcionar, e você continua pagando anúncio ou divulgando a bio para um grupo que não aceita mais ninguém. Trocar o link em todo lugar, a cada grupo novo, é o trabalho que ninguém faz a tempo.',
+    bullets: ['Um endereço só para divulgar, que manda cada pessoa para o grupo com mais vaga.', 'Grupo cheio sai do rodízio sozinho (teto padrão de 1.000 membros, ajustável).', 'Aviso no seu WhatsApp e por e-mail quando um grupo está quase cheio ou todos lotaram.', 'Painel com o número de membros de cada grupo.'],
+    process: ['Deixe o número do Espelha Grupos como admin dos seus grupos.', 'Em "Link Inteligente", escolha o nome do endereço e adicione os grupos.', 'Divulgue o endereço na bio, nos anúncios e nas ofertas.', 'Quando chegar o aviso de quase cheio, crie um grupo novo e coloque no link.'],
+    faqs: [
+      ['Canal do WhatsApp tem limite de membros?', 'Não tem o limite de 1.024 do grupo. Por isso muita afiliada usa o canal para o público grande e os grupos para quem quer conversar.'],
+      ['O link funciona se eu mudar os grupos?', 'Funciona. Você adiciona ou tira grupos no painel e o endereço divulgado continua o mesmo.'],
+      ['O Link Inteligente conta os cliques?', 'Conta cada clique e reserva a vaga até a próxima leitura do número de membros, para não mandar todo mundo para o mesmo grupo ao mesmo tempo.'],
+      ['Isso é "anti-ban"?', 'Não. O Link Inteligente só distribui quem entra. A cadência dos envios nos grupos é outra parte do produto.'],
     ],
   },
   /* Página do modo "o robô busca a oferta sozinho" (23/09/2026).
@@ -564,7 +852,10 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
   },
   'bot-que-busca-ofertas-shopee-whatsapp': {
     path: '/bot-que-busca-ofertas-shopee-whatsapp',
-    title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp',
+    // 03/10/2026 (Frente 2, item 8 da análise SEO+GEO): a palavra do mercado é
+    // "garimpo" e "no automático" (garimpo de ofertas 50/mês; Autocomplete
+    // "afiliado shopee no automático"), não "busca sozinho". Só o título muda.
+    title: 'Garimpo de ofertas da Shopee no automático (radar)',
     description: 'Diga o tema e o robô procura ofertas na Shopee, filtra pelo desconto, troca o link pelo seu código e publica nos seus grupos. Plano Pro, 7 dias grátis.',
     eyebrow: 'Ofertas automáticas da Shopee',
     h1: 'Bot que busca ofertas da Shopee sozinho e publica no seu WhatsApp',
@@ -666,6 +957,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     // MEDIDA em test/inbound-titulos-clique.test.js (8,09% de clique) e só sai
     // de lá com dado de Search Console. O H1 é que carrega preço e teste.
     description: 'Espelha os grupos que você segue e troca cada link pelo seu código de afiliada em 6 lojas. Basic R$ 39, Pro R$ 69 por 30 dias, 7 dias grátis sem cartão.',
+    // Frente 5 da análise SEO+GEO (03/10): o vídeo do canal entra aqui assim
+    // que for publicado (id em src/tutorialVideo.js); até lá, nada aparece.
+    video: videoPublicado(VIDEO_AFILIADO_SHOPEE_AUTOMATICO),
     eyebrow: 'Bot para afiliados',
     h1: 'Bot para afiliados no WhatsApp: R$ 39 por 30 dias, 7 dias grátis',
     lead: `Um bot para afiliados no WhatsApp acompanha os grupos de origem que você já segue, troca cada link de produto ou cupom pelo seu código de afiliada e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso em ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}), com intervalo entre envios, limite por destino e histórico de tudo o que saiu.`,
@@ -690,6 +984,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/padronizar-divulgacao-afiliado-whatsapp', label: 'Como padronizar a divulgação de cupons', note: 'Modelo de mensagem pronto com cupom e link com o seu código, o mesmo em todos os grupos.' },
       { href: '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo', label: 'Postar em vários grupos ao mesmo tempo sem spam', note: 'Os 4 caminhos lado a lado e o que o WhatsApp trata como spam.' },
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre: comissão e prazo de atribuição lado a lado.' },
+      { href: '/netshoes-afiliados-whatsapp', label: 'Afiliado Netshoes no WhatsApp', note: 'O programa roda na Rakuten; o robô converte as lojas que aprovaram você.' },
+      { href: '/kabum-afiliados-whatsapp', label: 'Afiliado KaBuM no WhatsApp', note: 'O programa roda na Awin; as promoções do dia podem sair sozinhas no Pro.' },
+      { href: '/grupo-whatsapp-lotado', label: 'Grupo de WhatsApp lotado', note: 'O limite de 1.024 membros e um link só que manda cada pessoa para o grupo com vaga.' },
       { href: '/vendas-e-comissao-afiliado-whatsapp', label: 'Quanto você ganhou de comissão', note: 'Pedidos, valor vendido e comissão estimada e confirmada das ofertas que o robô publicou.' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'Cadastro gratuito, 3% na venda padrão e até 30% na Comissão Extra.' },
       { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'De 0% a 13% conforme o produto, e por que a tag precisa estar na URL da loja.' },
@@ -828,6 +1125,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/confiabilidade-sessao-whatsapp', label: 'O que acontece quando o WhatsApp cai', note: 'Como o robô se recupera sozinho e o que você vê no painel enquanto isso.' },
       { href: '/grupo-para-canal-whatsapp', label: 'Grupo ou Canal: qual usar para achadinhos', note: 'O que muda no alcance, no risco e em quem pode responder.' },
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'De onde vem a comissão dos achadinhos que você publica.' },
+      { href: '/grupo-whatsapp-lotado', label: 'Grupo de achadinhos lotou?', note: 'O limite de membros do WhatsApp e o link que manda cada pessoa para o grupo com vaga.' },
+      { href: '/netshoes-afiliados-whatsapp', label: 'Achadinhos da Netshoes', note: 'Como entrar no programa pela Rakuten e publicar com o seu link.' },
+      { href: '/rakuten-afiliados-whatsapp', label: 'Rakuten Afiliados', note: 'Promoções e cupons das lojas da rede, publicados sozinhos no Pro.' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'O programa com maior volume de busca no Brasil.' },
       { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'Os primeiros passos antes de automatizar.' },
       { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'Clonar mensagens de um grupo de afiliados', note: 'O que a busca chama de "clonar" e como o link vira o seu.' },
@@ -1449,6 +1749,14 @@ export function PreservationCommercialPage({ pageKey }) {
             </div>
           </div>
         </section>
+
+        {page.video ? (
+          <section style={s.section}>
+            <div className="wrap">
+              <CanalVideo video={page.video} />
+            </div>
+          </section>
+        ) : null}
 
         {related.length ? (
           <section style={s.section}>

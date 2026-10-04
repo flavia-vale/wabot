@@ -94,12 +94,15 @@ function normalizeRevenueMonth(raw, month) {
   const affiliateCommissions = round2(raw?.affiliateCommissions ?? 0)
   const mpFees = round2(raw?.mpFees ?? 0)
   const refunds = round2(raw?.refunds ?? 0)
+  // Parte de `refunds` devolvida dentro do Mercado Pago (o resto saiu por PIX).
+  const mpRefunds = round2(raw?.mpRefunds ?? 0)
   return {
     month,
     gross,
     affiliateCommissions,
     mpFees,
     refunds,
+    mpRefunds,
     net: round2(gross - affiliateCommissions - mpFees - refunds),
     payments: Number(raw?.payments ?? 0) || 0,
     payingUsers: Number(raw?.payingUsers ?? 0) || 0,
@@ -337,13 +340,16 @@ export function buildRoiReport({
   let commissionsAllTime = 0
   let feesAllTime = 0
   let refundsAllTime = 0
+  let mpRefundsAllTime = 0
   for (const month of revenueMonths) {
     const revenue = normalizeRevenueMonth(revenueByMonth[month], month)
     grossAllTime += revenue.gross
     commissionsAllTime += revenue.affiliateCommissions
     feesAllTime += revenue.mpFees
     refundsAllTime += revenue.refunds
+    mpRefundsAllTime += revenue.mpRefunds
   }
+  mpRefundsAllTime = round2(mpRefundsAllTime)
   grossAllTime = round2(grossAllTime)
   commissionsAllTime = round2(commissionsAllTime)
   feesAllTime = round2(feesAllTime)
@@ -386,6 +392,8 @@ export function buildRoiReport({
       affiliateCommissionsAllTime: commissionsAllTime,
       mpFeesAllTime: feesAllTime,
       refundsAllTime,
+      // Já está dentro de refundsAllTime; separado só para a tela mostrar as duas linhas.
+      mpRefundsAllTime,
       netAllTime,
       // O mês corrente entra no placar, então a cascata termina nele. A linha
       // do mês fechado fica como detalhe, para conferir com a tabela.

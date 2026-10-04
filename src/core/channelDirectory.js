@@ -42,6 +42,8 @@ export async function getChannelMetadata({ sock, jid, inviteCode }) {
     owner,
     isViewerOwner,
     picture: meta.picture?.url ?? null,
+    // Vários números (Fase 2.1): SUBSCRIBER/ADMIN/OWNER = este número segue.
+    viewerRole: meta.viewer_metadata?.role ?? null,
   }
 }
 

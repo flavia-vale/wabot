@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import Link from 'next/link'
-import { buildCredentialBlockHelp, deliveryNetworkLabel, explainErrorMsg, isCredentialBlockErrorMsg, STATUS_TABS, statusTagForLog } from '@/lib/painel/logsCopy'
+import { buildCredentialBlockHelp, deliveryNetworkLabel, explainErrorMsg, senderNumberLabel, isCredentialBlockErrorMsg, STATUS_TABS, statusTagForLog } from '@/lib/painel/logsCopy'
 import { videoEtiquetasParaLoja } from '../../../../src/tutorialVideo.js'
 import { shouldShowStuckQueueRecovery } from '../../../../src/domain/painel/stuckQueueRecovery.js'
 
@@ -146,6 +146,8 @@ export default function SendHistory() {
   }, [tab, page, debounced])
 
   const logs = data?.logs || []
+  // Conta com número extra: coluna "Número" (qual número enviou).
+  const senderNumbers = data?.senderNumbers || null
   const total = num(data?.total)
   const totalPages = Math.max(1, Math.ceil(total / LIMIT))
   const statusCounts = data?.statusCounts || {}
@@ -331,6 +333,7 @@ export default function SendHistory() {
                         {dest || '—'}
                       </td>
                       <td className="pnl-muted" style={{ whiteSpace: 'nowrap' }}>{deliveryNetworkLabel(log)}</td>
+                      {senderNumbers && <td className="pnl-muted" style={{ whiteSpace: 'nowrap' }}>{senderNumberLabel(log, senderNumbers)}</td>}
                     </tr>
                   )
                 })}
@@ -349,7 +352,7 @@ export default function SendHistory() {
                     <span className="pnl-faint" style={{ fontSize: 11.5 }}>{formatDateTime(log.sentAt)}</span>
                   </div>
                   <p style={{ fontSize: 13, margin: '8px 0 4px' }}>{shortText(log.messageText)}</p>
-                  <p className="pnl-muted" style={{ fontSize: 12 }}>{logOriginLabel(log)}{dest ? ` → ${dest}` : ''} · {deliveryNetworkLabel(log)}</p>
+                  <p className="pnl-muted" style={{ fontSize: 12 }}>{logOriginLabel(log)}{dest ? ` → ${dest}` : ''} · {deliveryNetworkLabel(log)}{senderNumbers ? ` · ${senderNumberLabel(log, senderNumbers)}` : ''}</p>
                   <div style={{ marginTop: 8 }}><StatusTag log={log} /><DedupChip hits={log.dedupHits} /></div>
                   <CredentialHelpButton log={log} open={helpFor === `m-${log.id}`} onOpen={() => setHelpFor(`m-${log.id}`)} onClose={() => setHelpFor(null)} />
                   <ErrorDetails log={log} expanded={expanded.has(log.id)} onToggle={() => toggle(log.id)} />

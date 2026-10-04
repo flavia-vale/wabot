@@ -7,8 +7,9 @@ import { standbyProcessKey, STANDBY_PROCESS_SLOT, otherSlot } from '../../domain
 import { canStartReserve, reserveHeadroom } from '../../domain/session/reserveCapacity.js'
 import { normalizePairingPhone } from '../../domain/session/service.js'
 import { switchActiveNumber } from '../../core/numberSwitch.js'
+import { MOVING_NODE_LIFECYCLE } from '../../supervisor/accountMove.js'
 import { NUMBER_SWITCHED_EVENT } from '../../jobs/numberFailover.js'
-import { missingDestinations } from '../../domain/session/groupMembership.js'
+import { missingDestinations, sourceCoverage, channelFollowState } from '../../domain/session/groupMembership.js'
 import { rotationEnabledByEnv } from '../../domain/session/senderRouting.js'
 import { writeAnalyticsEvent } from '../../events/store.js'
 import {
@@ -30,6 +31,20 @@ const SESSION_VIEW = { phone: true, status: true, lifecycle: true, lastHeartbeat
 const MANUAL_SWITCH_MIN_INTERVAL_MS = 60_000
 // Pertença gravada há menos de 2 h vale (o robô regrava a cada hora).
 const MEMBERSHIP_FRESH_MS = 2 * 60 * 60_000
+// Canais de origem (Fase 2.1): consulta ao vivo no número reserva, com teto
+// para a tela não pendurar. Seguir vai em lotes pequenos e espaçados (anti-ban:
+// número novo seguindo muitos canais de uma vez chama atenção).
+const CHANNEL_CHECK_MAX = 20
+const CHANNEL_CHECK_TIMEOUT_MS = 5_000
+const FOLLOW_BATCH = 5
+const FOLLOW_GAP_MS = 3_000
+const FOLLOW_MIN_INTERVAL_MS = 30_000
+
+function withTimeout(promise, ms) {
+  let timer
+  const timeout = new Promise(resolve => { timer = setTimeout(() => resolve(null), ms) })
+  return Promise.race([Promise.resolve(promise).finally(() => clearTimeout(timer)), timeout])
+}
 
 function parseBlockNotice(raw) {
   try { return raw ? JSON.parse(raw) : null } catch { return null }
@@ -39,6 +54,25 @@ export async function multiNumberRoutes(app, opts = {}) {
   const manager = opts.manager ?? defaultManager
   const env = opts.env ?? process.env
   const maxSessions = () => Math.max(1, Number(env.MAX_SESSIONS_PER_PROCESS || 20))
+  const sleep = opts.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)))
+  const followInFlight = new Set()
+  const lastFollowAt = new Map()
+
+  // jid → 'ok' | 'missing' | 'unknown', perguntando ao número reserva.
+  async function readChannelStates(processKey, jids) {
+    const states = {}
+    for (const jid of jids.slice(0, CHANNEL_CHECK_MAX)) {
+      const meta = await withTimeout(Promise.resolve(manager.channelMetadata?.(processKey, { jid })).catch(() => null), CHANNEL_CHECK_TIMEOUT_MS)
+      states[jid] = channelFollowState(meta?.viewerRole)
+    }
+    return states
+  }
+
+  async function sourceChannels(userId) {
+    const rows = await db.group.findMany({ where: { userId, role: 'monitor', kind: 'channel' }, select: { waJid: true, name: true } })
+    const seen = new Set()
+    return rows.filter(r => r.waJid.endsWith('@newsletter') && !seen.has(r.waJid) && seen.add(r.waJid))
+  }
 
   async function loadState(userId) {
     const [user, events] = await Promise.all([
@@ -154,8 +188,13 @@ export async function multiNumberRoutes(app, opts = {}) {
     if (!state.active || !state.active.phone) {
       return reply.code(409).send({ error: 'Conecte primeiro o número principal.', code: 'PRIMARY_NOT_CONNECTED' })
     }
+    // Revisão V1 (multi-servidor): conta mudando de servidor não liga nada.
+    if (state.active.lifecycle === MOVING_NODE_LIFECYCLE) {
+      return reply.code(409).send({ error: 'Seu WhatsApp está mudando de servidor. Tente de novo em alguns minutos.', code: 'WA_SESSION_MOVING' })
+    }
     // Principal tem prioridade na vaga (Regra #1 — docs/rca/memoria-e-capacidade.md).
-    const node = manager.getNodeRoutingInfo ? await manager.getNodeRoutingInfo(userId).catch(() => null) : null
+    // Revisão V3: com roteamento, soma as vagas prometidas a contas novas.
+    const node = manager.getNodeRoutingInfo ? await manager.getNodeRoutingInfo(userId, { includeReservations: true }).catch(() => null) : null
     let runningCount = node?.running ?? null
     let max = node?.max ?? null
     if (!node) {
@@ -168,6 +207,9 @@ export async function multiNumberRoutes(app, opts = {}) {
       req.log.warn({ userId, runningCount, max, reason: capacity.reason }, 'Número reserva recusado por vaga')
       return reply.code(503).send({ error: 'Servidor sem vaga para o número reserva agora. Tente mais tarde.', code: 'RESERVE_NO_CAPACITY' })
     }
+    // Revisão V3: segura a vaga (a contagem tem cache de 15 s) — dois pedidos
+    // seguidos não passam juntos pela mesma medição.
+    if (node?.nodeId && manager.reserveNodeSlot) await Promise.resolve(manager.reserveNodeSlot(node.nodeId)).catch(() => {})
     await db.waExtraSession.upsert({
       where: { userId_slot: { userId, slot: STANDBY_PROCESS_SLOT } },
       update: { status: 'connecting', lifecycle: 'authenticating', blockNotice: null },
@@ -218,28 +260,88 @@ export async function multiNumberRoutes(app, opts = {}) {
 
   // Grupos de destino em que o número reserva NÃO está — nesses ele não
   // consegue enviar se assumir.
-  app.get('/reserve/missing-groups', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const state = await requireReserve(req, reply)
-    if (!state) return
-    if (state.standby?.status !== 'connected') return reply.code(409).send({ error: 'O número reserva ainda não está conectado.' })
-    const userId = req.user.sub
-    const destinations = await db.group.findMany({ where: { userId, role: 'post', kind: 'group' }, select: { waJid: true, name: true } })
-    // Fase 2: lê a pertença gravada pelo próprio robô (WaGroupMembership) do
-    // número que está de prontidão; sem dado recente, pergunta ao robô ao vivo.
-    const standbySlot = otherSlot(state.activeWaSlot)
+  // Destinos e origens de UM número. Pertença gravada pelo próprio robô
+  // (WaGroupMembership); sem dado recente, pergunta ao robô ao vivo. Canais:
+  // sempre ao vivo. Devolve null se não deu para ler os grupos.
+  async function numberCoverage({ userId, slot, processKey, destinations, sources }) {
     const stored = await db.waGroupMembership.findMany({
-      where: { userId, slot: standbySlot, refreshedAt: { gte: new Date(Date.now() - MEMBERSHIP_FRESH_MS) } },
+      where: { userId, slot, refreshedAt: { gte: new Date(Date.now() - MEMBERSHIP_FRESH_MS) } },
       select: { waJid: true },
     })
     let memberJids = stored.map(r => r.waJid)
     let source = 'stored'
     if (!stored.length) {
-      const live = await Promise.resolve(manager.listGroups(standbyProcessKey(userId))).catch(() => null)
-      if (!Array.isArray(live)) return reply.code(502).send({ error: 'Não foi possível ler os grupos do número reserva agora.' })
+      const live = await Promise.resolve(manager.listGroups(processKey)).catch(() => null)
+      if (!Array.isArray(live)) return null
       memberJids = live.map(g => g.waJid)
       source = 'live'
     }
-    return { total: destinations.length, missing: missingDestinations({ destinations, memberJids }), source }
+    const channelJids = [...new Set(sources.map(r => r.waJid).filter(j => j.endsWith('@newsletter')))]
+    const channelStates = channelJids.length ? await readChannelStates(processKey, channelJids) : {}
+    return {
+      total: destinations.length,
+      missing: missingDestinations({ destinations, memberJids }),
+      source,
+      sources: sourceCoverage({ sources, memberJids, channelStates }),
+    }
+  }
+
+  // Grupos/canais em que cada número NÃO está. Raiz (formato antigo) = número
+  // de prontidão; `active` = número que envia agora (depois de uma troca os
+  // papéis se invertem, e origem fora do número que envia = parada AGORA).
+  app.get('/reserve/missing-groups', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const state = await requireReserve(req, reply)
+    if (!state) return
+    if (state.standby?.status !== 'connected') return reply.code(409).send({ error: 'O número reserva ainda não está conectado.' })
+    const userId = req.user.sub
+    const [destinations, sources] = await Promise.all([
+      db.group.findMany({ where: { userId, role: 'post', kind: 'group' }, select: { waJid: true, name: true } }),
+      db.group.findMany({ where: { userId, role: 'monitor' }, select: { waJid: true, name: true } }),
+    ])
+    const standby = await numberCoverage({ userId, slot: otherSlot(state.activeWaSlot), processKey: standbyProcessKey(userId), destinations, sources })
+    if (!standby) return reply.code(502).send({ error: 'Não foi possível ler os grupos do número reserva agora.' })
+    const active = state.active?.status === 'connected'
+      ? await numberCoverage({ userId, slot: state.activeWaSlot, processKey: userId, destinations, sources })
+      : null
+    return { ...standby, active }
+  })
+
+  // A reserva segue os canais de origem que ainda não segue. Lote pequeno e
+  // espaçado; a tela chama de novo se sobrar (`remaining`).
+  app.post('/reserve/follow-source-channels', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const state = await requireReserve(req, reply)
+    if (!state) return
+    if (state.standby?.status !== 'connected') return reply.code(409).send({ error: 'O número reserva ainda não está conectado.' })
+    const userId = req.user.sub
+    if (followInFlight.has(userId)) return reply.code(429).send({ error: 'Já estamos seguindo os canais. Aguarde.', code: 'FOLLOW_IN_FLIGHT' })
+    const last = lastFollowAt.get(userId) ?? 0
+    if (Date.now() - last < FOLLOW_MIN_INTERVAL_MS) {
+      return reply.code(429).send({ error: 'Aguarde meio minuto antes de seguir mais canais.', code: 'FOLLOW_TOO_SOON' })
+    }
+    followInFlight.add(userId)
+    try {
+      const key = standbyProcessKey(userId)
+      const channels = await sourceChannels(userId)
+      const states = await readChannelStates(key, channels.map(c => c.waJid))
+      const pending = channels.filter(c => states[c.waJid] !== 'ok')
+      const batch = pending.slice(0, FOLLOW_BATCH)
+      const followed = []
+      const failed = []
+      for (const [i, ch] of batch.entries()) {
+        if (i > 0) await sleep(FOLLOW_GAP_MS)
+        try {
+          await manager.followChannelImmediate(key, ch.waJid)
+          followed.push(ch)
+        } catch (err) {
+          req.log.warn({ err: err?.message, jid: ch.waJid }, 'reserva: seguir canal de origem falhou')
+          failed.push(ch)
+        }
+      }
+      lastFollowAt.set(userId, Date.now())
+      return { followed, failed, remaining: pending.length - batch.length }
+    } finally {
+      followInFlight.delete(userId)
+    }
   })
 
   // Troca manual (ex.: "voltar para o número 1"). Só com o outro número

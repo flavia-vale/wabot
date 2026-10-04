@@ -18,7 +18,7 @@
 //   Shozap em 27/09/2026: o preço dele não é visível na página pública).
 import { getCompetitorBySlug } from './competitors-data'
 import { formatDatePtBr } from './editorial-content'
-import { DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from './marketing-content'
+import { DEFAULT_LANDING_PLANS, STORES_FACT_PT, SUPPORTED_STORES } from './marketing-content'
 
 const basicPlan = DEFAULT_LANDING_PLANS.find((plan) => plan.id === 'basic')
 const proPlan = DEFAULT_LANDING_PLANS.find((plan) => plan.id === 'pro')
@@ -41,7 +41,7 @@ export const AUTOMATION_MODELS = [
     what: 'Acompanha os grupos e canais de ofertas que você já segue e republica cada oferta nos seus, com o link trocado pelo seu código de afiliada.',
     bestFor: 'Quem já acompanha bons grupos de origem e perde tempo copiando e colando oferta por oferta.',
     notIdealFor: 'Quem não segue nenhum grupo de ofertas: sem origem, não há o que espelhar.',
-    ours: `Sim, nos planos Basic (${BASIC_PRICE_LABEL}) e Pro (${PRO_PRICE_LABEL}), em ${SUPPORTED_STORES.length} lojas. Canais do WhatsApp como origem e destino só no Pro.`,
+    ours: `Sim, nos planos Basic (${BASIC_PRICE_LABEL}) e Pro (${PRO_PRICE_LABEL}), em ${SUPPORTED_STORES.length} lojas e nas lojas aprovadas na Awin e na Rakuten. Canais do WhatsApp como origem e destino só no Pro.`,
   },
   {
     id: 'garimpo',
@@ -173,7 +173,7 @@ export const OUR_MODEL_COVERAGE = {
   espelhador: 'Sim, Basic e Pro, sem teto de grupos',
   garimpo: 'Sim, Shopee por tema e desconto mínimo (Pro)',
   formatador: 'Sim, "Criar oferta" a partir do link (Basic e Pro)',
-  stores: `${SUPPORTED_STORES.length} lojas: ${SUPPORTED_STORES.join(', ')}`,
+  stores: STORES_FACT_PT,
   freeTrial: '7 dias grátis com o Pro completo, sem cartão',
   entryPrice: `${BASIC_PRICE_LABEL} (Basic)`,
 }

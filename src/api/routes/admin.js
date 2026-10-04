@@ -2303,6 +2303,7 @@ export async function adminRoutes(app) {
       ],
     }
     const subscriptionChargeApprovedWhere = { status: { in: CHARGE_OUTCOME_STATUSES.aprovada } }
+    const mpRefundedStatuses = CHARGE_OUTCOME_STATUSES.devolvida
 
     // Contas de TESTE (assinatura ligada só para validar a cobrança recorrente)
     // ficam FORA de toda soma daqui — esse dinheiro não cai no caixa. Elas
@@ -2332,6 +2333,10 @@ export async function adminRoutes(app) {
       commissionsPaidPeriod,
       refundsPeriod,
       refundsAll,
+      mpRefundedPaymentsPeriod,
+      mpRefundedPaymentsAll,
+      mpRefundedChargesPeriod,
+      mpRefundedChargesAll,
     ] = await Promise.all([
       db.payment.aggregate({ where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser, createdAt: { gte: periodStart, lte: periodEnd } }, _sum: { amount: true }, _count: { _all: true } }),
       db.payment.aggregate({ where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser }, _sum: { amount: true }, _count: { _all: true } }),
@@ -2356,7 +2361,17 @@ export async function adminRoutes(app) {
       db.affiliateCommission.aggregate({ where: { status: 'paid', paidAt: { gte: periodStart, lte: periodEnd } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
       db.refund.aggregate({ where: { refundedAt: { gte: periodStart, lte: periodEnd }, ...notTestUser }, _sum: { amount: true, gatewayFeeLoss: true }, _count: { _all: true } }),
       db.refund.aggregate({ where: { ...notTestUser }, _sum: { amount: true, gatewayFeeLoss: true }, _count: { _all: true } }),
+      // Reembolsos feitos DENTRO do Mercado Pago: o pagamento muda para
+      // refunded/charged_back e some do "approved". `refund: null` evita contar
+      // de novo o que já foi marcado por PIX (tabela Refund).
+      db.payment.aggregate({ where: { status: { in: mpRefundedStatuses }, refund: null, ...oneTimePaymentWhere, ...notTestUser, createdAt: { gte: periodStart, lte: periodEnd } }, _sum: { amount: true }, _count: { _all: true } }),
+      db.payment.aggregate({ where: { status: { in: mpRefundedStatuses }, refund: null, ...oneTimePaymentWhere, ...notTestUser }, _sum: { amount: true }, _count: { _all: true } }),
+      db.subscriptionCharge.aggregate({ where: { status: { in: mpRefundedStatuses }, ...notTestUser, attemptedAt: { gte: periodStart, lte: periodEnd } }, _sum: { amount: true }, _count: { _all: true } }),
+      db.subscriptionCharge.aggregate({ where: { status: { in: mpRefundedStatuses }, ...notTestUser }, _sum: { amount: true }, _count: { _all: true } }),
     ])
+    const mpRefundsPeriod = (mpRefundedPaymentsPeriod._sum.amount ?? 0) + (mpRefundedChargesPeriod._sum.amount ?? 0)
+    const mpRefundsPeriodCount = mpRefundedPaymentsPeriod._count._all + mpRefundedChargesPeriod._count._all
+    const mpRefundsAllTime = (mpRefundedPaymentsAll._sum.amount ?? 0) + (mpRefundedChargesAll._sum.amount ?? 0)
 
     // MRR canônico (src/domain/admin/mrr.js): só pagante pela regra de
     // payingLoader × preço atual do plano. Mesma conta do ROI.
@@ -2367,11 +2382,13 @@ export async function adminRoutes(app) {
     // comissões em centavos (Int) → /100. Combinação em módulo puro e testado
     // (src/domain/admin/financeOverview.js) — é exatamente o ponto que faltava
     // e escondia a receita de assinatura recuperada pela reconciliação.
+    // O valor cheio inclui o que depois foi devolvido dentro do Mercado Pago —
+    // senão o reembolso some da conta em vez de aparecer como "(–)".
     const { amount: revenuePeriod, count: approvedPaymentsPeriod } = combineRevenueTotals({
-      oneTimeAmount: approvedOneTimePeriod._sum.amount,
-      oneTimeCount: approvedOneTimePeriod._count._all,
-      subscriptionAmount: subscriptionChargesPeriod._sum.amount,
-      subscriptionCount: subscriptionChargesPeriod._count._all,
+      oneTimeAmount: (approvedOneTimePeriod._sum.amount ?? 0) + (mpRefundedPaymentsPeriod._sum.amount ?? 0),
+      oneTimeCount: approvedOneTimePeriod._count._all + mpRefundedPaymentsPeriod._count._all,
+      subscriptionAmount: (subscriptionChargesPeriod._sum.amount ?? 0) + (mpRefundedChargesPeriod._sum.amount ?? 0),
+      subscriptionCount: subscriptionChargesPeriod._count._all + mpRefundedChargesPeriod._count._all,
     })
     const { amount: totalLtv, count: approvedPaymentsAll } = combineRevenueTotals({
       oneTimeAmount: approvedOneTimeAll._sum.amount,
@@ -2403,8 +2420,8 @@ export async function adminRoutes(app) {
       _count: { _all: true },
     })
     const mpFeesPeriod = computeMercadoPagoFees({
-      baseAmount: (mercadoPagoOneTimePeriod._sum.amount ?? 0) + (subscriptionChargesPeriod._sum.amount ?? 0),
-      baseCount: mercadoPagoOneTimePeriod._count._all + subscriptionChargesPeriod._count._all,
+      baseAmount: (mercadoPagoOneTimePeriod._sum.amount ?? 0) + (subscriptionChargesPeriod._sum.amount ?? 0) + mpRefundsPeriod,
+      baseCount: mercadoPagoOneTimePeriod._count._all + subscriptionChargesPeriod._count._all + mpRefundsPeriodCount,
       feePercent: mpFeePercent,
       feeFixedCents: mpFeeFixedCents,
     })
@@ -2412,7 +2429,7 @@ export async function adminRoutes(app) {
       grossRevenue: revenuePeriod,
       affiliateCommissions: affiliateCommissionsPeriod,
       mpFees: mpFeesPeriod,
-      refunds: refundsPeriod._sum.amount ?? 0,
+      refunds: (refundsPeriod._sum.amount ?? 0) + mpRefundsPeriod,
     })
 
     await writeAdminAuditLog(req, { action: 'admin.finance.overview.read', resource: 'finance', after: { period: range.period } })
@@ -2458,6 +2475,10 @@ export async function adminRoutes(app) {
       refunds30dCount: refundsPeriod._count._all,
       refundFeeLoss30d: refundsPeriod._sum.gatewayFeeLoss ?? 0,
       refundsAll: refundsAll._sum.amount ?? 0,
+      // Devoluções feitas dentro do Mercado Pago (separadas das de PIX acima).
+      mpRefunds30d: mpRefundsPeriod,
+      mpRefunds30dCount: mpRefundsPeriodCount,
+      mpRefundsAll: mpRefundsAllTime,
       // Contas de teste tiradas das somas acima (continuam visíveis nas listas).
       excludedTestAccounts: testAccounts.emails,
     }
@@ -2730,7 +2751,7 @@ export async function adminRoutes(app) {
       ],
     }
 
-    const [payments, charges, commissions, refunds, prices] = await Promise.all([
+    const [payments, charges, commissions, refunds, prices, mpRefundedPayments, mpRefundedCharges] = await Promise.all([
       db.payment.findMany({
         where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser },
         select: { userId: true, amount: true, provider: true, createdAt: true },
@@ -2755,6 +2776,19 @@ export async function adminRoutes(app) {
         take: ROI_ROW_LIMIT,
       }),
       getCurrentPlanPrices(),
+      // Devolvidos dentro do próprio Mercado Pago (ver a visão geral).
+      db.payment.findMany({
+        where: { status: { in: CHARGE_OUTCOME_STATUSES.devolvida }, refund: null, ...oneTimePaymentWhere, ...notTestUser },
+        select: { amount: true, provider: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+        take: ROI_ROW_LIMIT,
+      }),
+      db.subscriptionCharge.findMany({
+        where: { status: { in: CHARGE_OUTCOME_STATUSES.devolvida }, ...notTestUser },
+        select: { amount: true, attemptedAt: true },
+        orderBy: { attemptedAt: 'asc' },
+        take: ROI_ROW_LIMIT,
+      }),
     ])
 
     // Mesma estimativa de taxa do gateway da visão geral — uma fonte só.
@@ -2799,7 +2833,27 @@ export async function adminRoutes(app) {
       const bucket = revenueByMonth[month] ?? (revenueByMonth[month] = { gross: 0, affiliateCommissions: 0, mpFees: 0, refunds: 0, payments: 0, payingUsers: 0 })
       bucket.refunds = (bucket.refunds ?? 0) + (refund.amount ?? 0)
     }
-    for (const [month, payers] of payersByMonth) revenueByMonth[month].payingUsers = payers.size
+    // Devolvido no Mercado Pago: entra no valor cheio (com a taxa, que o MP não
+    // devolve) e sai de novo como reembolso, no mês do pagamento original — o
+    // MP não informa a data da devolução. Líquido do mês = zero menos a taxa.
+    const mpRefundedRows = [
+      ...mpRefundedPayments.map(row => ({ amount: row.amount, at: row.createdAt, manual: row.provider === 'manual' })),
+      ...mpRefundedCharges.map(row => ({ amount: row.amount, at: row.attemptedAt, manual: false })),
+    ]
+    for (const row of mpRefundedRows) {
+      const month = monthKeyOf(row.at)
+      if (!month) continue
+      const bucket = revenueByMonth[month] ?? (revenueByMonth[month] = { gross: 0, affiliateCommissions: 0, mpFees: 0, refunds: 0, payments: 0, payingUsers: 0 })
+      const amount = row.amount ?? 0
+      bucket.gross += amount
+      bucket.refunds = (bucket.refunds ?? 0) + amount
+      bucket.mpRefunds = (bucket.mpRefunds ?? 0) + amount
+      if (!row.manual) bucket.mpFees += (amount * (mpFeePercent / 100)) + mpFeeFixedCents / 100
+    }
+    for (const [month, payers] of payersByMonth) {
+      const bucket = revenueByMonth[month] ?? (revenueByMonth[month] = { gross: 0, affiliateCommissions: 0, mpFees: 0, refunds: 0, payments: 0, payingUsers: 0 })
+      bucket.payingUsers = payers.size
+    }
 
     const report = buildRoiReport({
       revenueByMonth,
@@ -2845,6 +2899,7 @@ export async function adminRoutes(app) {
       || charges.length >= ROI_ROW_LIMIT
       || commissions.length >= ROI_ROW_LIMIT
       || refunds.length >= ROI_ROW_LIMIT
+      || mpRefundedRows.length >= ROI_ROW_LIMIT
 
     return {
       ...report,

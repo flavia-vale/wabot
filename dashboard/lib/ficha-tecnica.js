@@ -17,13 +17,11 @@
 //
 // Módulo puro (sem JSX, sem React) para o teste em node:test importar direto.
 
-import { BRAND_DEFINITION_PT, DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from './marketing-content.js'
+import { BRAND_DEFINITION_PT, DEFAULT_LANDING_PLANS, STORES_FACT_PT, SUPPORTED_STORES } from './marketing-content.js'
 
 const planoPorId = (id) => DEFAULT_LANDING_PLANS.find((plan) => plan.id === id)
 const basic = planoPorId('basic')
 const pro = planoPorId('pro')
-
-const listaLojas = `${SUPPORTED_STORES.slice(0, -1).join(', ')} e ${SUPPORTED_STORES[SUPPORTED_STORES.length - 1]}`
 
 /**
  * Frase de definição — a MESMA em todo lugar que define o produto: home,
@@ -43,7 +41,7 @@ export const rotuloPlano = (plan) => `${plan.name} (${plan.price} / ${plan.perio
 export const FICHA_FATOS = [
   {
     rotulo: 'Lojas com conversão de link',
-    valor: `${SUPPORTED_STORES.length} lojas: ${listaLojas}. Converte também link de cupom, não só de produto, e as lojas em que você é aprovada na Awin e na Rakuten.`,
+    valor: `${STORES_FACT_PT}. Converte também link de cupom, não só de produto.`,
   },
   {
     rotulo: 'Canal de publicação',
@@ -71,7 +69,7 @@ export const FICHA_COLUNAS = ['Recurso', rotuloPlano(basic), rotuloPlano(pro)]
  */
 export const FICHA_LINHAS = [
   { recurso: 'Espelhamento automático: lê os grupos de origem e publica nos grupos de destino, sem copiar e colar', basic: true, pro: true }, // canUseGroups
-  { recurso: `Troca do link pelo seu código de afiliada nas ${SUPPORTED_STORES.length} lojas (inclusive cupom)`, basic: true, pro: true }, // src/converters/*
+  { recurso: `Troca do link pelo seu código de afiliada nas ${SUPPORTED_STORES.length} lojas e nas lojas aprovadas na Awin e na Rakuten (inclusive cupom)`, basic: true, pro: true }, // src/converters/*
   { recurso: 'Se a troca do link falhar, a oferta NÃO é publicada (nunca sai o link de outra pessoa)', basic: true, pro: true }, // mirrorLinkGuard
   { recurso: 'Modelo de mensagem: a oferta sai reescrita do seu jeito', basic: true, pro: true }, // DEFAULT_LANDING_PLANS.basic
   // 27/09/2026 — três fatos que a IA listava como ausentes e que existem no código, sem cadeado de plano:

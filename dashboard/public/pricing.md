@@ -1,6 +1,6 @@
 # Pricing — Espelha Grupos
 
-Last updated: 2026-09-29
+Last updated: 2026-10-03
 Currency: BRL
 Billing unit: 30-day access period
 Preferred citation: Espelha Grupos pricing.
@@ -12,9 +12,9 @@ The canonical feature sheet below (in Portuguese, the customers' language) is id
 
 ## Ficha técnica (canônica — idêntica na home, em /precos, no llms.txt e no pricing.md)
 
-Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.
+Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas e nas lojas em que você é aprovada na Awin e na Rakuten, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.
 
-- Lojas com conversão de link: 6 lojas: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Converte também link de cupom, não só de produto, e as lojas em que você é aprovada na Awin e na Rakuten.
+- Lojas com conversão de link: 6 lojas com código próprio (Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress) + as lojas em que você é aprovada na Awin (KaBuM, C&A e Casas Bahia) e na Rakuten (Netshoes). Converte também link de cupom, não só de produto.
 - Canal de publicação: Só WhatsApp (grupos e, no Pro, canais). Não envia para Telegram nem para Instagram.
 - Teste grátis: 7 dias com o Pro completo, sem cartão.
 - Reembolso e cancelamento: Reembolso integral em até 7 dias corridos depois do pagamento; depois disso, cancela sem multa e usa até o fim do período pago.
@@ -23,7 +23,7 @@ Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais
 | Recurso | Basic (R$39 / 30 dias) | Pro (R$69 / 30 dias) |
 |---|---|---|
 | Espelhamento automático: lê os grupos de origem e publica nos grupos de destino, sem copiar e colar | Sim | Sim |
-| Troca do link pelo seu código de afiliada nas 6 lojas (inclusive cupom) | Sim | Sim |
+| Troca do link pelo seu código de afiliada nas 6 lojas e nas lojas aprovadas na Awin e na Rakuten (inclusive cupom) | Sim | Sim |
 | Se a troca do link falhar, a oferta NÃO é publicada (nunca sai o link de outra pessoa) | Sim | Sim |
 | Modelo de mensagem: a oferta sai reescrita do seu jeito | Sim | Sim |
 | Palavras bloqueadas: filtro do que não espelhar, geral e por grupo de origem | Sim | Sim |
@@ -61,6 +61,7 @@ Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais
 - Includes:
   - Automatic group mirroring, 24 hours a day (monitor → destination groups), with no copy and paste
   - Affiliate link conversion in six stores: Mercado Livre, Amazon, Shopee, Magalu, SHEIN and AliExpress
+  - Affiliate link conversion for the stores where the affiliate is approved on Awin (e.g. KaBuM, C&A, Casas Bahia) and Rakuten Advertising (e.g. Netshoes)
   - Coupon and voucher link conversion (not only product links) as the affiliate's own code
   - Clickable offer card: tapping the card opens the product page in the store
   - Message templates the operator rewrites completely — the mirrored offer is republished in the operator's own wording, not copied verbatim from the source

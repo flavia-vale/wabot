@@ -75,8 +75,15 @@ test('estrutural: a prontidão não espelha, só aceita comandos de socket e só
   assert.match(src, /const CAN_SEND = !IS_STANDBY \|\| ROTATION_ON/)
   assert.match(src, /if \(CAN_SEND && !sendBackend\) sendBackend = await createSendBackend\(\)/)
   assert.match(src, /markUpsertReceived\(\)\n\s+\/\/[^\n]*\n\s+if \(IS_STANDBY\) return/)
-  assert.match(src, /STANDBY_IPC_TYPES = new Set\(\['stop', 'requestPairingCode', 'listGroups', 'metrics'\]\)/)
-  assert.match(src, /if \(IS_STANDBY\) \{\n\s+await handleStandbyOpen\(\{ phone \}\)\n\s+\} else \{/)
+  // Fase 2.1: consultar/seguir canal (a reserva precisa seguir os canais de origem).
+  assert.match(src, /STANDBY_IPC_TYPES = new Set\(\['stop', 'requestPairingCode', 'listGroups', 'metrics', 'channel:metadata', 'channel:follow'\]\)/)
+  assert.match(src, /if \(IS_STANDBY\) \{\n\s+await handleStandbyOpen\(\{ phone, sock \}\)\n\s+\} else \{/)
   assert.match(src, /const AUTH_DIR = getAuthInfoDir\(AUTH_KEY\)/)
+  // Mesmo número na reserva: sai do aparelho e apaga o login da PRONTIDÃO,
+  // senão "Conectar número reserva" reconecta sem QR e cai de novo no bloqueio.
+  const sameNumber = src.slice(src.indexOf('async function handleStandbyOpen'), src.indexOf('async function persistSessionPatch'))
+  assert.match(sameNumber, /sock\?\.logout\?\.\(\)/)
+  assert.match(sameNumber, /await rm\(AUTH_DIR, \{ recursive: true, force: true \}\)/)
+  assert.ok(sameNumber.indexOf('rm(AUTH_DIR') < sameNumber.indexOf('shutdown(0)'), 'apaga antes de sair')
   assert.doesNotMatch(src, /getAuthInfoDir\(userId\)/)
 })

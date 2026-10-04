@@ -23,6 +23,7 @@ import {
   TrialCta,
 } from '@/components/marketing/ComparisonSections'
 import { DifferentialGrid, InteractiveComparisonTable, TrustStrip } from '@/components/marketing/ComparisonInteractive'
+import { ModelToolsTable } from '@/components/marketing/ModelToolsTable'
 
 /*
  * Links por LOJA, em todas as páginas de comparativo.
@@ -48,6 +49,10 @@ export const COMPARISON_STORE_LINKS = [
   { href: '/amazon-afiliados-whatsapp', label: 'Amazon' },
   { href: '/shein-afiliados-whatsapp', label: 'SHEIN' },
   { href: '/magalu-afiliados-whatsapp', label: 'Magalu' },
+  // Lojas das redes Awin e Rakuten (Frente 2 da análise SEO+GEO de 02/10/2026).
+  { href: '/netshoes-afiliados-whatsapp', label: 'Netshoes' },
+  { href: '/kabum-afiliados-whatsapp', label: 'KaBuM' },
+  { href: '/rakuten-afiliados-whatsapp', label: 'Rakuten' },
 ]
 
 export const COMPARISON_SOURCE_LINKS = [
@@ -133,7 +138,15 @@ export const COMPARISON_PAGES = {
     // da dona do produto (exceção nominal à FR-030 em
     // test/marketing-limites-que-nao-se-cruzam.test.js). "Limita grupos" vem
     // de competitors-data.js: 1 grupo no Starter, teto de 15 no Premium.
-    title: 'AchadinhosBot limita grupos? Aqui é ilimitado: R$ 39',
+    // 03/10/2026 (Frente 4 da análise SEO+GEO de 02/10): 95% das impressões
+    // com consulta são marca de concorrente, com CTR ~1%. Teste do formato
+    // "X ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)", mantendo o
+    // contraste R$ 39 da exceção FR-030 (decisão da dona do produto em 03/10).
+    // `titleAbsolute`: o título já traz a marca; sem ele o sufixo do layout
+    // duplicaria "Espelha Grupos" e passaria de 70 chars no Bing. Medir 4
+    // semanas pela série diária; CTR abaixo de 2,5% → parar de mexer.
+    title: 'AchadinhosBot ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)',
+    titleAbsolute: true,
     description: 'O AchadinhosBot cobra por grupo e só cobre Shopee. O Espelha Grupos custa R$ 39 por 30 dias, com grupos ilimitados, 6 lojas e 7 dias grátis com o Pro completo.',
     competitorSlugs: ['achadinhosbot', 'achadinho-pro'],
     // Par recíproco do `competitorNudge` de /bot-achadinhos-whatsapp: as duas
@@ -148,7 +161,7 @@ export const COMPARISON_PAGES = {
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', title: 'Ferramenta para divulgar ofertas em grupos do WhatsApp' },
       // 23/09/2026: estes concorrentes vendem busca automática na Shopee; quem
       // chega aqui precisa saber que o Espelha Grupos também tem esse modo.
-      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Garimpo de ofertas da Shopee no automático (radar)' },
       { href: '/espelhar-grupos-de-ofertas-vale-a-pena', title: 'Espelhar grupos de ofertas vale a pena?' },
       // 27/09/2026 (B1/B2 do plano GEO): as duas perguntas que as IAs respondem
       // como problema de empresa, respondidas para afiliada.
@@ -305,7 +318,15 @@ export const COMPARISON_PAGES = {
     // diferencial concreto. Sem preço do Shozap (não visível no site dele).
     // 29/09/2026: estilo pergunta + contraste, decisão da dona do produto
     // (exceção nominal à FR-030). Básico do Shozap: 3 grupos por campanha.
-    title: 'Shozap limita grupos? Aqui é ilimitado por R$ 39',
+    // 03/10/2026 (Frente 4 da análise SEO+GEO de 02/10): 95% das impressões
+    // com consulta são marca de concorrente, com CTR ~1%. Teste do formato
+    // "X ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)", mantendo o
+    // contraste R$ 39 da exceção FR-030 (decisão da dona do produto em 03/10).
+    // `titleAbsolute`: o título já traz a marca; sem ele o sufixo do layout
+    // duplicaria "Espelha Grupos" e passaria de 70 chars no Bing. Medir 4
+    // semanas pela série diária; CTR abaixo de 2,5% → parar de mexer.
+    title: 'Shozap ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)',
+    titleAbsolute: true,
     description: 'Shozap ou Espelha Grupos? Compare grupos, conexões e lojas por plano. Aqui: grupos ilimitados por R$ 39/30 dias e 7 dias grátis. Verificado em 04/08/2026.',
     competitorSlugs: ['shozap'],
     productPage: {
@@ -488,7 +509,15 @@ export const COMPARISON_PAGES = {
     // R$ 49,97 só p/ Shopee. Veja a opção de R$ 39", 64 chars), encurtado
     // para caber no teto de 55. Exceção nominal à FR-030; preço do Basic
     // verificado em competitors-data.js.
-    title: 'Achadinho Pro cobra R$ 49,97 só p/ Shopee. Veja R$ 39',
+    // 03/10/2026 (Frente 4 da análise SEO+GEO de 02/10): 95% das impressões
+    // com consulta são marca de concorrente, com CTR ~1%. Teste do formato
+    // "X ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)", mantendo o
+    // contraste R$ 39 da exceção FR-030 (decisão da dona do produto em 03/10).
+    // `titleAbsolute`: o título já traz a marca; sem ele o sufixo do layout
+    // duplicaria "Espelha Grupos" e passaria de 70 chars no Bing. Medir 4
+    // semanas pela série diária; CTR abaixo de 2,5% → parar de mexer.
+    title: 'Achadinho Pro ou Espelha Grupos: R$ 39, lojas e 7 dias grátis (2026)',
+    titleAbsolute: true,
     description: 'O Achadinho Pro cobre só Shopee no plano de entrada (R$ 49,97/mês). No Espelha Grupos são 6 lojas por R$ 39 ou R$ 69 a cada 30 dias e 7 dias grátis sem cartão.',
     competitorSlugs: ['achadinho-pro'],
     // Páginas de resposta (19/09/2026): quem chega comparando ferramenta ainda
@@ -499,7 +528,7 @@ export const COMPARISON_PAGES = {
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', title: 'Ferramenta para divulgar ofertas em grupos do WhatsApp' },
       // 23/09/2026: estes concorrentes vendem busca automática na Shopee; quem
       // chega aqui precisa saber que o Espelha Grupos também tem esse modo.
-      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Garimpo de ofertas da Shopee no automático (radar)' },
       { href: '/espelhar-grupos-de-ofertas-vale-a-pena', title: 'Espelhar grupos de ofertas vale a pena?' },
       { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
     ],
@@ -722,20 +751,20 @@ export const COMPARISON_PAGES = {
   '/melhores-bots-para-afiliados-whatsapp': {
     format: 'alternative-plural',
     eyebrow: 'Critérios · Avaliação de ferramentas',
-    title: 'Melhores bots de afiliados no WhatsApp: como comparar',
-    description: 'Lista de critérios para avaliar bots e ferramentas de WhatsApp para afiliados sem ranking falso, promessa de ganho ou prova social inventada.',
+    title: 'Melhores bots de afiliados no WhatsApp: 8 comparados',
+    description: 'Os 6 critérios para escolher bot de afiliados no WhatsApp (API da Shopee, trava de link, grupos, intervalo, garimpo, rastreio) e 8 bots com ficha datada.',
     tldr: 'Não escolha por promessa de ganho: escolha por processo confiável, rastreabilidade e aderência às políticas das plataformas. E confira qual dos dois modos você precisa — espelhar grupos que já segue ou deixar o robô buscar oferta sozinho —, porque o mercado divide isso em ferramentas diferentes.',
     // 23/09/2026: "bot para afiliados" é lido por IA como "robô que busca oferta
     // sozinho". O critério dos dois modos entra aqui para a página responder
     // essa leitura — e o Espelha Grupos cobre os dois (busca automática só na
     // Shopee, plano Pro).
-    directAnswer: 'Os melhores bots para afiliados no WhatsApp devem ser avaliados por critérios de processo, não por promessa de comissão. Priorize revisão de link monetizado, controle de grupos, filtros, cadência, logs, limites contra spam, clareza de preço e suporte a plataformas realmente usadas pela operação. Antes disso, decida o modo: há bots que espelham os grupos que você já segue (repassam a oferta com o seu link) e bots que buscam oferta sozinhos na loja por tema. O Espelha Grupos faz os dois na mesma conta: espelha em 6 lojas e, no plano Pro, busca ofertas da Shopee sozinho por tema e desconto mínimo. Confira também se a ferramenta publica a política de reembolso.',
+    directAnswer: 'Os melhores bots para afiliados no WhatsApp devem ser avaliados por critérios de processo, não por promessa de comissão. Priorize revisão de link monetizado, controle de grupos, filtros, cadência, logs, limites contra spam, clareza de preço e suporte a plataformas realmente usadas pela operação. Antes disso, decida o modo: há bots que espelham os grupos que você já segue (repassam a oferta com o seu link) e bots que buscam oferta sozinhos na loja por tema. O Espelha Grupos faz os dois na mesma conta: espelha em 6 lojas e nas lojas em que você é aprovada na Awin e na Rakuten e, no plano Pro, busca ofertas da Shopee sozinho por tema e desconto mínimo. Confira também se a ferramenta publica a política de reembolso.',
     guides: [
       // 27/09/2026 (PLANO_SEO_GEO, B7): o hub dos 3 modelos é a página
       // canônica da categoria; esta fica no ar (67 impressões, posição 7,5) e
       // aponta para lá — apagar ou redirecionar perderia o histórico.
       { href: '/automacao-whatsapp-afiliados', title: 'Automação para afiliados no WhatsApp: os 3 modelos e 8 ferramentas comparadas' },
-      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Garimpo de ofertas da Shopee no automático (radar)' },
       { href: '/bot-afiliados-whatsapp', title: 'Bot para afiliados no WhatsApp: espelhar e buscar oferta' },
       { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
     ],
@@ -747,6 +776,19 @@ export const COMPARISON_PAGES = {
       ['Cadência', 'Há intervalos, filtros e controle para evitar repetição?', 'Ajuda a proteger experiência dos grupos.'],
       ['Logs', 'A operação consegue auditar envio, falha e campanha?', 'Permite aprender e corrigir processo.'],
     ],
+    // Frente 1, item 3 da análise SEO+GEO de 02/10/2026 (G3): os 6 critérios
+    // que o ChatGPT usa para recomendar, cada um com a resposta do Espelha
+    // Grupos — inclusive o "não" (Sub-ID por grupo não existe: o link da
+    // Shopee sai com SHOPEE_SUB_ID fixo, src/converters/shopee.js).
+    ownCriteriaAnswers: [
+      ['API oficial da Shopee', 'Sim. O link da Shopee é gerado pela API oficial de afiliados da Shopee, com a sua chave.', 'Link gerado pela API credita a comissão na sua conta, sem depender de truque de URL.'],
+      ['Trava se a conversão falhar', 'Sim, em todos os planos. Se a troca do link falhar, a oferta não é publicada.', 'É o que impede o link de outra pessoa de sair no seu grupo.'],
+      ['Quantos grupos acompanha', 'Sem teto de grupos de origem nem de destino, no Basic e no Pro.', 'Ferramenta que cobra por grupo fica cara quando a operação cresce.'],
+      ['Controle de intervalo', 'Pro: intervalo entre envios, horário de descanso e limite por hora e por dia, por grupo. Basic: envio imediato ou agendado.', 'Ritmo controlado reduz repetição e ruído no grupo; nenhum software garante que o número não será bloqueado.'],
+      ['Garimpo próprio além de espelhar', 'Pro: busca ofertas da Shopee sozinho por tema e desconto mínimo, e traz as promoções da Awin e da Rakuten das lojas em que você é aprovada.', 'Sem garimpo, a ferramenta depende de você ter bons grupos de origem.'],
+      ['Rastreio por grupo (Sub-ID)', 'Não por Sub-ID: o link da Shopee sai com um Sub-ID fixo. O que existe é o histórico de envios por grupo e o painel de vendas e comissão da Shopee (Pro).', 'Se você precisa separar a comissão de cada grupo no painel da Shopee, hoje isso não sai daqui.'],
+    ],
+    showToolsTable: true,
     criteria: ['Modo: espelhar grupos, buscar oferta sozinho ou os dois', 'Transparência de preço', 'Política de reembolso publicada', 'Limites de uso responsável', 'Logs e auditoria', 'Suporte a afiliados', 'Ausência de promessa de ganho garantido'],
     bestFit: [
       'A melhor ferramenta será a que reduzir erros operacionais mantendo revisão humana e trilha de auditoria.',
@@ -758,7 +800,7 @@ export const COMPARISON_PAGES = {
     faq: [
       { q: 'Por que esta página não ranqueia marcas como primeiro, segundo e terceiro lugar?', a: 'Sem testes públicos equivalentes e consentimento de dados, ranking numérico seria pouco confiável. A página usa critérios para avaliação responsável.' },
       { q: 'Espelha Grupos entra nesses critérios?', a: 'Sim. O Espelha Grupos foi desenhado para grupos, links suportados, cadência e logs, mas ainda exige revisão humana e autorização dos grupos.' },
-      { q: 'O Espelha Grupos busca ofertas sozinho ou só espelha grupos?', a: 'Os dois. O espelhamento repassa, com o seu código, as ofertas dos grupos e canais que você acompanha, em 6 lojas. No plano Pro, as ofertas automáticas buscam na Shopee pelo tema e pelo desconto mínimo que você definir e publicam sozinhas, sem grupo de origem. Nas outras lojas não há busca automática.' },
+      { q: 'O Espelha Grupos busca ofertas sozinho ou só espelha grupos?', a: 'Os dois. O espelhamento repassa, com o seu código, as ofertas dos grupos e canais que você acompanha, em 6 lojas e nas lojas aprovadas na Awin e na Rakuten. No plano Pro, as ofertas automáticas buscam na Shopee pelo tema e pelo desconto mínimo que você definir e publicam sozinhas, sem grupo de origem. Nas outras lojas não há busca automática.' },
       { q: 'O Espelha Grupos tem reembolso?', a: 'Tem, publicado: valor integral em até 7 dias corridos depois do pagamento (direito de arrependimento, art. 49 do CDC), processado em até 5 dias úteis. Depois disso, o cancelamento evita a próxima cobrança.' },
       { q: 'O que evitar ao escolher um bot?', a: 'Evite promessa de comissão garantida, disparo sem consentimento, ausência de logs e ferramenta que não explica limites de uso.' },
       { q: 'Quais são os modelos de automação para afiliados no WhatsApp?', a: 'Três: espelhador de grupos (republica, com o seu código, o que aparece nos grupos que você segue), garimpo automático (o robô acha a oferta sozinho na loja por tema e desconto) e formatador (você cola o link e a oferta sai montada). O hub de automação para afiliadas explica cada um, diz para quem serve e compara 8 ferramentas com ficha datada.' },
@@ -1563,7 +1605,7 @@ export function getComparisonMetadata(slug) {
   const page = COMPARISON_PAGES[slug]
   const robots = buildSeoRobots(slug)
   return {
-    title: page.title,
+    title: page.titleAbsolute ? { absolute: page.title } : page.title,
     description: page.description,
     alternates: { canonical: slug },
     ...(robots ? { robots } : {}),
@@ -1725,6 +1767,26 @@ export function ComparisonPage({ slug }) {
             )}
             <TrialCta slug={slug} content="tabela-register" variant="inline" label="Testar o Espelha Grupos 7 dias grátis" />
           </SectionCard>
+
+          {Array.isArray(page.ownCriteriaAnswers) && page.ownCriteriaAnswers.length > 0 && (
+            <SectionCard
+              eyebrow={`Resposta do ${BRAND_NAME}`}
+              title={`Como o ${BRAND_NAME} responde a cada critério`}
+              lead="Os critérios que as IAs usam para recomendar bot de afiliados, com o que o produto faz hoje em cada um — inclusive onde a resposta é não."
+            >
+              <ComparisonTable rows={page.ownCriteriaAnswers} headers={['Critério', `${BRAND_NAME} hoje`, 'Por que importa']} />
+            </SectionCard>
+          )}
+
+          {page.showToolsTable && (
+            <SectionCard
+              eyebrow="Ferramentas com ficha"
+              title={`${BRAND_NAME} e 8 bots do mercado, por modelo`}
+              lead="Só entram ferramentas com ficha própria, conferida na página de planos de cada uma na data indicada. Onde a ficha não informa, a célula fica com travessão (—)."
+            >
+              <ModelToolsTable ctaId="melhores-bots-tool-comparison" />
+            </SectionCard>
+          )}
 
           {/* 4. Decisão: quatro recortes lado a lado, com ícone em vez de bullet. */}
           <div id={SECTION_IDS.decisao} className="comparison-decision-grid">

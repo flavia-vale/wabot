@@ -834,11 +834,19 @@ async function persistStandbySessionPatch(data = {}) {
 
 // Prontidão conectou. Recusa o MESMO número do ativo (conectar duas vezes o
 // mesmo celular não dá reserva nenhuma e derruba os dois — 440).
-async function handleStandbyOpen({ phone }) {
+async function handleStandbyOpen({ phone, sock = null }) {
   const active = await db.waSession.findUnique({ where: { userId }, select: { phone: true } }).catch(() => null)
   if (phone && active?.phone && active.phone === phone) {
-    logger.warn({ processKey: SESSION_IDENTITY.processKey }, 'Número de prontidão é o mesmo do número ativo; desligando a prontidão')
+    logger.warn({ processKey: SESSION_IDENTITY.processKey, authSlot: SESSION_IDENTITY.authSlot }, 'Número de prontidão é o mesmo do número ativo; desligando a prontidão')
     await persistStandbySessionPatch({ status: 'disconnected', lifecycle: 'stopped_by_user', phone, blockNotice: JSON.stringify({ reason: 'same_number' }) })
+    // Staging 2026-10-03: sem isto o login do mesmo número ficava guardado na
+    // pasta da prontidão — todo "Conectar número reserva" reconectava na hora
+    // (sem QR novo) e caía de novo aqui. `logout` remove só ESTE aparelho
+    // conectado (o do número ativo é outro aparelho e segue intacto); a pasta
+    // apagada é a da prontidão (`AUTH_DIR` = slot da prontidão).
+    await Promise.resolve(sock?.logout?.()).catch(() => {})
+    await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+    await rm(pairingAuthBackup.backupDir, { recursive: true, force: true }).catch(() => {})
     await shutdown(0)
     return
   }
@@ -4342,7 +4350,7 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // Pertença aos grupos (Fase 2) — com folga para a sessão assentar.
       setTimeout(() => { void syncGroupMembership('open') }, 20_000).unref?.()
       if (IS_STANDBY) {
-        await handleStandbyOpen({ phone })
+        await handleStandbyOpen({ phone, sock })
       } else {
       const hadPhoneBeforeThisOpen = Boolean(
         (await db.waSession.findUnique({ where: { userId }, select: { phone: true } }).catch(() => null))?.phone,
@@ -6624,7 +6632,9 @@ if (registerProcessHandlers) process.once('SIGINT', () => { void shutdown(0) })
 
 // Prontidão só atende o ciclo de vida do socket; comando de negócio (envio,
 // broadcast, canais…) vai sempre para o processo ativo (chave = userId).
-const STANDBY_IPC_TYPES = new Set(['stop', 'requestPairingCode', 'listGroups', 'metrics'])
+// Canal: a reserva precisa SEGUIR os canais de origem para receber depois da
+// troca (Fase 2.1). Consultar/seguir canal não espelha nem envia nada.
+const STANDBY_IPC_TYPES = new Set(['stop', 'requestPairingCode', 'listGroups', 'metrics', 'channel:metadata', 'channel:follow'])
 
 const handleMessage = async msg => {
   if (IS_STANDBY && msg?.type && !STANDBY_IPC_TYPES.has(msg.type)) {
@@ -6932,7 +6942,8 @@ const handleMessage = async msg => {
         inFlight: inFlightChannelJids,
         logger,
       })
-      rememberChannelJid(msg.jid)
+      // A prontidão não grava na lista de canais da conta (arquivo é do ativo).
+      if (!IS_STANDBY) rememberChannelJid(msg.jid)
       sendIpc({ type: 'channel:followResult', requestId: msg.requestId, data })
     } catch (err) {
       logger.warn({ err: err?.message, jid: msg.jid }, 'channel:follow falhou')

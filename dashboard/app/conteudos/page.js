@@ -214,12 +214,12 @@ const nichePages = [
   },
   {
     href: '/shopee-afiliados-whatsapp',
-    title: 'Shopee Afiliados: divulgar no WhatsApp',
+    title: 'Shopee Afiliados no WhatsApp: 7 dias grátis',
     description: 'Para quem já é afiliada Shopee e quer publicar as ofertas sem copiar e colar.',
   },
   {
     href: '/mercado-livre-afiliados-whatsapp',
-    title: 'Afiliado Mercado Livre: divulgar no WhatsApp',
+    title: 'Afiliado Mercado Livre no WhatsApp: 7 dias grátis',
     description: 'Para quem já é afiliada do Mercado Livre e quer publicar sem copiar e colar.',
   },
   {
@@ -229,13 +229,33 @@ const nichePages = [
   },
   {
     href: '/shein-afiliados-whatsapp',
-    title: 'SHEIN Afiliados: divulgar no WhatsApp',
+    title: 'SHEIN Afiliados no WhatsApp: 7 dias grátis',
     description: 'Para quem já é afiliada SHEIN e quer publicar com o link curto da própria loja.',
   },
   {
     href: '/magalu-afiliados-whatsapp',
-    title: 'Divulgador Magalu: publicar no WhatsApp',
+    title: 'Divulgador Magalu no WhatsApp: 7 dias grátis',
     description: 'Para quem já divulga Magalu, onde o código vale inclusive em cupom e campanha.',
+  },
+  {
+    href: '/netshoes-afiliados-whatsapp',
+    title: 'Afiliado Netshoes: ofertas no WhatsApp, 7 dias grátis',
+    description: 'Como entrar no programa da Netshoes pela Rakuten e publicar com o seu link.',
+  },
+  {
+    href: '/kabum-afiliados-whatsapp',
+    title: 'Afiliado KaBuM: ofertas no WhatsApp, 7 dias grátis',
+    description: 'Como entrar no programa da KaBuM pela Awin e publicar as promoções do dia.',
+  },
+  {
+    href: '/rakuten-afiliados-whatsapp',
+    title: 'Rakuten Afiliados: ofertas no WhatsApp, 7 dias grátis',
+    description: 'Uma conta, várias lojas: o robô converte as que aprovaram você.',
+  },
+  {
+    href: '/grupo-whatsapp-lotado',
+    title: 'Limite de membros do grupo de WhatsApp e grupo lotado',
+    description: 'O limite de 1.024 membros e um link só que manda cada pessoa para o grupo com vaga.',
   },
 ]
 

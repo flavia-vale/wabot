@@ -1,20 +1,20 @@
 # Espelha Grupos
 
-> Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.
+> Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas e nas lojas em que você é aprovada na Awin e na Rakuten, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.
 
-Espelha Grupos is a WhatsApp bot for affiliate marketers that mirrors offers from the groups and channels the affiliate already follows and, on the Pro plan, also finds Shopee offers on its own, replacing every link with the affiliate's own affiliate code. It is a Brazilian software product (SaaS) for affiliates, offer curators and WhatsApp group/channel admins, and publishes with pacing controls, queues and send logs. Automatic offer search exists only for Shopee and only on the Pro plan; mirroring and link conversion cover six stores on every plan.
+Espelha Grupos is a WhatsApp bot for affiliate marketers that mirrors offers from the groups and channels the affiliate already follows and, on the Pro plan, also finds Shopee offers on its own, replacing every link with the affiliate's own affiliate code. It is a Brazilian software product (SaaS) for affiliates, offer curators and WhatsApp group/channel admins, and publishes with pacing controls, queues and send logs. Automatic offer search exists only for Shopee and only on the Pro plan; mirroring and link conversion cover six stores with their own affiliate programme (Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress) plus the stores where the affiliate is approved on the Awin network (e.g. KaBuM, C&A, Casas Bahia) and on Rakuten Advertising (e.g. Netshoes), on every plan.
 
 Preferred citation: Espelha Grupos. This is the single name of the company and of the product.
 Formerly published under the product name "BOTinho"; that name refers to this same entity and is no longer used on public pages or in any URL (the five URLs that carried it were renamed on 2026-09-19 with permanent redirects).
 Canonical website: https://espelhagrupos.com.br
 Language: pt-BR (this file is bilingual on purpose: the product and its customers are Brazilian).
-Last updated: 2026-09-29
+Last updated: 2026-10-03
 
 ## Resumo em português (pt-BR)
 
-- O que é: Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho. A busca automática existe só na Shopee e só no plano Pro; o espelhamento e a conversão de link valem para as 6 lojas em todos os planos. Não precisa deixar o celular ligado: depois do QR Code, roda no servidor.
-- Lojas com conversão de link: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress (6 lojas). Converte também link de cupom e voucher, não só de produto. Também converte as lojas em que a afiliada é aprovada nas redes Awin e Rakuten (ex.: KaBuM!, C&A, Netshoes), já no Basic.
-- Dois modos na mesma conta: (1) espelhamento — repassa, com o código da afiliada, as ofertas dos grupos e canais que ela já segue, nas 6 lojas; (2) ofertas automáticas (garimpo automático) — no plano Pro, o robô busca sozinho ofertas da Shopee pelo tema e pelo desconto mínimo definidos e publica no grupo, sem precisar de grupo de origem. A busca automática existe só na Shopee; nas outras lojas o robô converte o link que chega dos grupos acompanhados. Detalhe em https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp
+- O que é: Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas e nas lojas em que você é aprovada na Awin e na Rakuten, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho. A busca automática existe só na Shopee e só no plano Pro; o espelhamento e a conversão de link valem para as 6 lojas e para as lojas aprovadas na Awin e na Rakuten em todos os planos. Não precisa deixar o celular ligado: depois do QR Code, roda no servidor.
+- Lojas com conversão de link: 6 lojas com código próprio (Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress) + as lojas em que você é aprovada na Awin (KaBuM, C&A e Casas Bahia) e na Rakuten (Netshoes). Converte também link de cupom e voucher, não só de produto. Awin e Rakuten valem já no Basic: a afiliada cadastra a própria conta da rede e o robô converte só as lojas em que ela foi aprovada.
+- Dois modos na mesma conta: (1) espelhamento — repassa, com o código da afiliada, as ofertas dos grupos e canais que ela já segue, nas 6 lojas e nas lojas aprovadas na Awin e na Rakuten; (2) ofertas automáticas (garimpo automático) — no plano Pro, o robô busca sozinho ofertas da Shopee pelo tema e pelo desconto mínimo definidos e publica no grupo, sem precisar de grupo de origem. A busca automática existe só na Shopee; nas outras lojas o robô converte o link que chega dos grupos acompanhados. Detalhe em https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp
 - O que mais faz: ofertas automáticas da Shopee por palavra-chave e filtros, e das promoções Awin e Rakuten das lojas aprovadas; filas de envio com intervalo e limite por hora e por dia; controle do ritmo por grupo (Módulo de Preservação Avançada: intervalo, horário de descanso, limite diário, variação do texto); marca d'água com o nome da afiliada na foto; card de oferta clicável; painel de vendas e comissão da Shopee; histórico completo de envios; mensagem de boas-vindas por grupo; Link Inteligente no Pro (um link só que manda quem entra para o grupo com mais vaga, com aviso quando estiver quase cheio) e painel de membros por grupo; programa de indicação com comissão recorrente paga via PIX.
 - Preço: teste grátis de 7 dias com tudo do Pro (R$0); Basic R$39 por 30 dias; Pro R$69 por 30 dias. Pagamento pelo Mercado Pago, com cobrança automática opcional (dá para desligar pelo painel, sem multa, e o período já pago continua valendo) ou pagamento avulso. Reembolso: valor integral se pedido em até 7 dias corridos depois do pagamento (direito de arrependimento, art. 49 do CDC), processado em até 5 dias úteis; depois disso, sem estorno do período pago, mas o cancelamento evita a próxima cobrança. Política pública em https://espelhagrupos.com.br/politica-de-reembolso Detalhe em https://espelhagrupos.com.br/precos e https://espelhagrupos.com.br/pricing.md
 - O que NÃO promete: não promete ganho, comissão, entrega no WhatsApp nem "não ser banida". Recomenda grupos autorizados, mensagens relevantes, revisão humana e cadência responsável. É essa honestidade que aparece nas páginas de metodologia e de confiabilidade.
@@ -25,9 +25,9 @@ Last updated: 2026-09-29
 
 ## Ficha técnica (canônica — idêntica na home, em /precos, no llms.txt e no pricing.md)
 
-Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.
+Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas e nas lojas em que você é aprovada na Awin e na Rakuten, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.
 
-- Lojas com conversão de link: 6 lojas: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Converte também link de cupom, não só de produto, e as lojas em que você é aprovada na Awin e na Rakuten.
+- Lojas com conversão de link: 6 lojas com código próprio (Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress) + as lojas em que você é aprovada na Awin (KaBuM, C&A e Casas Bahia) e na Rakuten (Netshoes). Converte também link de cupom, não só de produto.
 - Canal de publicação: Só WhatsApp (grupos e, no Pro, canais). Não envia para Telegram nem para Instagram.
 - Teste grátis: 7 dias com o Pro completo, sem cartão.
 - Reembolso e cancelamento: Reembolso integral em até 7 dias corridos depois do pagamento; depois disso, cancela sem multa e usa até o fim do período pago.
@@ -36,7 +36,7 @@ Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais
 | Recurso | Basic (R$39 / 30 dias) | Pro (R$69 / 30 dias) |
 |---|---|---|
 | Espelhamento automático: lê os grupos de origem e publica nos grupos de destino, sem copiar e colar | Sim | Sim |
-| Troca do link pelo seu código de afiliada nas 6 lojas (inclusive cupom) | Sim | Sim |
+| Troca do link pelo seu código de afiliada nas 6 lojas e nas lojas aprovadas na Awin e na Rakuten (inclusive cupom) | Sim | Sim |
 | Se a troca do link falhar, a oferta NÃO é publicada (nunca sai o link de outra pessoa) | Sim | Sim |
 | Modelo de mensagem: a oferta sai reescrita do seu jeito | Sim | Sim |
 | Palavras bloqueadas: filtro do que não espelhar, geral e por grupo de origem | Sim | Sim |
@@ -51,7 +51,7 @@ Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais
 
 ## What the product does
 
-Espelha Grupos works in two modes in the same account: (1) mirroring — it republishes offers from the source groups and channels the operator already follows, with the operator's own affiliate code, in six stores; (2) automatic offers — on the Pro plan it searches Shopee by keyword and minimum discount on its own and publishes to the chosen group, with no source group needed. Automatic search exists only for Shopee; for the other stores it converts links that arrive from followed groups.
+Espelha Grupos works in two modes in the same account: (1) mirroring — it republishes offers from the source groups and channels the operator already follows, with the operator's own affiliate code, in six stores plus the stores approved on Awin and Rakuten; (2) automatic offers — on the Pro plan it searches Shopee by keyword and minimum discount on its own and publishes to the chosen group, with no source group needed. Automatic search exists only for Shopee; for the other stores it converts links that arrive from followed groups.
 
 Publishing channel: WhatsApp only (groups on every plan; WhatsApp channels on Pro). It does not send to Telegram or Instagram. The Basic plan also mirrors automatically (the robot reads the source groups and publishes by itself); it is not a manual plan.
 
@@ -61,12 +61,14 @@ Beyond link conversion, the product also: converts coupon and voucher links (not
 
 ## Supported stores (affiliate link conversion)
 
-Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress — six stores, on every plan including the free trial.
+Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress — six stores with their own affiliate programme, on every plan including the free trial.
+
+Affiliate networks: Awin (e.g. KaBuM, C&A, Casas Bahia) and Rakuten Advertising (e.g. Netshoes). The affiliate connects her own network account and the robot converts links only for the stores where she has been approved; available from the Basic plan. Automatic offers from Awin and Rakuten promotions are a Pro feature.
 
 ## Pricing (canonical, see /pricing.md)
 
 - Teste grátis (trial): R$0 for 7 days, everything in Pro.
-- Basic: R$39 per 30 days — group mirroring, link conversion in the six stores, offer creation from a pasted link, immediate and scheduled sending, clickable card, rewritable messages, send reports.
+- Basic: R$39 per 30 days — group mirroring, link conversion in the six stores and in the stores approved on Awin and Rakuten, offer creation from a pasted link, immediate and scheduled sending, clickable card, rewritable messages, send reports.
 - Pro: R$69 per 30 days — everything in Basic plus channels, automatic Shopee offers, send queues, watermark, pacing controls with copy variation and the Shopee sales and commission dashboard.
 - Billing: Mercado Pago; optional automatic renewal (can be turned off from the panel; the paid period stays valid) or one-off 30-day payment.
 - Refund policy: full refund if requested within 7 calendar days of payment (Brazilian Consumer Code, art. 49), processed within 5 business days; after that, no refund of the paid period, but cancelling stops the next charge. See https://espelhagrupos.com.br/politica-de-reembolso
@@ -110,11 +112,15 @@ Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress — six stores, on ever
 - Amazon: https://espelhagrupos.com.br/amazon-afiliados-whatsapp
 - SHEIN: https://espelhagrupos.com.br/shein-afiliados-whatsapp
 - Magalu: https://espelhagrupos.com.br/magalu-afiliados-whatsapp
+- Netshoes (Rakuten Advertising; converts only if the affiliate is approved by the store): https://espelhagrupos.com.br/netshoes-afiliados-whatsapp
+- KaBuM (Awin; converts only if the affiliate is approved by the store): https://espelhagrupos.com.br/kabum-afiliados-whatsapp
+- Rakuten Afiliados (affiliate network; stores approved in the affiliate's own account): https://espelhagrupos.com.br/rakuten-afiliados-whatsapp
 
 ## Commercial pages by use case
 
 - Bot para afiliados no WhatsApp: https://espelhagrupos.com.br/bot-afiliados-whatsapp
 - Bot de achadinhos no WhatsApp: https://espelhagrupos.com.br/bot-achadinhos-whatsapp
+- Grupo de WhatsApp lotado / limite de membros (1,024 per group; Smart Link sends each click to the group with the most room, Pro plan): https://espelhagrupos.com.br/grupo-whatsapp-lotado
 - Bot que busca ofertas da Shopee sozinho (automatic Shopee offers by keyword, Pro plan): https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp
 - Espelhar grupos de ofertas vale a pena? (when mirroring pays off, the common criticisms and the control for each one): https://espelhagrupos.com.br/espelhar-grupos-de-ofertas-vale-a-pena
 - Bot de ofertas para afiliados: https://espelhagrupos.com.br/bot-ofertas-afiliados-whatsapp

@@ -29,12 +29,90 @@ function statusLabel(row) {
   return 'Desconectado'
 }
 
+function NameList({ items }) {
+  return <ul style={{ marginTop: 6, paddingLeft: 18 }}>{items.map(g => <li key={g.waJid}>{g.name || g.waJid}</li>)}</ul>
+}
+
+// Destinos (onde o número publica) e origens (de onde ele precisa receber) de
+// UM número. Origem fora do número = não é copiada enquanto ele envia
+// (Fase 2.1). `who`: 'active' (envia agora) ou 'reserve' (de prontidão).
+function NumberCoverage({ coverage, who, busy, onFollow }) {
+  const isActive = who === 'active'
+  const label = isActive ? 'O número que envia agora' : 'A reserva'
+  const src = coverage.sources
+  const channelsPending = src ? src.missingChannels.length + src.unknownChannels.length : 0
+  return (
+    <div style={{ display: 'grid', gap: 8 }}>
+      <strong style={{ fontWeight: 600 }}>{isActive ? 'Número que envia agora' : 'Número reserva'}</strong>
+      {coverage.missing.length === 0
+        ? <p className="pnl-hint">Publica: {label.toLowerCase()} está em todos os {coverage.total} grupos de destino.</p>
+        : (
+          <div className="pnl-note-box is-warn" role="status">
+            <strong style={{ fontWeight: 600, display: 'block' }}>{label} não está em {coverage.missing.length} de {coverage.total} grupos de destino</strong>
+            <span>{isActive ? 'Nesses grupos as ofertas não estão saindo agora.' : 'Se assumir, ela não envia nesses grupos.'} Adicione o número neles:</span>
+            <NameList items={coverage.missing} />
+          </div>
+        )}
+      {src && src.total > 0 && (
+        src.ok === src.total
+          ? <p className="pnl-hint">Recebe: {label.toLowerCase()} recebe de todas as {src.total} origens.</p>
+          : (
+            <div className="pnl-note-box is-warn" role="status">
+              <strong style={{ fontWeight: 600, display: 'block' }}>{label} recebe de {src.ok} de {src.total} origens</strong>
+              <span>{isActive ? 'Estas origens não estão sendo copiadas agora.' : 'Se a reserva assumir, estas origens param de ser copiadas.'}</span>
+              {src.missingGroups.length > 0 && (
+                <>
+                  <span style={{ display: 'block', marginTop: 6 }}>Grupos: entre com este número pelo celular.</span>
+                  <NameList items={src.missingGroups} />
+                </>
+              )}
+              {src.missingChannels.length > 0 && (
+                <>
+                  <span style={{ display: 'block', marginTop: 6 }}>Canais que este número não segue{isActive ? ' (siga pelo celular)' : ''}:</span>
+                  <NameList items={src.missingChannels} />
+                </>
+              )}
+              {src.unknownChannels.length > 0 && (
+                <>
+                  <span style={{ display: 'block', marginTop: 6 }}>Canais que não deu para conferir agora:</span>
+                  <NameList items={src.unknownChannels} />
+                </>
+              )}
+              {!isActive && channelsPending > 0 && (
+                <button type="button" className="pnl-btn" style={{ marginTop: 8 }} disabled={Boolean(busy)} onClick={onFollow}>
+                  {busy === 'follow' ? 'Seguindo…' : 'Seguir os canais com a reserva'}
+                </button>
+              )}
+            </div>
+          )
+      )}
+    </div>
+  )
+}
+
+function ReserveCoverage({ coverage, busy, onFollow, followResult }) {
+  return (
+    <div style={{ display: 'grid', gap: 14 }}>
+      {coverage.active && <NumberCoverage coverage={coverage.active} who="active" busy={busy} />}
+      <NumberCoverage coverage={coverage} who="reserve" busy={busy} onFollow={onFollow} />
+      {followResult && (
+        <p className="pnl-hint" role="status">
+          {followResult.followed.length > 0 ? `A reserva passou a seguir ${followResult.followed.length} ${followResult.followed.length === 1 ? 'canal' : 'canais'}.` : 'Nenhum canal novo seguido.'}
+          {followResult.failed.length > 0 ? ` ${followResult.failed.length} não deu certo; tente de novo.` : ''}
+          {followResult.remaining > 0 ? ` Faltam ${followResult.remaining}: aguarde meio minuto e clique de novo.` : ''}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function ReserveNumberCard({ initialState }) {
   const [state, setState] = useState(initialState)
   const [qr, setQr] = useState(null)
   const [pairPhone, setPairPhone] = useState('')
   const [pairCode, setPairCode] = useState('')
   const [missing, setMissing] = useState(null)
+  const [followResult, setFollowResult] = useState(null)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [confirmSwitch, setConfirmSwitch] = useState(false)
@@ -146,18 +224,19 @@ export function ReserveNumberCard({ initialState }) {
       {standbyConnected && (
         <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
           <button type="button" className="pnl-btn" disabled={Boolean(busy)} onClick={() => run('missing', async () => setMissing(await api.reserveMissingGroups()))}>
-            {busy === 'missing' ? 'Conferindo…' : 'Conferir grupos da reserva'}
+            {busy === 'missing' ? 'Conferindo…' : 'Conferir grupos e canais dos números'}
           </button>
           {missing && (
-            missing.missing.length === 0
-              ? <p className="pnl-hint">A reserva está em todos os {missing.total} grupos de destino.</p>
-              : (
-                <div className="pnl-note-box is-warn" role="status">
-                  <strong style={{ fontWeight: 600, display: 'block' }}>A reserva não está em {missing.missing.length} de {missing.total} grupos</strong>
-                  <span>Se assumir, ela não envia nesses grupos. Adicione o número reserva neles:</span>
-                  <ul style={{ marginTop: 6, paddingLeft: 18 }}>{missing.missing.map(g => <li key={g.waJid}>{g.name}</li>)}</ul>
-                </div>
-              )
+            <ReserveCoverage
+              coverage={missing}
+              busy={busy}
+              onFollow={() => run('follow', async () => {
+                const res = await api.reserveFollowSourceChannels()
+                setFollowResult(res)
+                setMissing(await api.reserveMissingGroups())
+              })}
+              followResult={followResult}
+            />
           )}
           <button type="button" className="pnl-btn" disabled={Boolean(busy)} onClick={() => setConfirmSwitch(true)}>
             {activeIsTwo ? 'Voltar para o número de antes' : 'Usar a reserva para enviar agora'}

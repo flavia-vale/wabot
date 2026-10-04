@@ -208,4 +208,16 @@ export function deliveryNetworkLabel(log) {
   return deliveryNetworkDisplayName(log?.deliveryNetwork)
 }
 
+// Vários números por conta: qual número enviou (coluna "Número" em Envios).
+// `senderNumbers` vem da API ({ 1: telefone, 2: telefone }); envio sem
+// `senderSlot` (antes do rastreio, ou que não chegou a sair) = '—'.
+export function senderNumberLabel(log, senderNumbers) {
+  const slot = log?.senderSlot
+  if (!senderNumbers || slot == null) return '—'
+  const d = String(senderNumbers[slot] ?? '').replace(/\D/g, '')
+  if (d.length < 12) return `Número ${slot}`
+  const local = d.slice(4)
+  return `(${d.slice(2, 4)}) ${local.slice(0, local.length - 4)}-${local.slice(-4)}`
+}
+
 export { buildCredentialBlockHelp, describeConversionFailure, isCredentialBlockErrorMsg }
