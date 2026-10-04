@@ -312,7 +312,7 @@ export default function SendHistory() {
             <table className="pnl-table">
               <thead>
                 <tr>
-                  <th>Horário</th><th>Status</th><th>Produto</th><th>Loja</th><th>Origem → Destino</th><th>Aplicativo</th>{senderNumbers && <th>Número</th>}
+                  <th>Horário</th><th>Status</th><th>Produto</th><th>Loja</th><th>Origem</th><th>Destino</th><th>Aplicativo</th>
                 </tr>
               </thead>
               <tbody>
@@ -328,8 +328,9 @@ export default function SendHistory() {
                       </td>
                       <td className="pnl-td-clip" title={log.messageText}>{shortText(log.messageText)}</td>
                       <td><span className="pnl-store">{log.platform || '—'}</span></td>
-                      <td className="pnl-muted pnl-td-clip" title={`${logOriginLabel(log)} → ${dest || '—'}`}>
-                        {logOriginLabel(log)}{dest ? ` → ${dest}` : ''}
+                      <td className="pnl-muted pnl-td-clip" title={logOriginLabel(log)}>{logOriginLabel(log)}</td>
+                      <td className="pnl-muted pnl-td-clip" title={dest || '—'}>
+                        {dest || '—'}
                       </td>
                       <td className="pnl-muted" style={{ whiteSpace: 'nowrap' }}>{deliveryNetworkLabel(log)}</td>
                       {senderNumbers && <td className="pnl-muted" style={{ whiteSpace: 'nowrap' }}>{senderNumberLabel(log, senderNumbers)}</td>}
