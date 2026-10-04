@@ -321,7 +321,11 @@ async function fetchMercadoPagoSubscriptionInvoices(preapprovalId, { limit = 50 
       invoices: results.map(row => ({
         mpAuthorizedPaymentId: row?.id != null ? String(row.id) : null,
         mpPaymentId: row?.payment?.id != null ? String(row.payment.id) : null,
-        status: row?.status ?? row?.payment?.status ?? null,
+        // A fatura continua "processed" depois que o dinheiro é devolvido no
+        // painel do Mercado Pago; quem diz que foi estornado é o pagamento.
+        status: isReversiblePaymentStatus(row?.payment?.status) && row.payment.status !== 'cancelled'
+          ? row.payment.status
+          : (row?.status ?? row?.payment?.status ?? null),
         statusDetail: row?.payment?.status_detail ?? null,
         amount: row?.transaction_amount ?? row?.payment?.transaction_amount ?? null,
         retryAttempt: row?.retry_attempt ?? null,
